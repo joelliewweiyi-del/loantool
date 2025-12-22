@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useLoan, useLoanEvents, useLoanPeriods, useLoanFacilities, useCreateLoanEvent, useApproveEvent } from '@/hooks/useLoans';
+import { useAccruals } from '@/hooks/useAccruals';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/loans/LoanStatusBadge';
+import { AccrualsTab } from '@/components/loans/AccrualsTab';
 import { formatCurrency, formatDate, formatDateTime, formatPercent, formatEventType } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EventType } from '@/types/loan';
@@ -19,7 +21,8 @@ import {
   Check,
   FileText,
   Clock,
-  Landmark
+  Landmark,
+  TrendingUp
 } from 'lucide-react';
 
 const eventTypes: EventType[] = [
@@ -41,7 +44,8 @@ export default function LoanDetail() {
   const { data: events, isLoading: eventsLoading } = useLoanEvents(id);
   const { data: periods } = useLoanPeriods(id);
   const { data: facilities } = useLoanFacilities(id);
-  const { user, isController, isPM, roles } = useAuth();
+  const { periodAccruals, summary: accrualsSummary, isLoading: accrualsLoading } = useAccruals(id);
+  const { user, isController, isPM } = useAuth();
   const createEvent = useCreateLoanEvent();
   const approveEvent = useApproveEvent();
 
@@ -127,7 +131,7 @@ export default function LoanDetail() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -172,12 +176,28 @@ export default function LoanDetail() {
             </p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Interest Accrued
+            </CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(accrualsSummary.totalInterestAccrued)}</div>
+            <p className="text-xs text-muted-foreground">
+              @ {formatPercent(accrualsSummary.currentRate, 2)} current rate
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="events" className="space-y-4">
         <TabsList>
           <TabsTrigger value="events">Events</TabsTrigger>
+          <TabsTrigger value="accruals">Accruals</TabsTrigger>
           <TabsTrigger value="periods">Periods</TabsTrigger>
           <TabsTrigger value="facilities">Facilities</TabsTrigger>
         </TabsList>
@@ -318,6 +338,15 @@ export default function LoanDetail() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Accruals Tab */}
+        <TabsContent value="accruals">
+          <AccrualsTab 
+            periodAccruals={periodAccruals} 
+            summary={accrualsSummary} 
+            isLoading={accrualsLoading} 
+          />
         </TabsContent>
 
         {/* Periods Tab */}
