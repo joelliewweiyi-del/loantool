@@ -100,33 +100,6 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
         </CardContent>
       </Card>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <SummaryCard
-          icon={<DollarSign className="h-4 w-4" />}
-          label="Current Principal"
-          value={formatCurrency(summary.currentPrincipal)}
-          subtext={`${summary.totalDays} days tracked`}
-        />
-        <SummaryCard
-          icon={<Percent className="h-4 w-4" />}
-          label="Current Rate"
-          value={formatPercent(summary.currentRate, 2)}
-          subtext={`Avg: ${formatPercent(summary.averageRate, 2)}`}
-        />
-        <SummaryCard
-          icon={<TrendingUp className="h-4 w-4" />}
-          label="Total Interest"
-          value={formatCurrency(summary.totalInterestAccrued)}
-          subtext={summary.totalPikCapitalized > 0 ? `PIK: ${formatCurrency(summary.totalPikCapitalized)}` : 'All cash pay'}
-        />
-        <SummaryCard
-          icon={<PiggyBank className="h-4 w-4" />}
-          label="Commitment Fees"
-          value={formatCurrency(summary.totalCommitmentFees)}
-          subtext={`@ ${formatPercent(summary.commitmentFeeRate, 2)} on undrawn`}
-        />
-      </div>
 
       {/* Period Breakdown */}
       <Card>
@@ -156,8 +129,10 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
                 <div className="col-span-1"></div>
               </div>
 
-              {/* Period Rows */}
-              {periodAccruals.map((period) => (
+              {/* Period Rows - sorted earliest to latest */}
+              {[...periodAccruals].sort((a, b) => 
+                new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
+              ).map((period) => (
                 <PeriodRow
                   key={period.periodId}
                   period={period}
