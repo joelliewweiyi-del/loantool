@@ -43,6 +43,8 @@ export interface PeriodAccrual {
   // Opening balances
   openingPrincipal: number;
   openingRate: number;
+  openingCommitment: number;
+  openingUndrawn: number;
   
   // Movements during period
   principalDrawn: number;
@@ -52,10 +54,14 @@ export interface PeriodAccrual {
   // Closing balances
   closingPrincipal: number;
   closingRate: number;
+  closingCommitment: number;
+  closingUndrawn: number;
   
   // Calculated accruals
   interestAccrued: number;
   commitmentFeeAccrued: number;
+  commitmentFeeRate: number;
+  avgUndrawnAmount: number;
   feesInvoiced: number;
   
   // Total due for the period
@@ -66,6 +72,22 @@ export interface PeriodAccrual {
   
   // Interest accrual segments (when rate changes mid-period)
   interestSegments: InterestSegment[];
+  
+  // Commitment fee segments (when undrawn changes)
+  commitmentFeeSegments: CommitmentFeeSegment[];
+}
+
+/**
+ * Represents a segment of commitment fee calculation
+ */
+export interface CommitmentFeeSegment {
+  startDate: string;
+  endDate: string;
+  days: number;
+  commitment: number;
+  undrawn: number;
+  feeRate: number;
+  fee: number;
 }
 
 /**
@@ -330,6 +352,89 @@ export function calculateInterestSegments(
 }
 
 /**
+ * Calculates commitment fee segments when undrawn amount changes.
+ */
+export function calculateCommitmentFeeSegments(
+  events: LoanEvent[],
+  startDate: string,
+  endDate: string,
+  feeRate: number,
+  initialCommitment: number = 0
+): CommitmentFeeSegment[] {
+  const segments: CommitmentFeeSegment[] = [];
+  const sortedEvents = sortEventsByDate(events);
+  
+  // Get state at start of period
+  const startState = getLoanStateAtDate(sortedEvents, startDate, initialCommitment);
+  
+  // Find all events that affect undrawn amount within the period
+  const relevantEventTypes = [
+    'principal_draw',
+    'principal_repayment',
+    'commitment_set',
+    'commitment_change',
+    'commitment_cancel',
+  ];
+  
+  const periodEvents = sortedEvents.filter(e => {
+    const eventDate = new Date(e.effective_date);
+    const periodStart = new Date(startDate);
+    const periodEnd = new Date(endDate);
+    return eventDate > periodStart && 
+           eventDate <= periodEnd && 
+           relevantEventTypes.includes(e.event_type);
+  });
+  
+  // Build segments based on when undrawn changes
+  let segmentStart = startDate;
+  let currentState = startState;
+  
+  for (const event of periodEvents) {
+    // Close current segment at the day before the event
+    const eventDate = new Date(event.effective_date);
+    const segmentEnd = new Date(eventDate);
+    segmentEnd.setDate(segmentEnd.getDate() - 1);
+    
+    if (new Date(segmentStart) <= segmentEnd) {
+      const days = daysBetween(segmentStart, segmentEnd.toISOString().split('T')[0]) + 1;
+      const fee = currentState.undrawnCommitment * feeRate * (days / 365);
+      
+      segments.push({
+        startDate: segmentStart,
+        endDate: segmentEnd.toISOString().split('T')[0],
+        days,
+        commitment: currentState.totalCommitment,
+        undrawn: currentState.undrawnCommitment,
+        feeRate,
+        fee,
+      });
+    }
+    
+    // Apply event and start new segment
+    currentState = applyEventToState(currentState, event);
+    segmentStart = event.effective_date;
+  }
+  
+  // Close final segment
+  const days = daysBetween(segmentStart, endDate) + 1;
+  if (days > 0) {
+    const fee = currentState.undrawnCommitment * feeRate * (days / 365);
+    
+    segments.push({
+      startDate: segmentStart,
+      endDate: endDate,
+      days,
+      commitment: currentState.totalCommitment,
+      undrawn: currentState.undrawnCommitment,
+      feeRate,
+      fee,
+    });
+  }
+  
+  return segments;
+}
+
+/**
  * Calculates comprehensive accruals for a single period.
  */
 export function calculatePeriodAccruals(
@@ -389,6 +494,20 @@ export function calculatePeriodAccruals(
   const dailyAccruals = calculateDailyAccruals(sortedEvents, periodStart, periodEnd, commitmentFeeRate, initialCommitment);
   const commitmentFeeAccrued = dailyAccruals.reduce((sum, day) => sum + day.commitmentFee, 0);
   
+  // Calculate average undrawn amount for the period
+  const avgUndrawnAmount = dailyAccruals.length > 0 
+    ? dailyAccruals.reduce((sum, day) => sum + day.undrawn, 0) / dailyAccruals.length
+    : 0;
+  
+  // Build commitment fee segments
+  const commitmentFeeSegments = calculateCommitmentFeeSegments(
+    sortedEvents, 
+    periodStart, 
+    periodEnd, 
+    commitmentFeeRate, 
+    initialCommitment
+  );
+  
   // Total due (cash pay interest + commitment fee + invoiced fees)
   const cashPayInterest = interestSegments
     .filter(seg => seg.interestType === 'cash_pay')
@@ -404,17 +523,24 @@ export function calculatePeriodAccruals(
     days,
     openingPrincipal: openingState.outstandingPrincipal,
     openingRate: openingState.currentRate,
+    openingCommitment: openingState.totalCommitment,
+    openingUndrawn: openingState.undrawnCommitment,
     principalDrawn,
     principalRepaid,
     pikCapitalized,
     closingPrincipal: closingState.outstandingPrincipal,
     closingRate: closingState.currentRate,
+    closingCommitment: closingState.totalCommitment,
+    closingUndrawn: closingState.undrawnCommitment,
     interestAccrued,
     commitmentFeeAccrued,
+    commitmentFeeRate,
+    avgUndrawnAmount,
     feesInvoiced,
     totalDue,
     dailyAccruals,
     interestSegments,
+    commitmentFeeSegments,
   };
 }
 
@@ -445,6 +571,10 @@ export interface AccrualsSummary {
   currentPrincipal: number;
   currentRate: number;
   averageRate: number;
+  // Commitment breakdown
+  totalCommitment: number;
+  currentUndrawn: number;
+  commitmentFeeRate: number;
 }
 
 /**
@@ -462,6 +592,9 @@ export function calculateAccrualsSummary(periodAccruals: PeriodAccrual[]): Accru
       currentPrincipal: 0,
       currentRate: 0,
       averageRate: 0,
+      totalCommitment: 0,
+      currentUndrawn: 0,
+      commitmentFeeRate: 0,
     };
   }
   
@@ -491,5 +624,8 @@ export function calculateAccrualsSummary(periodAccruals: PeriodAccrual[]): Accru
     currentPrincipal: lastPeriod.closingPrincipal,
     currentRate: lastPeriod.closingRate,
     averageRate,
+    totalCommitment: lastPeriod.closingCommitment,
+    currentUndrawn: lastPeriod.closingUndrawn,
+    commitmentFeeRate: lastPeriod.commitmentFeeRate,
   };
 }
