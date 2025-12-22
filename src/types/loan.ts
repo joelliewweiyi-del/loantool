@@ -16,12 +16,26 @@ export type EventType =
   | 'fee_invoice'
   | 'pik_capitalization_posted';
 
+export type InterestType = 'cash_pay' | 'pik';
+export type LoanType = 'term_loan' | 'committed_facility';
+export type CommitmentFeeBasis = 'undrawn_only' | 'total_commitment';
+
 export interface Loan {
   id: string;
   borrower_name: string;
+  loan_name: string | null;
   status: LoanStatus;
   notice_frequency: string;
   payment_due_rule: string | null;
+  loan_start_date: string | null;
+  maturity_date: string | null;
+  interest_rate: number | null;
+  interest_type: InterestType;
+  loan_type: LoanType;
+  initial_principal: number | null;
+  total_commitment: number | null;
+  commitment_fee_rate: number | null;
+  commitment_fee_basis: CommitmentFeeBasis | null;
   created_at: string;
   updated_at: string;
 }

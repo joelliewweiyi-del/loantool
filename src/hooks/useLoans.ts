@@ -99,7 +99,21 @@ export function useCreateLoan() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (data: { borrower_name: string; payment_due_rule?: string }) => {
+    mutationFn: async (data: {
+      borrower_name: string;
+      loan_name?: string | null;
+      payment_due_rule?: string | null;
+      loan_start_date?: string | null;
+      maturity_date?: string | null;
+      interest_rate?: number | null;
+      interest_type?: string;
+      loan_type?: string;
+      initial_principal?: number | null;
+      total_commitment?: number | null;
+      commitment_fee_rate?: number | null;
+      commitment_fee_basis?: string | null;
+      notice_frequency?: string;
+    }) => {
       const { data: loan, error } = await supabase
         .from('loans')
         .insert([data])
