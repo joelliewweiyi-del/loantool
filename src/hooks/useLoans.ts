@@ -1,7 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Loan, LoanEvent, Period, LoanFacility } from '@/types/loan';
+import { Loan, LoanEvent, Period, LoanFacility, EventType, EventStatus } from '@/types/loan';
 import { useToast } from '@/hooks/use-toast';
+import type { Database } from '@/integrations/supabase/types';
+
+type DbEventType = Database['public']['Enums']['event_type'];
+type DbEventStatus = Database['public']['Enums']['event_status'];
 
 export function useLoans() {
   return useQuery({
@@ -127,20 +131,28 @@ export function useCreateLoanEvent() {
     mutationFn: async (data: {
       loan_id: string;
       facility_id: string | null;
-      event_type: string;
+      event_type: EventType;
       effective_date: string;
       value_date: string | null;
       amount: number | null;
       rate: number | null;
       metadata: Record<string, unknown>;
-      status: string;
+      status: EventStatus;
       created_by: string;
     }) => {
       const { data: event, error } = await supabase
         .from('loan_events')
         .insert([{
-          ...data,
-          metadata: data.metadata as unknown as Record<string, never>
+          loan_id: data.loan_id,
+          facility_id: data.facility_id,
+          event_type: data.event_type as DbEventType,
+          effective_date: data.effective_date,
+          value_date: data.value_date,
+          amount: data.amount,
+          rate: data.rate,
+          metadata: data.metadata as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
+          status: data.status as DbEventStatus,
+          created_by: data.created_by,
         }])
         .select()
         .single();
