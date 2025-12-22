@@ -308,7 +308,9 @@ export default function LoanDetail() {
                     </tr>
                   </thead>
                   <tbody>
-                    {events?.map(event => (
+                    {[...events || []].sort((a, b) => 
+                      new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime()
+                    ).map(event => (
                       <tr key={event.id}>
                         <td className="font-mono">{formatDate(event.effective_date)}</td>
                         <td>{formatEventType(event.event_type)}</td>
@@ -373,7 +375,9 @@ export default function LoanDetail() {
                     </tr>
                   </thead>
                   <tbody>
-                    {periods?.map(period => (
+                    {[...periods || []].sort((a, b) => 
+                      new Date(a.period_start).getTime() - new Date(b.period_start).getTime()
+                    ).map(period => (
                       <tr key={period.id}>
                         <td className="font-mono">
                           {formatDate(period.period_start)} – {formatDate(period.period_end)}
@@ -414,7 +418,9 @@ export default function LoanDetail() {
                     </tr>
                   </thead>
                   <tbody>
-                    {facilities?.map(facility => (
+                    {[...facilities || []].sort((a, b) => 
+                      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                    ).map(facility => (
                       <tr key={facility.id}>
                         <td className="capitalize">{facility.facility_type.replace('_', ' ')}</td>
                         <td className="numeric">{formatCurrency(facility.commitment_amount)}</td>
