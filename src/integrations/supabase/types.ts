@@ -151,29 +151,59 @@ export type Database = {
       loans: {
         Row: {
           borrower_name: string
+          commitment_fee_basis: string | null
+          commitment_fee_rate: number | null
           created_at: string
           id: string
+          initial_principal: number | null
+          interest_rate: number | null
+          interest_type: string
+          loan_name: string | null
+          loan_start_date: string | null
+          loan_type: string
+          maturity_date: string | null
           notice_frequency: string
           payment_due_rule: string | null
           status: Database["public"]["Enums"]["loan_status"]
+          total_commitment: number | null
           updated_at: string
         }
         Insert: {
           borrower_name: string
+          commitment_fee_basis?: string | null
+          commitment_fee_rate?: number | null
           created_at?: string
           id?: string
+          initial_principal?: number | null
+          interest_rate?: number | null
+          interest_type?: string
+          loan_name?: string | null
+          loan_start_date?: string | null
+          loan_type?: string
+          maturity_date?: string | null
           notice_frequency?: string
           payment_due_rule?: string | null
           status?: Database["public"]["Enums"]["loan_status"]
+          total_commitment?: number | null
           updated_at?: string
         }
         Update: {
           borrower_name?: string
+          commitment_fee_basis?: string | null
+          commitment_fee_rate?: number | null
           created_at?: string
           id?: string
+          initial_principal?: number | null
+          interest_rate?: number | null
+          interest_type?: string
+          loan_name?: string | null
+          loan_start_date?: string | null
+          loan_type?: string
+          maturity_date?: string | null
           notice_frequency?: string
           payment_due_rule?: string | null
           status?: Database["public"]["Enums"]["loan_status"]
+          total_commitment?: number | null
           updated_at?: string
         }
         Relationships: []

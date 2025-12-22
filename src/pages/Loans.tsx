@@ -1,40 +1,25 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useLoans, useCreateLoan } from '@/hooks/useLoans';
+import { useLoans } from '@/hooks/useLoans';
 import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { StatusBadge } from '@/components/loans/LoanStatusBadge';
-import { formatDate } from '@/lib/format';
+import { CreateLoanDialog } from '@/components/loans/CreateLoanDialog';
+import { formatDate, formatCurrency, formatPercent } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Plus, ChevronRight, Search } from 'lucide-react';
+import { ChevronRight, Search } from 'lucide-react';
 
 export default function Loans() {
   const { data: loans, isLoading } = useLoans();
   const { roles } = useAuth();
-  const createLoan = useCreateLoan();
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [borrowerName, setBorrowerName] = useState('');
-  const [paymentDueRule, setPaymentDueRule] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   const canCreate = roles.includes('pm') || roles.includes('controller');
 
-  const handleCreate = async () => {
-    await createLoan.mutateAsync({
-      borrower_name: borrowerName,
-      payment_due_rule: paymentDueRule || undefined,
-    });
-    setIsCreateOpen(false);
-    setBorrowerName('');
-    setPaymentDueRule('');
-  };
-
   const filteredLoans = loans?.filter(loan => 
-    loan.borrower_name.toLowerCase().includes(searchQuery.toLowerCase())
+    loan.borrower_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    loan.loan_name?.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
   if (isLoading) {
@@ -56,55 +41,7 @@ export default function Loans() {
           </p>
         </div>
         
-        {canCreate && (
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                New Loan
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Loan</DialogTitle>
-                <DialogDescription>
-                  Add a new loan to the portfolio
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="borrower">Borrower Name</Label>
-                  <Input
-                    id="borrower"
-                    value={borrowerName}
-                    onChange={(e) => setBorrowerName(e.target.value)}
-                    placeholder="Enter borrower name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="payment-rule">Payment Due Rule (optional)</Label>
-                  <Input
-                    id="payment-rule"
-                    value={paymentDueRule}
-                    onChange={(e) => setPaymentDueRule(e.target.value)}
-                    placeholder="e.g., 5 business days after period end"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                  Cancel
-                </Button>
-                <Button 
-                  onClick={handleCreate} 
-                  disabled={!borrowerName || createLoan.isPending}
-                >
-                  {createLoan.isPending ? 'Creating...' : 'Create Loan'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
+        {canCreate && <CreateLoanDialog />}
       </div>
 
       <Card>
@@ -130,22 +67,33 @@ export default function Loans() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Borrower</th>
+                  <th>Loan / Borrower</th>
+                  <th>Type</th>
                   <th>Status</th>
-                  <th>Frequency</th>
-                  <th>Payment Rule</th>
-                  <th>Created</th>
+                  <th className="text-right">Principal</th>
+                  <th className="text-right">Rate</th>
+                  <th>Start</th>
+                  <th>Maturity</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {filteredLoans.map(loan => (
                   <tr key={loan.id}>
-                    <td className="font-medium">{loan.borrower_name}</td>
+                    <td>
+                      <div className="font-medium">{loan.loan_name || loan.borrower_name}</div>
+                      {loan.loan_name && (
+                        <div className="text-xs text-muted-foreground">{loan.borrower_name}</div>
+                      )}
+                    </td>
+                    <td className="text-sm">
+                      {loan.loan_type === 'committed_facility' ? 'Committed' : 'Term Loan'}
+                    </td>
                     <td><StatusBadge status={loan.status} /></td>
-                    <td className="capitalize">{loan.notice_frequency}</td>
-                    <td className="text-muted-foreground">{loan.payment_due_rule || '—'}</td>
-                    <td className="text-muted-foreground">{formatDate(loan.created_at)}</td>
+                    <td className="numeric">{formatCurrency(loan.initial_principal)}</td>
+                    <td className="numeric">{formatPercent(loan.interest_rate)}</td>
+                    <td className="text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
+                    <td className="text-muted-foreground">{formatDate(loan.maturity_date)}</td>
                     <td className="text-right">
                       <Link 
                         to={`/loans/${loan.id}`}
