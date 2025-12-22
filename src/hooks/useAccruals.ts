@@ -40,6 +40,9 @@ export function useAccruals(loanId: string | undefined): UseAccrualsResult {
           currentPrincipal: 0,
           currentRate: 0,
           averageRate: 0,
+          totalCommitment: 0,
+          currentUndrawn: 0,
+          commitmentFeeRate: 0,
         },
       };
     }
