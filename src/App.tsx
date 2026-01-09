@@ -10,6 +10,8 @@ import Auth from "./pages/Auth";
 import Loans from "./pages/Loans";
 import LoanDetail from "./pages/LoanDetail";
 import Periods from "./pages/Periods";
+import MonthlyApproval from "./pages/MonthlyApproval";
+import Processing from "./pages/Processing";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -59,6 +61,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Periods />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/monthly-approval"
+        element={
+          <ProtectedRoute>
+            <MonthlyApproval />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/processing"
+        element={
+          <ProtectedRoute>
+            <Processing />
           </ProtectedRoute>
         }
       />

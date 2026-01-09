@@ -14,6 +14,66 @@ export type Database = {
   }
   public: {
     Tables: {
+      accrual_entries: {
+        Row: {
+          accrual_date: string
+          commitment_balance: number | null
+          commitment_fee_rate: number | null
+          created_at: string
+          daily_commitment_fee: number | null
+          daily_interest: number
+          id: string
+          interest_rate: number
+          is_pik: boolean | null
+          loan_id: string
+          period_id: string | null
+          principal_balance: number
+        }
+        Insert: {
+          accrual_date: string
+          commitment_balance?: number | null
+          commitment_fee_rate?: number | null
+          created_at?: string
+          daily_commitment_fee?: number | null
+          daily_interest: number
+          id?: string
+          interest_rate: number
+          is_pik?: boolean | null
+          loan_id: string
+          period_id?: string | null
+          principal_balance: number
+        }
+        Update: {
+          accrual_date?: string
+          commitment_balance?: number | null
+          commitment_fee_rate?: number | null
+          created_at?: string
+          daily_commitment_fee?: number | null
+          daily_interest?: number
+          id?: string
+          interest_rate?: number
+          is_pik?: boolean | null
+          loan_id?: string
+          period_id?: string | null
+          principal_balance?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accrual_entries_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accrual_entries_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
@@ -58,9 +118,11 @@ export type Database = {
           event_type: Database["public"]["Enums"]["event_type"]
           facility_id: string | null
           id: string
+          is_system_generated: boolean | null
           loan_id: string
           metadata: Json | null
           rate: number | null
+          requires_approval: boolean | null
           status: Database["public"]["Enums"]["event_status"]
           value_date: string | null
         }
@@ -74,9 +136,11 @@ export type Database = {
           event_type: Database["public"]["Enums"]["event_type"]
           facility_id?: string | null
           id?: string
+          is_system_generated?: boolean | null
           loan_id: string
           metadata?: Json | null
           rate?: number | null
+          requires_approval?: boolean | null
           status?: Database["public"]["Enums"]["event_status"]
           value_date?: string | null
         }
@@ -90,9 +154,11 @@ export type Database = {
           event_type?: Database["public"]["Enums"]["event_type"]
           facility_id?: string | null
           id?: string
+          is_system_generated?: boolean | null
           loan_id?: string
           metadata?: Json | null
           rate?: number | null
+          requires_approval?: boolean | null
           status?: Database["public"]["Enums"]["event_status"]
           value_date?: string | null
         }
@@ -208,6 +274,45 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_approvals: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          periods_with_exceptions: number
+          status: string
+          total_periods: number
+          updated_at: string
+          year_month: string
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          periods_with_exceptions?: number
+          status?: string
+          total_periods?: number
+          updated_at?: string
+          year_month: string
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          periods_with_exceptions?: number
+          status?: string
+          total_periods?: number
+          updated_at?: string
+          year_month?: string
+        }
+        Relationships: []
+      }
       notice_snapshots: {
         Row: {
           generated_at: string
@@ -271,11 +376,16 @@ export type Database = {
       periods: {
         Row: {
           approved_at: string | null
+          auto_processed_at: string | null
           created_at: string
+          exception_reason: string | null
+          has_economic_events: boolean | null
           id: string
           loan_id: string
+          monthly_approval_id: string | null
           period_end: string
           period_start: string
+          processing_mode: string | null
           sent_at: string | null
           snapshot_id: string | null
           status: Database["public"]["Enums"]["period_status"]
@@ -283,11 +393,16 @@ export type Database = {
         }
         Insert: {
           approved_at?: string | null
+          auto_processed_at?: string | null
           created_at?: string
+          exception_reason?: string | null
+          has_economic_events?: boolean | null
           id?: string
           loan_id: string
+          monthly_approval_id?: string | null
           period_end: string
           period_start: string
+          processing_mode?: string | null
           sent_at?: string | null
           snapshot_id?: string | null
           status?: Database["public"]["Enums"]["period_status"]
@@ -295,11 +410,16 @@ export type Database = {
         }
         Update: {
           approved_at?: string | null
+          auto_processed_at?: string | null
           created_at?: string
+          exception_reason?: string | null
+          has_economic_events?: boolean | null
           id?: string
           loan_id?: string
+          monthly_approval_id?: string | null
           period_end?: string
           period_start?: string
+          processing_mode?: string | null
           sent_at?: string | null
           snapshot_id?: string | null
           status?: Database["public"]["Enums"]["period_status"]
@@ -314,6 +434,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "periods_monthly_approval_id_fkey"
+            columns: ["monthly_approval_id"]
+            isOneToOne: false
+            referencedRelation: "monthly_approvals"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "periods_snapshot_id_fkey"
             columns: ["snapshot_id"]
             isOneToOne: false
@@ -321,6 +448,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      processing_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_count: number | null
+          error_details: Json | null
+          id: string
+          job_type: string
+          metadata: Json | null
+          processed_count: number | null
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_count?: number | null
+          error_details?: Json | null
+          id?: string
+          job_type: string
+          metadata?: Json | null
+          processed_count?: number | null
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_count?: number | null
+          error_details?: Json | null
+          id?: string
+          job_type?: string
+          metadata?: Json | null
+          processed_count?: number | null
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
@@ -348,12 +514,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      determine_period_processing_mode: {
+        Args: { p_period_id: string }
+        Returns: string
+      }
       has_any_role: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      period_has_economic_events: {
+        Args: { p_period_id: string }
         Returns: boolean
       }
     }

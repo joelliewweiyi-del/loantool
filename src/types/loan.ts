@@ -3,6 +3,10 @@ export type FacilityType = 'capex' | 'interest_depot' | 'other';
 export type EventStatus = 'draft' | 'approved';
 export type PeriodStatus = 'open' | 'submitted' | 'approved' | 'sent';
 export type AppRole = 'pm' | 'controller';
+export type ProcessingMode = 'auto' | 'manual';
+export type MonthlyApprovalStatus = 'pending' | 'approved' | 'rejected';
+export type ProcessingJobType = 'daily_accrual' | 'month_end' | 'period_close';
+export type ProcessingJobStatus = 'pending' | 'running' | 'completed' | 'failed';
 export type EventType = 
   | 'principal_draw'
   | 'principal_repayment'
@@ -72,10 +76,56 @@ export interface Period {
   period_start: string;
   period_end: string;
   status: PeriodStatus;
+  processing_mode: ProcessingMode;
+  has_economic_events: boolean;
+  monthly_approval_id: string | null;
+  auto_processed_at: string | null;
+  exception_reason: string | null;
   submitted_at: string | null;
   approved_at: string | null;
   sent_at: string | null;
   snapshot_id: string | null;
+  created_at: string;
+}
+
+export interface MonthlyApproval {
+  id: string;
+  year_month: string;
+  status: MonthlyApprovalStatus;
+  total_periods: number;
+  periods_with_exceptions: number;
+  approved_by: string | null;
+  approved_at: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AccrualEntry {
+  id: string;
+  loan_id: string;
+  period_id: string | null;
+  accrual_date: string;
+  principal_balance: number;
+  interest_rate: number;
+  daily_interest: number;
+  commitment_balance: number | null;
+  commitment_fee_rate: number | null;
+  daily_commitment_fee: number;
+  is_pik: boolean;
+  created_at: string;
+}
+
+export interface ProcessingJob {
+  id: string;
+  job_type: ProcessingJobType;
+  status: ProcessingJobStatus;
+  started_at: string | null;
+  completed_at: string | null;
+  processed_count: number;
+  error_count: number;
+  error_details: Record<string, unknown> | null;
+  metadata: Record<string, unknown>;
   created_at: string;
 }
 
