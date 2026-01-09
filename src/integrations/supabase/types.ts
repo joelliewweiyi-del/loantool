@@ -217,9 +217,12 @@ export type Database = {
       loans: {
         Row: {
           borrower_name: string
+          category: string | null
+          city: string | null
           commitment_fee_basis: string | null
           commitment_fee_rate: number | null
           created_at: string
+          external_loan_id: string | null
           id: string
           initial_principal: number | null
           interest_rate: number | null
@@ -227,18 +230,26 @@ export type Database = {
           loan_name: string | null
           loan_start_date: string | null
           loan_type: string
+          ltv: number | null
           maturity_date: string | null
           notice_frequency: string
           payment_due_rule: string | null
+          remarks: string | null
+          rental_income: number | null
           status: Database["public"]["Enums"]["loan_status"]
           total_commitment: number | null
           updated_at: string
+          valuation: number | null
+          valuation_date: string | null
         }
         Insert: {
           borrower_name: string
+          category?: string | null
+          city?: string | null
           commitment_fee_basis?: string | null
           commitment_fee_rate?: number | null
           created_at?: string
+          external_loan_id?: string | null
           id?: string
           initial_principal?: number | null
           interest_rate?: number | null
@@ -246,18 +257,26 @@ export type Database = {
           loan_name?: string | null
           loan_start_date?: string | null
           loan_type?: string
+          ltv?: number | null
           maturity_date?: string | null
           notice_frequency?: string
           payment_due_rule?: string | null
+          remarks?: string | null
+          rental_income?: number | null
           status?: Database["public"]["Enums"]["loan_status"]
           total_commitment?: number | null
           updated_at?: string
+          valuation?: number | null
+          valuation_date?: string | null
         }
         Update: {
           borrower_name?: string
+          category?: string | null
+          city?: string | null
           commitment_fee_basis?: string | null
           commitment_fee_rate?: number | null
           created_at?: string
+          external_loan_id?: string | null
           id?: string
           initial_principal?: number | null
           interest_rate?: number | null
@@ -265,12 +284,17 @@ export type Database = {
           loan_name?: string | null
           loan_start_date?: string | null
           loan_type?: string
+          ltv?: number | null
           maturity_date?: string | null
           notice_frequency?: string
           payment_due_rule?: string | null
+          remarks?: string | null
+          rental_income?: number | null
           status?: Database["public"]["Enums"]["loan_status"]
           total_commitment?: number | null
           updated_at?: string
+          valuation?: number | null
+          valuation_date?: string | null
         }
         Relationships: []
       }

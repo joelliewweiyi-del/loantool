@@ -19,7 +19,9 @@ export default function Loans() {
 
   const filteredLoans = loans?.filter(loan => 
     loan.borrower_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    loan.loan_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    loan.loan_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (loan as any).city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (loan as any).category?.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
 
   if (isLoading) {
@@ -112,8 +114,9 @@ export default function Loans() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Loan / Borrower</th>
-                  <th>Type</th>
+                  <th>Loan</th>
+                  <th>City</th>
+                  <th>Category</th>
                   <th>Status</th>
                   <th className="text-right">Principal</th>
                   <th className="text-right">Rate</th>
@@ -127,13 +130,15 @@ export default function Loans() {
                   <tr key={loan.id}>
                     <td>
                       <div className="font-medium">{loan.loan_name || loan.borrower_name}</div>
-                      {loan.loan_name && (
-                        <div className="text-xs text-muted-foreground">{loan.borrower_name}</div>
-                      )}
                     </td>
-                    <td className="text-sm">
-                      {loan.loan_type === 'committed_facility' ? 'Construction' : 'Bullet'}
-                      {loan.interest_type === 'pik' && <span className="ml-1 text-xs text-amber-600 font-medium">(PIK)</span>}
+                    <td className="text-muted-foreground">{(loan as any).city || '—'}</td>
+                    <td>
+                      <span className="text-xs px-2 py-0.5 rounded bg-muted">
+                        {(loan as any).category || '—'}
+                      </span>
+                      {loan.interest_type === 'pik' && (
+                        <span className="ml-1 text-xs text-amber-600 font-medium">(PIK)</span>
+                      )}
                     </td>
                     <td><StatusBadge status={loan.status} /></td>
                     <td className="numeric">{formatCurrency(loan.initial_principal)}</td>
