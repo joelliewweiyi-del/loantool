@@ -141,10 +141,14 @@ export default function LoanDetail() {
       </div>
 
       {/* Key Loan Metrics Bar */}
-      <div className="grid grid-cols-6 gap-6 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
+      <div className="grid grid-cols-7 gap-4 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
         <div>
           <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Running Principal</div>
           <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(accrualsSummary.currentPrincipal)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Commitment</div>
+          <div className="text-lg font-semibold font-mono">{formatCurrency(accrualsSummary.totalCommitment)}</div>
         </div>
         <div>
           <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Rate</div>
