@@ -87,7 +87,8 @@ export default function Loans() {
                       )}
                     </td>
                     <td className="text-sm">
-                      {loan.loan_type === 'committed_facility' ? 'Committed' : 'Term Loan'}
+                      {loan.loan_type === 'committed_facility' ? 'Construction' : 'Bullet'}
+                      {loan.interest_type === 'pik' && <span className="ml-1 text-xs text-amber-600 font-medium">(PIK)</span>}
                     </td>
                     <td><StatusBadge status={loan.status} /></td>
                     <td className="numeric">{formatCurrency(loan.initial_principal)}</td>
