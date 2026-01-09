@@ -140,67 +140,35 @@ export default function LoanDetail() {
         </div>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Events
-            </CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{events?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {events?.filter(e => e.status === 'draft').length || 0} pending approval
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Periods
-            </CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{periods?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {periods?.filter(p => p.status === 'open').length || 0} open
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Facilities
-            </CardTitle>
-            <Landmark className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{facilities?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {formatCurrency(facilities?.reduce((sum, f) => sum + Number(f.commitment_amount), 0) || 0)} total commitment
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Interest Accrued
-            </CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(accrualsSummary.totalInterestAccrued)}</div>
-            <p className="text-xs text-muted-foreground">
-              @ {formatPercent(accrualsSummary.currentRate, 2)} current rate
-            </p>
-          </CardContent>
-        </Card>
+      {/* Key Loan Metrics Bar */}
+      <div className="grid grid-cols-6 gap-6 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Running Principal</div>
+          <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(accrualsSummary.currentPrincipal)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Rate</div>
+          <div className="text-lg font-semibold font-mono">{formatPercent(accrualsSummary.currentRate, 2)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">PIK Capitalized</div>
+          <div className="text-lg font-semibold font-mono text-amber-600">{formatCurrency(periodAccruals.reduce((sum, p) => sum + p.pikCapitalized, 0))}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Undrawn</div>
+          <div className="text-lg font-semibold font-mono text-green-600">{formatCurrency(accrualsSummary.currentUndrawn)}</div>
+          {accrualsSummary.commitmentFeeRate > 0 && (
+            <div className="text-xs text-muted-foreground">@ {formatPercent(accrualsSummary.commitmentFeeRate, 2)}</div>
+          )}
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Start Date</div>
+          <div className="text-lg font-semibold font-mono">{formatDate(loan.loan_start_date)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Maturity Date</div>
+          <div className="text-lg font-semibold font-mono">{formatDate(loan.maturity_date)}</div>
+        </div>
       </div>
 
       {/* Tabs */}
