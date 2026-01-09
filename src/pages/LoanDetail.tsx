@@ -124,6 +124,14 @@ export default function LoanDetail() {
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-semibold">{loan.loan_name || loan.borrower_name}</h1>
               <StatusBadge status={loan.status} />
+              <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
+                {loan.loan_type === 'committed_facility' ? 'Construction' : 'Bullet'}
+              </span>
+              {loan.interest_type === 'pik' && (
+                <span className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 font-medium">
+                  PIK
+                </span>
+              )}
             </div>
             <p className="text-muted-foreground text-sm">
               {loan.borrower_name} • Created {formatDate(loan.created_at)} • {loan.notice_frequency} notices
