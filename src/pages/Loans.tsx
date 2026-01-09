@@ -31,6 +31,23 @@ export default function Loans() {
     );
   }
 
+  // Calculate portfolio summary metrics
+  const activeLoans = loans?.filter(l => l.status === 'active') || [];
+  const totalPrincipal = activeLoans.reduce((sum, l) => sum + (l.initial_principal || 0), 0);
+  const totalCommitment = activeLoans.reduce((sum, l) => sum + (l.total_commitment || 0), 0);
+  const totalUndrawn = totalCommitment - totalPrincipal;
+  
+  // Weighted average rate (weighted by principal)
+  const weightedRateSum = activeLoans.reduce((sum, l) => {
+    const principal = l.initial_principal || 0;
+    const rate = l.interest_rate || 0;
+    return sum + (principal * rate);
+  }, 0);
+  const avgRate = totalPrincipal > 0 ? weightedRateSum / totalPrincipal : 0;
+  
+  // Count PIK loans
+  const pikLoansCount = activeLoans.filter(l => l.interest_type === 'pik').length;
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -42,6 +59,34 @@ export default function Loans() {
         </div>
         
         {canCreate && <CreateLoanDialog />}
+      </div>
+
+      {/* Portfolio Metrics Bar */}
+      <div className="grid grid-cols-6 gap-6 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Principal</div>
+          <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(totalPrincipal)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Commitment</div>
+          <div className="text-lg font-semibold font-mono">{formatCurrency(totalCommitment)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Undrawn</div>
+          <div className="text-lg font-semibold font-mono text-green-600">{formatCurrency(totalUndrawn)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Avg Rate (Wtd)</div>
+          <div className="text-lg font-semibold font-mono">{formatPercent(avgRate, 2)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Active Loans</div>
+          <div className="text-lg font-semibold font-mono">{activeLoans.length}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">PIK Loans</div>
+          <div className="text-lg font-semibold font-mono text-amber-600">{pikLoansCount}</div>
+        </div>
       </div>
 
       <Card>
