@@ -42,56 +42,37 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
     );
   }
 
+  // Calculate total PIK capitalized
+  const totalPikCapitalized = periodAccruals.reduce((sum, p) => sum + p.pikCapitalized, 0);
+
   return (
     <div className="space-y-6">
-      {/* Commitment Breakdown Card */}
-      <Card className="bg-muted/30">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Wallet className="h-4 w-4" />
-            Commitment Breakdown
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-3 gap-8">
-            <div>
-              <div className="text-sm text-muted-foreground mb-1">Total Commitment</div>
-              <div className="text-2xl font-bold font-mono">{formatCurrency(summary.totalCommitment)}</div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground mb-1">Outstanding (Drawn)</div>
-              <div className="text-2xl font-bold font-mono text-primary">{formatCurrency(summary.currentPrincipal)}</div>
-              <div className="text-xs text-muted-foreground">
-                {summary.totalCommitment > 0 
-                  ? `${((summary.currentPrincipal / summary.totalCommitment) * 100).toFixed(1)}% utilized`
-                  : '—'}
-              </div>
-            </div>
-            <div>
-              <div className="text-sm text-muted-foreground mb-1">Undrawn (Available)</div>
-              <div className="text-2xl font-bold font-mono text-green-600">{formatCurrency(summary.currentUndrawn)}</div>
-              <div className="text-xs text-muted-foreground">
-                Fee rate: {formatPercent(summary.commitmentFeeRate, 2)} p.a.
-              </div>
-            </div>
-          </div>
-          {summary.totalCommitment > 0 && (
-            <div className="mt-4">
-              <div className="text-xs text-muted-foreground mb-1">Utilization</div>
-              <div className="h-3 bg-muted rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-primary transition-all" 
-                  style={{ width: `${Math.min(100, (summary.currentPrincipal / summary.totalCommitment) * 100)}%` }}
-                />
-              </div>
-              <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                <span>€0</span>
-                <span>{formatCurrency(summary.totalCommitment)}</span>
-              </div>
-            </div>
+      {/* Key Loan Metrics Bar */}
+      <div className="grid grid-cols-5 gap-4 p-4 bg-muted/30 rounded-lg border">
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Running Principal</div>
+          <div className="text-xl font-bold font-mono text-primary">{formatCurrency(summary.currentPrincipal)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Rate</div>
+          <div className="text-xl font-bold font-mono">{formatPercent(summary.currentRate, 2)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Accrued</div>
+          <div className="text-xl font-bold font-mono">{formatCurrency(summary.totalInterestAccrued)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">PIK Capitalized</div>
+          <div className="text-xl font-bold font-mono text-amber-600">{formatCurrency(totalPikCapitalized)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Undrawn</div>
+          <div className="text-xl font-bold font-mono text-green-600">{formatCurrency(summary.currentUndrawn)}</div>
+          {summary.commitmentFeeRate > 0 && (
+            <div className="text-xs text-muted-foreground">@ {formatPercent(summary.commitmentFeeRate, 2)}</div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
 
       {/* Period Breakdown */}
