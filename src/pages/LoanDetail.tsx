@@ -122,11 +122,11 @@ export default function LoanDetail() {
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">{loan.borrower_name}</h1>
+              <h1 className="text-lg font-mono">{id}</h1>
               <StatusBadge status={loan.status} />
             </div>
-            <p className="text-muted-foreground">
-              Created {formatDate(loan.created_at)} • {loan.notice_frequency} notices
+            <p className="text-muted-foreground text-sm">
+              {loan.borrower_name} • Created {formatDate(loan.created_at)} • {loan.notice_frequency} notices
             </p>
           </div>
         </div>
