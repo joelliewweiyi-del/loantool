@@ -122,7 +122,7 @@ export default function LoanDetail() {
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-lg font-mono">{id}</h1>
+              <h1 className="text-2xl font-semibold">{loan.loan_name || loan.borrower_name}</h1>
               <StatusBadge status={loan.status} />
             </div>
             <p className="text-muted-foreground text-sm">
