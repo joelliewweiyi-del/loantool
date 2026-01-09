@@ -5,13 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { AppLayout } from "@/components/layout/AppLayout";
-import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Loans from "./pages/Loans";
 import LoanDetail from "./pages/LoanDetail";
-import Periods from "./pages/Periods";
 import MonthlyApproval from "./pages/MonthlyApproval";
-import Processing from "./pages/Processing";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -39,7 +36,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/auth" element={<Auth />} />
-      <Route path="/" element={<Index />} />
+      <Route path="/" element={<Navigate to="/loans" replace />} />
       <Route
         path="/loans"
         element={
@@ -57,26 +54,10 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/periods"
-        element={
-          <ProtectedRoute>
-            <Periods />
-          </ProtectedRoute>
-        }
-      />
-      <Route
         path="/monthly-approval"
         element={
           <ProtectedRoute>
             <MonthlyApproval />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/processing"
-        element={
-          <ProtectedRoute>
-            <Processing />
           </ProtectedRoute>
         }
       />

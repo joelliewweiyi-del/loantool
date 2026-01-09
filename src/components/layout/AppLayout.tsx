@@ -4,14 +4,11 @@ import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { 
   Landmark, 
-  LayoutDashboard, 
   FileText, 
-  Clock, 
   LogOut,
   User,
   ChevronRight,
-  CalendarCheck,
-  Cog
+  CalendarCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,11 +17,8 @@ interface AppLayoutProps {
 }
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Loans', href: '/loans', icon: FileText },
-  { name: 'Periods', href: '/periods', icon: Clock },
   { name: 'Monthly Approval', href: '/monthly-approval', icon: CalendarCheck },
-  { name: 'Processing', href: '/processing', icon: Cog },
 ];
 
 export function AppLayout({ children }: AppLayoutProps) {
