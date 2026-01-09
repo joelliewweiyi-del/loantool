@@ -6,7 +6,8 @@ import { Separator } from '@/components/ui/separator';
 import { formatCurrency, formatDate, formatPercent } from '@/lib/format';
 import { PeriodAccrual, AccrualsSummary, InterestSegment } from '@/lib/loanCalculations';
 import { Loan } from '@/types/loan';
-import { 
+import { getCurrentDateString } from '@/lib/simulatedDate';
+import {
   FileText, 
   Download, 
   Send, 
@@ -193,7 +194,7 @@ function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
         </div>
         <div className="text-right">
           <p className="text-sm text-muted-foreground mb-1">Notice Date:</p>
-          <p className="font-mono">{formatDate(new Date().toISOString())}</p>
+          <p className="font-mono">{formatDate(getCurrentDateString())}</p>
           <p className="text-sm text-muted-foreground mt-3 mb-1">Reference:</p>
           <p className="font-mono text-sm">{period.periodId.slice(0, 8).toUpperCase()}</p>
         </div>
