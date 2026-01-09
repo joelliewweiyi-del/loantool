@@ -48,26 +48,26 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
   return (
     <div className="space-y-6">
       {/* Key Loan Metrics Bar */}
-      <div className="grid grid-cols-5 gap-4 p-4 bg-muted/30 rounded-lg border">
+      <div className="grid grid-cols-5 gap-6 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
         <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Running Principal</div>
-          <div className="text-xl font-bold font-mono text-primary">{formatCurrency(summary.currentPrincipal)}</div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Running Principal</div>
+          <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(summary.currentPrincipal)}</div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Current Rate</div>
-          <div className="text-xl font-bold font-mono">{formatPercent(summary.currentRate, 2)}</div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Rate</div>
+          <div className="text-lg font-semibold font-mono">{formatPercent(summary.currentRate, 2)}</div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Accrued</div>
-          <div className="text-xl font-bold font-mono">{formatCurrency(summary.totalInterestAccrued)}</div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Accrued</div>
+          <div className="text-lg font-semibold font-mono">{formatCurrency(summary.totalInterestAccrued)}</div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">PIK Capitalized</div>
-          <div className="text-xl font-bold font-mono text-amber-600">{formatCurrency(totalPikCapitalized)}</div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">PIK Capitalized</div>
+          <div className="text-lg font-semibold font-mono text-amber-600">{formatCurrency(totalPikCapitalized)}</div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Undrawn</div>
-          <div className="text-xl font-bold font-mono text-green-600">{formatCurrency(summary.currentUndrawn)}</div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Undrawn</div>
+          <div className="text-lg font-semibold font-mono text-green-600">{formatCurrency(summary.currentUndrawn)}</div>
           {summary.commitmentFeeRate > 0 && (
             <div className="text-xs text-muted-foreground">@ {formatPercent(summary.commitmentFeeRate, 2)}</div>
           )}
