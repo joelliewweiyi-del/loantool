@@ -9,7 +9,9 @@ import {
   Clock, 
   LogOut,
   User,
-  ChevronRight
+  ChevronRight,
+  CalendarCheck,
+  Cog
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +23,8 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Loans', href: '/loans', icon: FileText },
   { name: 'Periods', href: '/periods', icon: Clock },
+  { name: 'Monthly Approval', href: '/monthly-approval', icon: CalendarCheck },
+  { name: 'Processing', href: '/processing', icon: Cog },
 ];
 
 export function AppLayout({ children }: AppLayoutProps) {
