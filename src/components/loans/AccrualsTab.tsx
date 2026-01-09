@@ -2,22 +2,15 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { formatCurrency, formatDate, formatPercent } from '@/lib/format';
 import { PeriodStatus } from '@/types/loan';
-import { PeriodAccrual, AccrualsSummary, InterestSegment, DailyAccrual, CommitmentFeeSegment } from '@/lib/loanCalculations';
+import { PeriodAccrual, AccrualsSummary, InterestSegment, DailyAccrual } from '@/lib/loanCalculations';
 import { StatusBadge } from './LoanStatusBadge';
 import { 
   ChevronDown, 
   ChevronRight, 
-  TrendingUp, 
-  Calculator, 
   Calendar,
-  DollarSign,
-  Percent,
-  BarChart3,
-  Wallet,
-  PiggyBank
+  Wallet
 } from 'lucide-react';
 
 interface AccrualsTabProps {
@@ -103,49 +96,52 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
 
       {/* Period Breakdown */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <BarChart3 className="h-5 w-5" />
-            Period-by-Period Accruals
-          </CardTitle>
-          <CardDescription>
-            Derived from the event ledger using ACT/365 Fixed day count convention
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Period-by-Period Accruals</CardTitle>
+          <CardDescription className="text-xs">
+            ACT/365 Fixed · Click row to expand
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {periodAccruals.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               No periods to calculate accruals for
             </div>
           ) : (
-            <div className="space-y-2">
-              {/* Header */}
-              <div className="grid grid-cols-12 gap-2 px-4 py-2 text-sm font-medium text-muted-foreground border-b">
-                <div className="col-span-3">Period</div>
-                <div className="col-span-2 text-right">Opening</div>
-                <div className="col-span-2 text-right">Interest</div>
-                <div className="col-span-2 text-right">Closing</div>
-                <div className="col-span-2 text-right">Due</div>
-                <div className="col-span-1"></div>
-              </div>
-
-              {/* Period Rows - sorted earliest to latest */}
-              {[...periodAccruals].sort((a, b) => 
-                new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
-              ).map((period) => (
-                <PeriodRow
-                  key={period.periodId}
-                  period={period}
-                  isExpanded={expandedPeriods.has(period.periodId)}
-                  onToggle={() => togglePeriod(period.periodId)}
-                  showDailyBreakdown={showDailyBreakdown === period.periodId}
-                  onToggleDailyBreakdown={() => 
-                    setShowDailyBreakdown(
-                      showDailyBreakdown === period.periodId ? null : period.periodId
-                    )
-                  }
-                />
-              ))}
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/40">
+                    <th className="text-left py-2.5 px-4 font-medium text-muted-foreground w-8"></th>
+                    <th className="text-left py-2.5 px-4 font-medium text-muted-foreground">Period</th>
+                    <th className="text-center py-2.5 px-4 font-medium text-muted-foreground">Status</th>
+                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Days</th>
+                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Principal</th>
+                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Rate</th>
+                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Interest</th>
+                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Fees</th>
+                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Total Due</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...periodAccruals].sort((a, b) => 
+                    new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
+                  ).map((period) => (
+                    <PeriodTableRow
+                      key={period.periodId}
+                      period={period}
+                      isExpanded={expandedPeriods.has(period.periodId)}
+                      onToggle={() => togglePeriod(period.periodId)}
+                      showDailyBreakdown={showDailyBreakdown === period.periodId}
+                      onToggleDailyBreakdown={() => 
+                        setShowDailyBreakdown(
+                          showDailyBreakdown === period.periodId ? null : period.periodId
+                        )
+                      }
+                    />
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>
@@ -176,7 +172,7 @@ function SummaryCard({ icon, label, value, subtext }: SummaryCardProps) {
   );
 }
 
-interface PeriodRowProps {
+interface PeriodTableRowProps {
   period: PeriodAccrual;
   isExpanded: boolean;
   onToggle: () => void;
@@ -184,218 +180,179 @@ interface PeriodRowProps {
   onToggleDailyBreakdown: () => void;
 }
 
-function PeriodRow({ 
+function PeriodTableRow({ 
   period, 
   isExpanded, 
   onToggle,
   showDailyBreakdown,
   onToggleDailyBreakdown,
-}: PeriodRowProps) {
+}: PeriodTableRowProps) {
   return (
-    <Collapsible open={isExpanded} onOpenChange={onToggle}>
-      <CollapsibleTrigger asChild>
-        <div className="grid grid-cols-12 gap-2 px-4 py-3 hover:bg-muted/50 rounded-lg cursor-pointer items-center">
-          <div className="col-span-3 flex items-center gap-2">
-            {isExpanded ? (
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            )}
-            <div>
-              <div className="font-mono text-sm">
-                {formatDate(period.periodStart)} – {formatDate(period.periodEnd)}
-              </div>
-              <div className="flex items-center gap-2 mt-1">
-                <StatusBadge status={period.status as PeriodStatus} />
-                <span className="text-xs text-muted-foreground">{period.days} days</span>
-              </div>
-            </div>
-          </div>
-          <div className="col-span-2 text-right">
-            <div className="font-mono">{formatCurrency(period.openingPrincipal)}</div>
-            <div className="text-xs text-muted-foreground">@ {formatPercent(period.openingRate, 2)}</div>
-          </div>
-          <div className="col-span-2 text-right">
-            <div className="font-mono text-primary">{formatCurrency(period.interestAccrued)}</div>
-            {period.commitmentFeeAccrued > 0 && (
-              <div className="text-xs text-muted-foreground">
-                +{formatCurrency(period.commitmentFeeAccrued)} fee
-              </div>
-            )}
-          </div>
-          <div className="col-span-2 text-right">
-            <div className="font-mono">{formatCurrency(period.closingPrincipal)}</div>
-            <div className="text-xs text-muted-foreground">@ {formatPercent(period.closingRate, 2)}</div>
-          </div>
-          <div className="col-span-2 text-right">
-            <div className="font-mono font-semibold">{formatCurrency(period.totalDue)}</div>
-          </div>
-          <div className="col-span-1"></div>
-        </div>
-      </CollapsibleTrigger>
-
-      <CollapsibleContent>
-        <div className="ml-8 mr-4 mb-4 space-y-4">
-          {/* Commitment Breakdown for Period */}
-          <div className="bg-blue-500/10 rounded-lg p-4">
-            <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-              <Wallet className="h-4 w-4" />
-              Commitment Status
-            </h4>
-            <div className="grid grid-cols-2 gap-8">
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Opening</div>
-                <div className="grid grid-cols-3 gap-2 text-sm">
-                  <div>
-                    <div className="text-muted-foreground">Commitment</div>
-                    <div className="font-mono font-medium">{formatCurrency(period.openingCommitment)}</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Drawn</div>
-                    <div className="font-mono font-medium">{formatCurrency(period.openingPrincipal)}</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Undrawn</div>
-                    <div className="font-mono font-medium text-green-600">{formatCurrency(period.openingUndrawn)}</div>
-                  </div>
+    <>
+      <tr 
+        className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
+        onClick={onToggle}
+      >
+        <td className="py-3 px-4">
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
+        </td>
+        <td className="py-3 px-4">
+          <span className="font-mono text-xs">
+            {formatDate(period.periodStart)} – {formatDate(period.periodEnd)}
+          </span>
+        </td>
+        <td className="py-3 px-4 text-center">
+          <StatusBadge status={period.status as PeriodStatus} />
+        </td>
+        <td className="py-3 px-4 text-right font-mono text-muted-foreground">
+          {period.days}
+        </td>
+        <td className="py-3 px-4 text-right font-mono">
+          {formatCurrency(period.openingPrincipal)}
+        </td>
+        <td className="py-3 px-4 text-right font-mono text-muted-foreground">
+          {formatPercent(period.openingRate, 2)}
+        </td>
+        <td className="py-3 px-4 text-right font-mono text-primary font-medium">
+          {formatCurrency(period.interestAccrued)}
+        </td>
+        <td className="py-3 px-4 text-right font-mono text-muted-foreground">
+          {period.commitmentFeeAccrued > 0 ? formatCurrency(period.commitmentFeeAccrued) : '—'}
+        </td>
+        <td className="py-3 px-4 text-right font-mono font-semibold">
+          {formatCurrency(period.totalDue)}
+        </td>
+      </tr>
+      
+      {isExpanded && (
+        <tr>
+          <td colSpan={9} className="p-0">
+            <div className="bg-muted/30 border-b px-6 py-4 space-y-4">
+              {/* Compact Summary Grid */}
+              <div className="grid grid-cols-4 gap-4 text-xs">
+                <div className="space-y-1">
+                  <div className="text-muted-foreground uppercase tracking-wide">Opening</div>
+                  <div className="font-mono">{formatCurrency(period.openingPrincipal)} @ {formatPercent(period.openingRate, 2)}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-muted-foreground uppercase tracking-wide">Closing</div>
+                  <div className="font-mono">{formatCurrency(period.closingPrincipal)} @ {formatPercent(period.closingRate, 2)}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-muted-foreground uppercase tracking-wide">Commitment</div>
+                  <div className="font-mono">{formatCurrency(period.openingCommitment)}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-muted-foreground uppercase tracking-wide">Undrawn</div>
+                  <div className="font-mono text-green-600">{formatCurrency(period.openingUndrawn)}</div>
                 </div>
               </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Closing</div>
-                <div className="grid grid-cols-3 gap-2 text-sm">
-                  <div>
-                    <div className="text-muted-foreground">Commitment</div>
-                    <div className="font-mono font-medium">{formatCurrency(period.closingCommitment)}</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Drawn</div>
-                    <div className="font-mono font-medium">{formatCurrency(period.closingPrincipal)}</div>
-                  </div>
-                  <div>
-                    <div className="text-muted-foreground">Undrawn</div>
-                    <div className="font-mono font-medium text-green-600">{formatCurrency(period.closingUndrawn)}</div>
-                  </div>
+
+              {/* Principal Movements */}
+              {(period.principalDrawn > 0 || period.principalRepaid > 0 || period.pikCapitalized > 0) && (
+                <div className="flex gap-6 text-xs pt-2 border-t">
+                  {period.principalDrawn > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">Drawn: </span>
+                      <span className="font-mono text-green-600">+{formatCurrency(period.principalDrawn)}</span>
+                    </div>
+                  )}
+                  {period.principalRepaid > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">Repaid: </span>
+                      <span className="font-mono text-red-600">-{formatCurrency(period.principalRepaid)}</span>
+                    </div>
+                  )}
+                  {period.pikCapitalized > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">PIK: </span>
+                      <span className="font-mono text-amber-600">+{formatCurrency(period.pikCapitalized)}</span>
+                    </div>
+                  )}
                 </div>
+              )}
+
+              {/* Interest Segments */}
+              {period.interestSegments.length > 0 && (
+                <div className="pt-2 border-t">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Interest Segments</div>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-muted-foreground">
+                        <th className="text-left py-1 font-medium">Period</th>
+                        <th className="text-right font-medium">Days</th>
+                        <th className="text-right font-medium">Principal</th>
+                        <th className="text-right font-medium">Rate</th>
+                        <th className="text-right font-medium">Interest</th>
+                        <th className="text-left pl-2 font-medium">Type</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {period.interestSegments.map((segment, idx) => (
+                        <InterestSegmentRow key={idx} segment={segment} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Commitment Fee Segments */}
+              {period.commitmentFeeSegments.length > 0 && period.commitmentFeeRate > 0 && (
+                <div className="pt-2 border-t">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Commitment Fees</div>
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-muted-foreground">
+                        <th className="text-left py-1 font-medium">Period</th>
+                        <th className="text-right font-medium">Days</th>
+                        <th className="text-right font-medium">Undrawn</th>
+                        <th className="text-right font-medium">Rate</th>
+                        <th className="text-right font-medium">Fee</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {period.commitmentFeeSegments.map((segment, idx) => (
+                        <tr key={idx} className="border-b border-border/30 last:border-0">
+                          <td className="py-1 font-mono">{formatDate(segment.startDate)} – {formatDate(segment.endDate)}</td>
+                          <td className="text-right font-mono">{segment.days}</td>
+                          <td className="text-right font-mono text-green-600">{formatCurrency(segment.undrawn)}</td>
+                          <td className="text-right font-mono">{formatPercent(segment.feeRate, 2)}</td>
+                          <td className="text-right font-mono">{formatCurrency(segment.fee)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Daily Breakdown Toggle */}
+              <div className="pt-2 border-t">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleDailyBreakdown();
+                  }}
+                  className="text-xs h-7 px-2"
+                >
+                  <Calendar className="h-3 w-3 mr-1" />
+                  {showDailyBreakdown ? 'Hide daily' : 'Show daily breakdown'}
+                </Button>
+                
+                {showDailyBreakdown && (
+                  <DailyBreakdownTable dailyAccruals={period.dailyAccruals} />
+                )}
               </div>
             </div>
-          </div>
-
-          {/* Movement Summary */}
-          {(period.principalDrawn > 0 || period.principalRepaid > 0 || period.pikCapitalized > 0) && (
-            <div className="bg-muted/30 rounded-lg p-4">
-              <h4 className="text-sm font-medium mb-2">Principal Movements</h4>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                {period.principalDrawn > 0 && (
-                  <div>
-                    <span className="text-muted-foreground">Drawn:</span>{' '}
-                    <span className="font-mono text-green-600">+{formatCurrency(period.principalDrawn)}</span>
-                  </div>
-                )}
-                {period.principalRepaid > 0 && (
-                  <div>
-                    <span className="text-muted-foreground">Repaid:</span>{' '}
-                    <span className="font-mono text-red-600">-{formatCurrency(period.principalRepaid)}</span>
-                  </div>
-                )}
-                {period.pikCapitalized > 0 && (
-                  <div>
-                    <span className="text-muted-foreground">PIK Capitalized:</span>{' '}
-                    <span className="font-mono text-amber-600">+{formatCurrency(period.pikCapitalized)}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Interest Segments */}
-          <div className="bg-muted/30 rounded-lg p-4">
-            <h4 className="text-sm font-medium mb-3">Interest Calculation</h4>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-muted-foreground">
-                  <th className="text-left py-1">Period</th>
-                  <th className="text-right">Days</th>
-                  <th className="text-right">Principal</th>
-                  <th className="text-right">Rate</th>
-                  <th className="text-right">Interest</th>
-                  <th className="text-left pl-2">Type</th>
-                </tr>
-              </thead>
-              <tbody>
-                {period.interestSegments.map((segment, idx) => (
-                  <InterestSegmentRow key={idx} segment={segment} />
-                ))}
-                <tr className="border-t font-medium">
-                  <td className="py-2">Total</td>
-                  <td className="text-right">{period.days}</td>
-                  <td></td>
-                  <td></td>
-                  <td className="text-right font-mono">{formatCurrency(period.interestAccrued)}</td>
-                  <td></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* Commitment Fee Segments */}
-          {period.commitmentFeeSegments.length > 0 && period.commitmentFeeRate > 0 && (
-            <div className="bg-amber-500/10 rounded-lg p-4">
-              <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
-                <PiggyBank className="h-4 w-4" />
-                Commitment Fee Calculation
-              </h4>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-muted-foreground">
-                    <th className="text-left py-1">Period</th>
-                    <th className="text-right">Days</th>
-                    <th className="text-right">Commitment</th>
-                    <th className="text-right">Undrawn</th>
-                    <th className="text-right">Fee Rate</th>
-                    <th className="text-right">Fee</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {period.commitmentFeeSegments.map((segment, idx) => (
-                    <CommitmentFeeSegmentRow key={idx} segment={segment} />
-                  ))}
-                  <tr className="border-t font-medium">
-                    <td className="py-2">Total</td>
-                    <td className="text-right">{period.days}</td>
-                    <td></td>
-                    <td className="text-right text-xs text-muted-foreground">
-                      Avg: {formatCurrency(period.avgUndrawnAmount)}
-                    </td>
-                    <td></td>
-                    <td className="text-right font-mono">{formatCurrency(period.commitmentFeeAccrued)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Daily Breakdown Toggle */}
-          <div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleDailyBreakdown();
-              }}
-              className="w-full"
-            >
-              <Calendar className="h-4 w-4 mr-2" />
-              {showDailyBreakdown ? 'Hide Daily Breakdown' : 'Show Daily Breakdown'}
-            </Button>
-            
-            {showDailyBreakdown && (
-              <DailyBreakdownTable dailyAccruals={period.dailyAccruals} />
-            )}
-          </div>
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }
 
@@ -426,24 +383,6 @@ function InterestSegmentRow({ segment }: InterestSegmentRowProps) {
   );
 }
 
-interface CommitmentFeeSegmentRowProps {
-  segment: CommitmentFeeSegment;
-}
-
-function CommitmentFeeSegmentRow({ segment }: CommitmentFeeSegmentRowProps) {
-  return (
-    <tr className="border-b border-border/50 last:border-0">
-      <td className="py-1.5 font-mono text-xs">
-        {formatDate(segment.startDate)} – {formatDate(segment.endDate)}
-      </td>
-      <td className="text-right font-mono">{segment.days}</td>
-      <td className="text-right font-mono">{formatCurrency(segment.commitment)}</td>
-      <td className="text-right font-mono text-green-600">{formatCurrency(segment.undrawn)}</td>
-      <td className="text-right font-mono">{formatPercent(segment.feeRate, 2)}</td>
-      <td className="text-right font-mono">{formatCurrency(segment.fee)}</td>
-    </tr>
-  );
-}
 
 interface DailyBreakdownTableProps {
   dailyAccruals: DailyAccrual[];
