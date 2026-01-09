@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/loans/LoanStatusBadge';
 import { AccrualsTab } from '@/components/loans/AccrualsTab';
+import { NoticePreviewTab } from '@/components/loans/NoticePreviewTab';
 import { formatCurrency, formatDate, formatDateTime, formatPercent, formatEventType } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EventType } from '@/types/loan';
@@ -22,7 +23,8 @@ import {
   FileText,
   Clock,
   Landmark,
-  TrendingUp
+  TrendingUp,
+  Mail
 } from 'lucide-react';
 
 const eventTypes: EventType[] = [
@@ -197,6 +199,10 @@ export default function LoanDetail() {
       <Tabs defaultValue="events" className="space-y-4">
         <TabsList>
           <TabsTrigger value="events">Events</TabsTrigger>
+          <TabsTrigger value="notices">
+            <Mail className="h-4 w-4 mr-2" />
+            Interest Notices
+          </TabsTrigger>
           <TabsTrigger value="accruals">Accruals</TabsTrigger>
           <TabsTrigger value="periods">Periods</TabsTrigger>
           <TabsTrigger value="facilities">Facilities</TabsTrigger>
@@ -340,6 +346,18 @@ export default function LoanDetail() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Notices Tab */}
+        <TabsContent value="notices">
+          {loan && (
+            <NoticePreviewTab 
+              loan={loan}
+              periodAccruals={periodAccruals} 
+              summary={accrualsSummary} 
+              isLoading={accrualsLoading} 
+            />
+          )}
         </TabsContent>
 
         {/* Accruals Tab */}
