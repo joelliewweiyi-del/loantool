@@ -176,16 +176,14 @@ export default function LoanDetail() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="events" className="space-y-4">
+      <Tabs defaultValue="accruals" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="accruals">Accruals</TabsTrigger>
           <TabsTrigger value="events">Events</TabsTrigger>
           <TabsTrigger value="notices">
             <Mail className="h-4 w-4 mr-2" />
             Interest Notices
           </TabsTrigger>
-          <TabsTrigger value="accruals">Accruals</TabsTrigger>
-          <TabsTrigger value="periods">Periods</TabsTrigger>
-          <TabsTrigger value="facilities">Facilities</TabsTrigger>
         </TabsList>
 
         {/* Events Tab */}
@@ -276,7 +274,7 @@ export default function LoanDetail() {
             <CardContent>
               {eventsLoading ? (
                 <Skeleton className="h-48" />
-              ) : events?.length === 0 ? (
+              ) : events?.filter(e => e.event_type !== 'pik_capitalization_posted')?.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   No events recorded yet
                 </div>
@@ -294,9 +292,11 @@ export default function LoanDetail() {
                     </tr>
                   </thead>
                   <tbody>
-                    {[...events || []].sort((a, b) => 
-                      new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime()
-                    ).map(event => (
+                    {[...events || []]
+                      .filter(event => event.event_type !== 'pik_capitalization_posted')
+                      .sort((a, b) => 
+                        new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime()
+                      ).map(event => (
                       <tr key={event.id}>
                         <td className="font-mono">{formatDate(event.effective_date)}</td>
                         <td>{formatEventType(event.event_type)}</td>
@@ -349,89 +349,6 @@ export default function LoanDetail() {
           />
         </TabsContent>
 
-        {/* Periods Tab */}
-        <TabsContent value="periods">
-          <Card>
-            <CardHeader>
-              <CardTitle>Notice Periods</CardTitle>
-              <CardDescription>Monthly notice periods and their status</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {periods?.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No periods created yet
-                </div>
-              ) : (
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Period</th>
-                      <th>Status</th>
-                      <th>Submitted</th>
-                      <th>Approved</th>
-                      <th>Sent</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...periods || []].sort((a, b) => 
-                      new Date(a.period_start).getTime() - new Date(b.period_start).getTime()
-                    ).map(period => (
-                      <tr key={period.id}>
-                        <td className="font-mono">
-                          {formatDate(period.period_start)} – {formatDate(period.period_end)}
-                        </td>
-                        <td><StatusBadge status={period.status} /></td>
-                        <td className="text-muted-foreground">{formatDateTime(period.submitted_at)}</td>
-                        <td className="text-muted-foreground">{formatDateTime(period.approved_at)}</td>
-                        <td className="text-muted-foreground">{formatDateTime(period.sent_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Facilities Tab */}
-        <TabsContent value="facilities">
-          <Card>
-            <CardHeader>
-              <CardTitle>Facilities</CardTitle>
-              <CardDescription>Commitment facilities (capex, interest depot, etc.)</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {facilities?.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No facilities created yet
-                </div>
-              ) : (
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Type</th>
-                      <th className="text-right">Commitment</th>
-                      <th className="text-right">Fee Rate</th>
-                      <th>Created</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...facilities || []].sort((a, b) => 
-                      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-                    ).map(facility => (
-                      <tr key={facility.id}>
-                        <td className="capitalize">{facility.facility_type.replace('_', ' ')}</td>
-                        <td className="numeric">{formatCurrency(facility.commitment_amount)}</td>
-                        <td className="numeric">{formatPercent(facility.commitment_fee_rate)}</td>
-                        <td className="text-muted-foreground">{formatDate(facility.created_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
       </Tabs>
     </div>
   );

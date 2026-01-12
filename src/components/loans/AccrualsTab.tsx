@@ -61,25 +61,26 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b bg-muted/40">
-                    <th className="text-left py-2.5 px-4 font-medium text-muted-foreground w-8"></th>
-                    <th className="text-left py-2.5 px-4 font-medium text-muted-foreground">Period</th>
-                    <th className="text-center py-2.5 px-4 font-medium text-muted-foreground">Status</th>
-                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Days</th>
-                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Principal</th>
-                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Rate</th>
-                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Interest</th>
-                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Fees</th>
-                    <th className="text-right py-2.5 px-4 font-medium text-muted-foreground">Total Due</th>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left py-3 px-4 font-semibold text-muted-foreground w-8"></th>
+                    <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Period</th>
+                    <th className="text-center py-3 px-4 font-semibold text-muted-foreground">Status</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Days</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Opening Principal</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Rate</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Interest</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Fees</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Total Due</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border">
                   {[...periodAccruals].sort((a, b) => 
                     new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
-                  ).map((period) => (
+                  ).map((period, index) => (
                     <PeriodTableRow
                       key={period.periodId}
                       period={period}
+                      index={index}
                       isExpanded={expandedPeriods.has(period.periodId)}
                       onToggle={() => togglePeriod(period.periodId)}
                       showDailyBreakdown={showDailyBreakdown === period.periodId}
@@ -124,6 +125,7 @@ function SummaryCard({ icon, label, value, subtext }: SummaryCardProps) {
 
 interface PeriodTableRowProps {
   period: PeriodAccrual;
+  index: number;
   isExpanded: boolean;
   onToggle: () => void;
   showDailyBreakdown: boolean;
@@ -132,48 +134,64 @@ interface PeriodTableRowProps {
 
 function PeriodTableRow({ 
   period, 
+  index,
   isExpanded, 
   onToggle,
   showDailyBreakdown,
   onToggleDailyBreakdown,
 }: PeriodTableRowProps) {
+  const getStatusBorderColor = (status: string) => {
+    switch (status) {
+      case 'open': return 'border-l-blue-400';
+      case 'submitted': return 'border-l-yellow-400';
+      case 'approved': return 'border-l-green-400';
+      case 'sent': return 'border-l-primary';
+      default: return 'border-l-muted';
+    }
+  };
+
   return (
     <>
       <tr 
-        className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
+        className={`
+          cursor-pointer transition-colors border-l-4
+          ${getStatusBorderColor(period.status)}
+          ${index % 2 === 0 ? 'bg-background' : 'bg-muted/20'}
+          hover:bg-muted/40
+        `}
         onClick={onToggle}
       >
-        <td className="py-3 px-4">
+        <td className="py-4 px-4">
           {isExpanded ? (
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
           ) : (
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
         </td>
-        <td className="py-3 px-4">
-          <span className="font-mono text-xs">
+        <td className="py-4 px-4">
+          <span className="font-mono text-sm font-medium">
             {formatDate(period.periodStart)} – {formatDate(period.periodEnd)}
           </span>
         </td>
-        <td className="py-3 px-4 text-center">
+        <td className="py-4 px-4 text-center">
           <StatusBadge status={period.status as PeriodStatus} />
         </td>
-        <td className="py-3 px-4 text-right font-mono text-muted-foreground">
+        <td className="py-4 px-4 text-right font-mono text-sm text-muted-foreground">
           {period.days}
         </td>
-        <td className="py-3 px-4 text-right font-mono">
+        <td className="py-4 px-4 text-right font-mono text-sm font-medium">
           {formatCurrency(period.openingPrincipal)}
         </td>
-        <td className="py-3 px-4 text-right font-mono text-muted-foreground">
+        <td className="py-4 px-4 text-right font-mono text-sm text-muted-foreground">
           {formatPercent(period.openingRate, 2)}
         </td>
-        <td className="py-3 px-4 text-right font-mono text-primary font-medium">
+        <td className="py-4 px-4 text-right font-mono text-sm text-primary font-semibold">
           {formatCurrency(period.interestAccrued)}
         </td>
-        <td className="py-3 px-4 text-right font-mono text-muted-foreground">
+        <td className="py-4 px-4 text-right font-mono text-sm text-muted-foreground">
           {period.commitmentFeeAccrued > 0 ? formatCurrency(period.commitmentFeeAccrued) : '—'}
         </td>
-        <td className="py-3 px-4 text-right font-mono font-semibold">
+        <td className="py-4 px-4 text-right font-mono text-sm font-bold">
           {formatCurrency(period.totalDue)}
         </td>
       </tr>
