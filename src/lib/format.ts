@@ -15,7 +15,7 @@ export function formatCurrency(amount: number | null | undefined): string {
 /**
  * Format a number as a percentage
  */
-export function formatPercent(rate: number | null | undefined, decimals = 4): string {
+export function formatPercent(rate: number | null | undefined, decimals = 2): string {
   if (rate === null || rate === undefined) return '—';
   return `${(rate * 100).toFixed(decimals)}%`;
 }
