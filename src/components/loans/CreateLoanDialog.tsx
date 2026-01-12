@@ -15,6 +15,8 @@ interface LoanFormData {
   borrower_name: string;
   loan_start_date: string;
   maturity_date: string;
+  vehicle: string;
+  facility: string;
   // Interest
   interest_rate: string;
   interest_type: InterestType;
@@ -34,6 +36,8 @@ const initialFormData: LoanFormData = {
   borrower_name: '',
   loan_start_date: '',
   maturity_date: '',
+  vehicle: 'RED IV',
+  facility: '',
   interest_rate: '',
   interest_type: 'cash_pay',
   loan_type: 'term_loan',
@@ -72,6 +76,8 @@ export function CreateLoanDialog() {
         ? formData.commitment_fee_basis : null,
       notice_frequency: formData.notice_frequency,
       payment_due_rule: formData.payment_due_rule || null,
+      vehicle: formData.vehicle,
+      facility: formData.vehicle === 'TLF' ? formData.facility || null : null,
     };
 
     await createLoan.mutateAsync(payload);
@@ -80,7 +86,8 @@ export function CreateLoanDialog() {
   };
 
   const isCommittedFacility = formData.loan_type === 'committed_facility';
-  const canSubmit = formData.borrower_name && formData.loan_start_date;
+  const isTLF = formData.vehicle === 'TLF';
+  const canSubmit = formData.borrower_name && formData.loan_start_date && (formData.vehicle !== 'TLF' || formData.facility);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -105,6 +112,33 @@ export function CreateLoanDialog() {
               Identity
             </h3>
             <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Vehicle *</Label>
+                <Select 
+                  value={formData.vehicle} 
+                  onValueChange={(v) => handleChange('vehicle', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="RED IV">RED IV</SelectItem>
+                    <SelectItem value="TLF">TLF</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {isTLF && (
+                <div className="space-y-2">
+                  <Label htmlFor="facility">Facility Name *</Label>
+                  <Input
+                    id="facility"
+                    value={formData.facility}
+                    onChange={(e) => handleChange('facility', e.target.value)}
+                    placeholder="e.g., TLF_DEC_A"
+                    required
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="loan_name">Loan Name</Label>
                 <Input

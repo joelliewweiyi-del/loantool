@@ -113,6 +113,8 @@ export function useCreateLoan() {
       commitment_fee_rate?: number | null;
       commitment_fee_basis?: string | null;
       notice_frequency?: string;
+      vehicle?: string;
+      facility?: string | null;
     }) => {
       const { data: loan, error } = await supabase
         .from('loans')
