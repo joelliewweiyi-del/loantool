@@ -177,7 +177,7 @@ function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
   paymentDueDate.setDate(paymentDueDate.getDate() + 5); // Assume 5 business days
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 font-serif">
+    <div className="max-w-3xl mx-auto space-y-8 font-barlow">
       {/* Letterhead */}
       <div className="text-center border-b pb-6">
         <img src={raxLogo} alt="Rax Finance" className="h-10 mx-auto mb-4" />
@@ -228,8 +228,7 @@ function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
 
       {/* Calculation Details */}
       <div>
-        <h3 className="font-semibold mb-4 flex items-center gap-2">
-          <DollarSign className="h-4 w-4" />
+        <h3 className="font-semibold mb-4">
           Interest Calculation
         </h3>
         <table className="w-full text-sm">
