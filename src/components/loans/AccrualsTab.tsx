@@ -42,8 +42,61 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
     );
   }
 
+  // Get the latest period (most recent by end date)
+  const latestPeriod = periodAccruals.length > 0 
+    ? [...periodAccruals].sort((a, b) => 
+        new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime()
+      )[0]
+    : null;
+
   return (
     <div className="space-y-6">
+      {/* Latest Period Header */}
+      {latestPeriod && (
+        <Card className="border-l-4 border-l-primary bg-gradient-to-r from-primary/5 to-transparent">
+          <CardContent className="py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="bg-primary/10 p-2 rounded-lg">
+                  <Calendar className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Current Period</div>
+                  <div className="font-mono font-semibold">
+                    {formatDate(latestPeriod.periodStart)} – {formatDate(latestPeriod.periodEnd)}
+                  </div>
+                </div>
+                <StatusBadge status={latestPeriod.status as PeriodStatus} />
+              </div>
+              <div className="flex items-center gap-8">
+                <div className="text-right">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Principal</div>
+                  <div className="font-mono font-semibold">{formatCurrency(latestPeriod.openingPrincipal)}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Rate</div>
+                  <div className="font-mono font-semibold">{formatPercent(latestPeriod.openingRate, 2)}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Interest Accrued</div>
+                  <div className="font-mono font-semibold text-primary">{formatCurrency(latestPeriod.interestAccrued)}</div>
+                </div>
+                {latestPeriod.commitmentFeeAccrued > 0 && (
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Commitment Fees</div>
+                    <div className="font-mono font-semibold">{formatCurrency(latestPeriod.commitmentFeeAccrued)}</div>
+                  </div>
+                )}
+                <div className="text-right border-l pl-6">
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Total Due</div>
+                  <div className="font-mono font-bold text-lg">{formatCurrency(latestPeriod.totalDue)}</div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Period Breakdown */}
       <Card>
         <CardHeader className="pb-2">
