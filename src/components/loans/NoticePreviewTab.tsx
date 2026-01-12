@@ -21,6 +21,7 @@ import {
   Calendar,
   DollarSign
 } from 'lucide-react';
+import raxLogo from '@/assets/rax-logo.png';
 
 interface NoticePreviewTabProps {
   loan: Loan;
@@ -179,8 +180,8 @@ function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
     <div className="max-w-3xl mx-auto space-y-8 font-serif">
       {/* Letterhead */}
       <div className="text-center border-b pb-6">
+        <img src={raxLogo} alt="Rax Finance" className="h-10 mx-auto mb-4" />
         <h1 className="text-2xl font-bold tracking-tight">INTEREST PAYMENT NOTICE</h1>
-        <p className="text-muted-foreground mt-2">Private Credit Fund</p>
       </div>
 
       {/* Recipient & Reference */}
