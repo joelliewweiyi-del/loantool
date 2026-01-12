@@ -147,6 +147,7 @@ export default function Loans() {
               <thead>
                 <tr>
                   <th>Loan</th>
+                  {activeVehicle === 'TLF' && <th>Facility</th>}
                   <th>City</th>
                   <th>Category</th>
                   <th>Status</th>
@@ -163,6 +164,13 @@ export default function Loans() {
                     <td>
                       <div className="font-medium">{loan.loan_name || loan.borrower_name}</div>
                     </td>
+                    {activeVehicle === 'TLF' && (
+                      <td>
+                        <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
+                          {(loan as any).facility || '—'}
+                        </span>
+                      </td>
+                    )}
                     <td className="text-muted-foreground">{(loan as any).city || '—'}</td>
                     <td>
                       <span className="text-xs px-2 py-0.5 rounded bg-muted">
