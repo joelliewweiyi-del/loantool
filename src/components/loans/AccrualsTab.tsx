@@ -69,7 +69,7 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Opening Principal</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Rate</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Interest</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Fees</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Commitment Fees</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Total Due</th>
                   </tr>
                 </thead>
