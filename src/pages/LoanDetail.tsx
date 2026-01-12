@@ -56,12 +56,20 @@ export default function LoanDetail() {
   const [effectiveDate, setEffectiveDate] = useState('');
   const [amount, setAmount] = useState('');
   const [rate, setRate] = useState('');
+  const [feeType, setFeeType] = useState<string>('arrangement');
+  const [feePaymentType, setFeePaymentType] = useState<'cash' | 'pik'>('cash');
 
   const canCreateEvents = isPM || isController;
   const canApproveEvents = isController;
 
   const handleCreateEvent = async () => {
     if (!id || !user) return;
+    
+    const metadata: Record<string, unknown> = {};
+    if (eventType === 'fee_invoice') {
+      metadata.fee_type = feeType;
+      metadata.payment_type = feePaymentType;
+    }
     
     await createEvent.mutateAsync({
       loan_id: id,
@@ -71,7 +79,7 @@ export default function LoanDetail() {
       value_date: null,
       amount: amount ? parseFloat(amount) : null,
       rate: rate ? parseFloat(rate) / 100 : null,
-      metadata: {},
+      metadata,
       status: 'draft',
       created_by: user.id,
     });
@@ -81,6 +89,8 @@ export default function LoanDetail() {
     setEffectiveDate('');
     setAmount('');
     setRate('');
+    setFeeType('arrangement');
+    setFeePaymentType('cash');
   };
 
   const handleApproveEvent = async (eventId: string) => {
@@ -225,6 +235,41 @@ export default function LoanDetail() {
                           </SelectContent>
                         </Select>
                       </div>
+                      
+                      {/* Fee-specific fields */}
+                      {eventType === 'fee_invoice' && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label>Fee Type</Label>
+                            <Select value={feeType} onValueChange={setFeeType}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="arrangement">Arrangement Fee</SelectItem>
+                                <SelectItem value="extension">Extension Fee</SelectItem>
+                                <SelectItem value="exit">Exit Fee</SelectItem>
+                                <SelectItem value="monitoring">Monitoring Fee</SelectItem>
+                                <SelectItem value="waiver">Waiver Fee</SelectItem>
+                                <SelectItem value="legal">Legal Fee</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Payment Type</Label>
+                            <Select value={feePaymentType} onValueChange={(v) => setFeePaymentType(v as 'cash' | 'pik')}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="cash">Cash (Paid Out)</SelectItem>
+                                <SelectItem value="pik">PIK (Rolled Up)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      )}
+                      
                       <div className="space-y-2">
                         <Label>Effective Date</Label>
                         <Input
