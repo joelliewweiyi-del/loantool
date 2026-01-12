@@ -98,23 +98,28 @@ export default function MonthlyApproval() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header with month navigation */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Monthly Approval</h1>
-          <p className="text-muted-foreground">
-            Review and approve all periods for a month in one batch
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={handlePrevMonth}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="px-4 py-2 min-w-[160px] text-center font-medium bg-muted rounded-md">
-            {displayMonth}
+      {/* Header with prominent month display */}
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">Monthly Approval</h1>
+            <p className="text-muted-foreground">
+              Review and approve all periods for a month in one batch
+            </p>
           </div>
-          <Button variant="outline" size="icon" onClick={handleNextMonth}>
-            <ChevronRight className="h-4 w-4" />
+        </div>
+        
+        {/* Prominent Month Selector */}
+        <div className="flex items-center justify-center gap-3 py-4 px-6 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 rounded-lg border">
+          <Button variant="ghost" size="icon" onClick={handlePrevMonth} className="h-10 w-10">
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <div className="text-center">
+            <p className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Approval Period</p>
+            <p className="text-3xl font-bold text-primary">{displayMonth}</p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={handleNextMonth} className="h-10 w-10">
+            <ChevronRight className="h-5 w-5" />
           </Button>
         </div>
       </div>
