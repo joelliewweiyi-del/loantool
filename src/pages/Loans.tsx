@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useLoans } from '@/hooks/useLoans';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
@@ -8,21 +8,54 @@ import { StatusBadge } from '@/components/loans/LoanStatusBadge';
 import { CreateLoanDialog } from '@/components/loans/CreateLoanDialog';
 import { formatDate, formatCurrency, formatPercent } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronRight, Search } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ChevronRight, Search, Building2, Briefcase } from 'lucide-react';
+
+type Vehicle = 'RED IV' | 'TLF';
 
 export default function Loans() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeVehicle = (searchParams.get('vehicle') as Vehicle) || 'RED IV';
   const { data: loans, isLoading } = useLoans();
   const { roles } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
 
   const canCreate = roles.includes('pm') || roles.includes('controller');
 
-  const filteredLoans = loans?.filter(loan => 
+  const handleVehicleChange = (vehicle: string) => {
+    setSearchParams({ vehicle });
+    setSearchQuery('');
+  };
+
+  // Filter by vehicle first
+  const vehicleLoans = loans?.filter(loan => 
+    (loan as any).vehicle === activeVehicle
+  ) || [];
+
+  const filteredLoans = vehicleLoans.filter(loan => 
     loan.borrower_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     loan.loan_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (loan as any).city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (loan as any).category?.toLowerCase().includes(searchQuery.toLowerCase())
-  ) || [];
+  );
+
+  // Calculate portfolio summary metrics for current vehicle
+  const activeLoans = vehicleLoans.filter(l => l.status === 'active');
+  const totalPrincipal = activeLoans.reduce((sum, l) => sum + (l.initial_principal || 0), 0);
+  const totalCommitment = activeLoans.reduce((sum, l) => sum + (l.total_commitment || 0), 0);
+  const totalUndrawn = totalCommitment - totalPrincipal;
+  
+  const weightedRateSum = activeLoans.reduce((sum, l) => {
+    const principal = l.initial_principal || 0;
+    const rate = l.interest_rate || 0;
+    return sum + (principal * rate);
+  }, 0);
+  const avgRate = totalPrincipal > 0 ? weightedRateSum / totalPrincipal : 0;
+  const pikLoansCount = activeLoans.filter(l => l.interest_type === 'pik').length;
+
+  // Count loans per vehicle for tabs
+  const redIVCount = loans?.filter(l => (l as any).vehicle === 'RED IV').length || 0;
+  const tlfCount = loans?.filter(l => (l as any).vehicle === 'TLF').length || 0;
 
   if (isLoading) {
     return (
@@ -33,35 +66,34 @@ export default function Loans() {
     );
   }
 
-  // Calculate portfolio summary metrics
-  const activeLoans = loans?.filter(l => l.status === 'active') || [];
-  const totalPrincipal = activeLoans.reduce((sum, l) => sum + (l.initial_principal || 0), 0);
-  const totalCommitment = activeLoans.reduce((sum, l) => sum + (l.total_commitment || 0), 0);
-  const totalUndrawn = totalCommitment - totalPrincipal;
-  
-  // Weighted average rate (weighted by principal)
-  const weightedRateSum = activeLoans.reduce((sum, l) => {
-    const principal = l.initial_principal || 0;
-    const rate = l.interest_rate || 0;
-    return sum + (principal * rate);
-  }, 0);
-  const avgRate = totalPrincipal > 0 ? weightedRateSum / totalPrincipal : 0;
-  
-  // Count PIK loans
-  const pikLoansCount = activeLoans.filter(l => l.interest_type === 'pik').length;
-
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Loans</h1>
           <p className="text-muted-foreground">
-            Manage loan portfolio
+            Manage loan portfolio by vehicle
           </p>
         </div>
         
         {canCreate && <CreateLoanDialog />}
       </div>
+
+      {/* Vehicle Tabs */}
+      <Tabs value={activeVehicle} onValueChange={handleVehicleChange} className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="RED IV" className="flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            RED IV
+            <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{redIVCount}</span>
+          </TabsTrigger>
+          <TabsTrigger value="TLF" className="flex items-center gap-2">
+            <Briefcase className="h-4 w-4" />
+            TLF
+            <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{tlfCount}</span>
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* Portfolio Metrics Bar */}
       <div className="grid grid-cols-6 gap-6 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
@@ -97,7 +129,7 @@ export default function Loans() {
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search loans..."
+                placeholder={`Search ${activeVehicle} loans...`}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9"
@@ -108,7 +140,7 @@ export default function Loans() {
         <CardContent>
           {filteredLoans.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
-              {searchQuery ? 'No loans match your search.' : 'No loans yet. Create your first loan to get started.'}
+              {searchQuery ? 'No loans match your search.' : `No loans in ${activeVehicle} yet.`}
             </div>
           ) : (
             <table className="data-table">
