@@ -3,11 +3,12 @@
  */
 export function formatCurrency(amount: number | null | undefined): string {
   if (amount === null || amount === undefined) return '—';
-  return new Intl.NumberFormat('de-DE', {
+  return new Intl.NumberFormat('nl-NL', {
     style: 'currency',
     currency: 'EUR',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
+    currencyDisplay: 'symbol',
   }).format(amount);
 }
 
