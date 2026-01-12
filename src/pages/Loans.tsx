@@ -187,7 +187,7 @@ export default function Loans() {
                     </td>
                     <td><StatusBadge status={loan.status} /></td>
                     <td className="numeric">{formatCurrency(loan.initial_principal)}</td>
-                    <td className="numeric">{formatPercent(loan.interest_rate)}</td>
+                    <td className="numeric">{formatPercent(loan.interest_rate, 2)}</td>
                     <td className="text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
                     <td className="text-muted-foreground">{formatDate(loan.maturity_date)}</td>
                     <td className="text-right">
