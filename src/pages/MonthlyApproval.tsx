@@ -139,6 +139,30 @@ export default function MonthlyApproval() {
         </Card>
       )}
 
+      {/* How It Works Callout - only show when not approved */}
+      {!isApproved && (
+        <Card className="bg-blue-50/50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800">
+          <CardContent className="py-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-full bg-blue-100 dark:bg-blue-900">
+                <FileCheck className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-medium text-blue-900 dark:text-blue-100">How Monthly Approval Works</h3>
+                <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                  Each loan has a billing period for this month. Periods without economic events are <strong>auto-processed</strong>. 
+                  Periods with draws, repayments, or rate changes are flagged <strong>Manual</strong> for your review.
+                </p>
+                <p className="text-sm text-blue-700 dark:text-blue-300 mt-2">
+                  <strong>To approve:</strong> Review any periods marked "Economic events", click "View Loan" to check details, 
+                  then click <strong>"Approve All Periods"</strong> to batch-approve the entire month.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>
@@ -147,6 +171,7 @@ export default function MonthlyApproval() {
               <div>
                 <p className="text-sm text-muted-foreground">Total Periods</p>
                 <p className="text-2xl font-bold">{data?.total_periods || 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">Loans billing this month</p>
               </div>
               <Clock className="h-8 w-8 text-muted-foreground/30" />
             </div>
@@ -159,18 +184,20 @@ export default function MonthlyApproval() {
               <div>
                 <p className="text-sm text-muted-foreground">Auto-Processed</p>
                 <p className="text-2xl font-bold text-green-600">{stats.auto}</p>
+                <p className="text-xs text-muted-foreground mt-1">No changes, ready to go</p>
               </div>
               <Zap className="h-8 w-8 text-green-200" />
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={stats.exceptions > 0 ? 'ring-2 ring-amber-300 dark:ring-amber-600' : ''}>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">With Exceptions</p>
+                <p className="text-sm text-muted-foreground">Needs Review</p>
                 <p className="text-2xl font-bold text-amber-600">{stats.exceptions}</p>
+                <p className="text-xs text-muted-foreground mt-1">Has economic events</p>
               </div>
               <AlertTriangle className="h-8 w-8 text-amber-200" />
             </div>
@@ -183,6 +210,7 @@ export default function MonthlyApproval() {
               <div>
                 <p className="text-sm text-muted-foreground">Already Approved</p>
                 <p className="text-2xl font-bold">{stats.approved}</p>
+                <p className="text-xs text-muted-foreground mt-1">Previously approved</p>
               </div>
               <FileCheck className="h-8 w-8 text-muted-foreground/30" />
             </div>
@@ -253,9 +281,21 @@ export default function MonthlyApproval() {
                 <TableRow>
                   <TableHead>Loan ID</TableHead>
                   <TableHead>Period</TableHead>
-                  <TableHead>Processing</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Exceptions</TableHead>
+                  <TableHead>
+                    <span title="Auto = no changes this period. Manual = has events requiring review.">
+                      Processing
+                    </span>
+                  </TableHead>
+                  <TableHead>
+                    <span title="Open = awaiting approval. Approved = finalized.">
+                      Status
+                    </span>
+                  </TableHead>
+                  <TableHead>
+                    <span title="Periods with draws, repayments, or rate changes need review.">
+                      Exceptions
+                    </span>
+                  </TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
