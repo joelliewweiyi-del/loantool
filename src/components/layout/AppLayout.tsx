@@ -3,7 +3,6 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { 
-  Landmark, 
   FileText, 
   LogOut,
   User,
@@ -11,6 +10,7 @@ import {
   CalendarCheck
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import raxLogo from '@/assets/rax-logo.png';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -30,14 +30,8 @@ export function AppLayout({ children }: AppLayoutProps) {
       {/* Sidebar */}
       <aside className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
         <div className="p-4 border-b border-sidebar-border">
-          <Link to="/" className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-sidebar-primary flex items-center justify-center">
-              <Landmark className="h-5 w-5 text-sidebar-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="font-semibold text-sidebar-foreground text-sm">Loan Management</h1>
-              <p className="text-xs text-sidebar-foreground/60">Private Credit Fund</p>
-            </div>
+          <Link to="/" className="flex items-center gap-2">
+            <img src={raxLogo} alt="Rax Finance" className="h-8 w-auto" />
           </Link>
         </div>
 
