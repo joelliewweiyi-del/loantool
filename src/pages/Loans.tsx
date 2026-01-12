@@ -150,6 +150,7 @@ export default function Loans() {
                   {activeVehicle === 'TLF' && <th>Facility</th>}
                   <th>City</th>
                   <th>Category</th>
+                  <th>PIK</th>
                   <th>Status</th>
                   <th className="text-right">Principal</th>
                   <th className="text-right">Rate</th>
@@ -176,8 +177,12 @@ export default function Loans() {
                       <span className="text-xs px-2 py-0.5 rounded bg-muted">
                         {(loan as any).category || '—'}
                       </span>
-                      {loan.interest_type === 'pik' && (
-                        <span className="ml-1 text-xs text-amber-600 font-medium">(PIK)</span>
+                    </td>
+                    <td>
+                      {loan.interest_type === 'pik' ? (
+                        <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">PIK</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
                     <td><StatusBadge status={loan.status} /></td>
