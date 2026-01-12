@@ -241,6 +241,7 @@ export type Database = {
           updated_at: string
           valuation: number | null
           valuation_date: string | null
+          vehicle: string | null
         }
         Insert: {
           borrower_name: string
@@ -268,6 +269,7 @@ export type Database = {
           updated_at?: string
           valuation?: number | null
           valuation_date?: string | null
+          vehicle?: string | null
         }
         Update: {
           borrower_name?: string
@@ -295,6 +297,7 @@ export type Database = {
           updated_at?: string
           valuation?: number | null
           valuation_date?: string | null
+          vehicle?: string | null
         }
         Relationships: []
       }
