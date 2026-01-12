@@ -249,7 +249,7 @@ function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
                 </td>
                 <td className="text-right font-mono">{segment.days}</td>
                 <td className="text-right font-mono">{formatCurrency(segment.principal)}</td>
-                <td className="text-right font-mono">{formatPercent(segment.rate, 4)}</td>
+                <td className="text-right font-mono">{formatPercent(segment.rate)}</td>
                 <td className="text-right font-mono">{formatCurrency(segment.interest)}</td>
               </tr>
             ))}
@@ -288,7 +288,7 @@ function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
                   </td>
                   <td className="text-right font-mono">{segment.days}</td>
                   <td className="text-right font-mono">{formatCurrency(segment.undrawn)}</td>
-                  <td className="text-right font-mono">{formatPercent(segment.feeRate, 4)}</td>
+                  <td className="text-right font-mono">{formatPercent(segment.feeRate)}</td>
                   <td className="text-right font-mono">{formatCurrency(segment.fee)}</td>
                 </tr>
               ))}
