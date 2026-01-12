@@ -7,8 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { Landmark, Shield } from 'lucide-react';
+import { Shield } from 'lucide-react';
 import { z } from 'zod';
+import raxLogo from '@/assets/rax-logo.png';
 
 const authSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -98,13 +99,11 @@ export default function Auth() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="h-12 w-12 rounded-lg bg-primary flex items-center justify-center">
-              <Landmark className="h-6 w-6 text-primary-foreground" />
-            </div>
+            <img src={raxLogo} alt="Rax Finance" className="h-10 w-auto" />
           </div>
           <CardTitle className="text-2xl">Loan Management System</CardTitle>
           <CardDescription>
-            Private Credit Fund - Audit Grade
+            Rax Finance
           </CardDescription>
         </CardHeader>
         <CardContent>

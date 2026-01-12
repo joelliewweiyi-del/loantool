@@ -366,7 +366,7 @@ function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
         <p>Please wire the amount due to the following account:</p>
         <div className="bg-muted/30 rounded p-4 font-mono text-xs space-y-1">
           <p>Bank: [Bank Name]</p>
-          <p>Account Name: Private Credit Fund</p>
+          <p>Account Name: Rax Finance</p>
           <p>IBAN: [IBAN Number]</p>
           <p>BIC/SWIFT: [BIC Code]</p>
           <p>Reference: {period.periodId.slice(0, 8).toUpperCase()}</p>
