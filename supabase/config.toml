@@ -2,3 +2,6 @@ project_id = "xgurpabsifgxeyqjlwxu"
 
 [functions.process-daily-accruals]
 verify_jwt = false
+
+[functions.test-afas-connection]
+verify_jwt = false
