@@ -29,12 +29,43 @@ serve(async (req) => {
     // Try to read from Pocket_Financial_Entry_Invoices GetConnector
     const connectorName = 'Pocket_Financial_Entry_Invoices';
     
-    // Try with different filter approaches
-    const filters = [
-      '?skip=0&take=1', // Minimal pagination
-      '', // No filter
-      '?filterfieldids=Jaar&filtervalues=2024&operatortypes=1', // Year filter
-      '?filterfieldids=Administratie&filtervalues=05&operatortypes=1', // Admin code filter
+    // First, get the connector's metainfo to understand available fields
+    const metaUrl = `${baseUrl}/metainfo/get/${connectorName}`;
+    console.log('Fetching metainfo:', metaUrl);
+    
+    const metaResponse = await fetch(metaUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `AfasToken ${btoa(afasToken)}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    let schema = null;
+    let primaryField = null;
+    
+    if (metaResponse.ok) {
+      const metaText = await metaResponse.text();
+      try {
+        schema = JSON.parse(metaText);
+        // Extract first field name to use for sorting (orderbyfieldids is REQUIRED)
+        if (schema.fields && schema.fields.length > 0) {
+          primaryField = schema.fields[0].fieldId;
+        }
+      } catch {
+        schema = metaText;
+      }
+    }
+    
+    console.log('Schema:', JSON.stringify(schema)?.substring(0, 500));
+    console.log('Primary field for sorting:', primaryField);
+    
+    // Build filters - orderbyfieldids is MANDATORY when using skip/take
+    const filters = primaryField ? [
+      `?skip=0&take=5&orderbyfieldids=${primaryField}`, // Proper pagination with required sort
+      `?orderbyfieldids=${primaryField}`, // Just sorting, no pagination
+    ] : [
+      '', // No filter (fallback if no schema)
     ];
     
     const attempts: Array<{filter: string, status: number, response: string}> = [];
@@ -73,31 +104,11 @@ serve(async (req) => {
           success: true, 
           message: `Successfully retrieved data from ${connectorName}`,
           data: successData,
+          schema: schema,
           attempts: attempts
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
-    }
-    
-    // All attempts failed - get connector schema to understand required fields
-    console.log('All filter attempts failed, fetching connector schema...');
-    
-    const schemaUrl = `${baseUrl}/metainfo/get/${connectorName}`;
-    const schemaResponse = await fetch(schemaUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `AfasToken ${btoa(afasToken)}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    
-    let schema = null;
-    if (schemaResponse.ok) {
-      try {
-        schema = JSON.parse(await schemaResponse.text());
-      } catch {
-        schema = await schemaResponse.text();
-      }
     }
 
     return new Response(
@@ -106,7 +117,7 @@ serve(async (req) => {
         error: `Could not read from ${connectorName}`,
         attempts: attempts,
         connectorSchema: schema,
-        hint: 'The connector may require specific filter parameters. Check the schema for required fields.'
+        hint: 'The connector may have a configuration issue in AFAS. Check the profitLogReference in AFAS logs.'
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
