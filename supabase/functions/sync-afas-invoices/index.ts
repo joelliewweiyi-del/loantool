@@ -6,6 +6,17 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// GL Code mapping for AFAS invoice types
+const GL_CODES = {
+  RENTE_REGULIER: '9350',      // Regular interest
+  RENTE_COMMITMENT: '9351',    // Commitment fees
+  EXIT_FEE: '9352',            // Exit fees
+  LATE_PAYMENT: '9353',        // Late payment penalties
+  ARRANGEMENT_FEE: '8170',     // Arrangement fees (afsluitprovisie)
+  PRINCIPAL: '1750',           // Loans principal
+  COMMITMENT: '1751',          // Loans commitment
+};
+
 interface AfasInvoice {
   InvoiceNr: string;
   DebtorId: string;
@@ -14,6 +25,7 @@ interface AfasInvoice {
   Amount: number;
   OpenAmount?: number;
   Description?: string;
+  GlAccount?: string;          // Grootboekrekening
   [key: string]: unknown;
 }
 
@@ -21,7 +33,6 @@ interface ParsedInvoiceInfo {
   loanNumber: string | null;
   periodMonth: string | null;
   periodYear: string | null;
-  isInterest: boolean;
 }
 
 // Parse Description to extract loan number and period
@@ -31,14 +42,9 @@ function parseAfasDescription(description: string): ParsedInvoiceInfo {
     loanNumber: null,
     periodMonth: null,
     periodYear: null,
-    isInterest: false
   };
 
   if (!description) return result;
-
-  // Check if it's an interest invoice (rente)
-  const lowerDesc = description.toLowerCase();
-  result.isInterest = lowerDesc.includes('rente') || lowerDesc.includes('interest');
 
   // Pattern: "458 - Rente P12 2025" or "484 - Rente P11 2025"
   // Loan number is at the start before " - "
@@ -164,14 +170,15 @@ serve(async (req) => {
     for (const invoice of invoices) {
       const invoiceNr = invoice.InvoiceNr?.toString() || '';
       const description = invoice.Description?.toString() || '';
+      const glAccount = invoice.GlAccount?.toString() || '';
       
-      // Parse Description to extract loan and period (Description has the actual loan number)
-      const parsed = parseAfasDescription(description);
-      
-      // Only process interest invoices
-      if (!parsed.isInterest) {
+      // Only process interest invoices (GL code 9350 = Rente regulier)
+      if (glAccount !== GL_CODES.RENTE_REGULIER) {
         continue;
       }
+      
+      // Parse Description to extract loan and period
+      const parsed = parseAfasDescription(description);
 
       let loanId: string | null = null;
       let periodId: string | null = null;
