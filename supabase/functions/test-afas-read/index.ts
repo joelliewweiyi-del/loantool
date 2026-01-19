@@ -48,9 +48,15 @@ serve(async (req) => {
       const metaText = await metaResponse.text();
       try {
         schema = JSON.parse(metaText);
-        // Extract first field name to use for sorting (orderbyfieldids is REQUIRED)
+        // Find a suitable field for sorting - prefer date fields or the first indexed field
         if (schema.fields && schema.fields.length > 0) {
-          primaryField = schema.fields[0].fieldId;
+          // Look for a date field first (better for chronological sorting)
+          const dateField = schema.fields.find((f: { dataType: string; fieldId: string }) => f.dataType === 'date');
+          // Or use the first string/int field (avoid decimal fields for sorting)
+          const sortableField = schema.fields.find((f: { dataType: string; fieldId: string }) => 
+            f.dataType === 'string' || f.dataType === 'int' || f.dataType === 'date'
+          );
+          primaryField = dateField?.fieldId || sortableField?.fieldId || schema.fields[0].fieldId;
         }
       } catch {
         schema = metaText;
@@ -60,12 +66,10 @@ serve(async (req) => {
     console.log('Schema:', JSON.stringify(schema)?.substring(0, 500));
     console.log('Primary field for sorting:', primaryField);
     
-    // Build filters - orderbyfieldids is MANDATORY when using skip/take
-    const filters = primaryField ? [
-      `?skip=0&take=5&orderbyfieldids=${primaryField}`, // Proper pagination with required sort
-      `?orderbyfieldids=${primaryField}`, // Just sorting, no pagination
-    ] : [
-      '', // No filter (fallback if no schema)
+    // Build filters - try without pagination first (orderbyfieldids requires indexable fields in AFAS)
+    const filters = [
+      '', // No filter - just get all data (AFAS returns max 100 by default)
+      '?take=10', // Try take without orderby
     ];
     
     const attempts: Array<{filter: string, status: number, response: string}> = [];
