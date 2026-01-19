@@ -10,6 +10,7 @@ import Loans from "./pages/Loans";
 import LoanDetail from "./pages/LoanDetail";
 import MonthlyApproval from "./pages/MonthlyApproval";
 import AfasReconciliation from "./pages/AfasReconciliation";
+import AfasInvoices from "./pages/AfasInvoices";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -67,6 +68,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AfasReconciliation />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/afas-invoices"
+        element={
+          <ProtectedRoute>
+            <AfasInvoices />
           </ProtectedRoute>
         }
       />
