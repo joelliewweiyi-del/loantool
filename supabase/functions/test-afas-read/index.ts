@@ -65,8 +65,11 @@ serve(async (req) => {
       // If the specific connector doesn't exist, try listing available connectors
       console.log('Primary connector failed, trying to list available connectors...');
       
-      const listUrl = `${baseUrl}/connectorinfo`;
-      const listResponse = await fetch(listUrl, {
+      // Try metainfo/get endpoint to list GetConnectors
+      const metaUrl = `${baseUrl}/metainfo/get`;
+      console.log('Trying metainfo endpoint:', metaUrl);
+      
+      const metaResponse = await fetch(metaUrl, {
         method: 'GET',
         headers: {
           'Authorization': `AfasToken ${btoa(afasToken)}`,
@@ -74,12 +77,47 @@ serve(async (req) => {
         },
       });
       
-      const listText = await listResponse.text();
+      const metaText = await metaResponse.text();
+      console.log('Metainfo response status:', metaResponse.status);
+      
       let availableConnectors;
-      try {
-        availableConnectors = JSON.parse(listText);
-      } catch {
-        availableConnectors = listText;
+      if (metaResponse.ok) {
+        try {
+          availableConnectors = JSON.parse(metaText);
+        } catch {
+          availableConnectors = metaText;
+        }
+      } else {
+        // Try alternative endpoints
+        const altEndpoints = [
+          `${baseUrl}/metainfo`,
+          `${baseUrl}/connectorinfo`
+        ];
+        
+        for (const altUrl of altEndpoints) {
+          console.log('Trying alternative:', altUrl);
+          const altResponse = await fetch(altUrl, {
+            method: 'GET',
+            headers: {
+              'Authorization': `AfasToken ${btoa(afasToken)}`,
+              'Content-Type': 'application/json',
+            },
+          });
+          
+          if (altResponse.ok) {
+            const altText = await altResponse.text();
+            try {
+              availableConnectors = JSON.parse(altText);
+            } catch {
+              availableConnectors = altText;
+            }
+            break;
+          }
+        }
+        
+        if (!availableConnectors) {
+          availableConnectors = `Could not list connectors. metainfo/get response: ${metaText}`;
+        }
       }
 
       return new Response(
