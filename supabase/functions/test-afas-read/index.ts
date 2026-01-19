@@ -27,49 +27,24 @@ serve(async (req) => {
     const baseUrl = `https://${afasEnvId}.rest.afas.online/profitrestservices`;
     
     // Try to read from Pocket_Financial_Entry_Invoices GetConnector
-    // This connector should return financial entry invoices
     const connectorName = 'Pocket_Financial_Entry_Invoices';
-    const getUrl = `${baseUrl}/connectors/${connectorName}?skip=0&take=5`;
     
-    console.log('Fetching from:', getUrl);
-
-    const response = await fetch(getUrl, {
-      method: 'GET',
-      headers: {
-        'Authorization': `AfasToken ${btoa(afasToken)}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    const responseText = await response.text();
-    console.log('Response Status:', response.status);
-
-    if (response.ok) {
-      let data;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        data = responseText;
-      }
+    // Try with different filter approaches
+    const filters = [
+      '?skip=0&take=1', // Minimal pagination
+      '', // No filter
+      '?filterfieldids=Jaar&filtervalues=2024&operatortypes=1', // Year filter
+      '?filterfieldids=Administratie&filtervalues=05&operatortypes=1', // Admin code filter
+    ];
+    
+    const attempts: Array<{filter: string, status: number, response: string}> = [];
+    let successData = null;
+    
+    for (const filter of filters) {
+      const getUrl = `${baseUrl}/connectors/${connectorName}${filter}`;
+      console.log('Trying:', getUrl);
       
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: `Successfully retrieved data from ${connectorName}`,
-          status: response.status,
-          data: data
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    } else {
-      // If the specific connector doesn't exist, try listing available connectors
-      console.log('Primary connector failed, trying to list available connectors...');
-      
-      // Try metainfo/get endpoint to list GetConnectors
-      const metaUrl = `${baseUrl}/metainfo/get`;
-      console.log('Trying metainfo endpoint:', metaUrl);
-      
-      const metaResponse = await fetch(metaUrl, {
+      const testResponse = await fetch(getUrl, {
         method: 'GET',
         headers: {
           'Authorization': `AfasToken ${btoa(afasToken)}`,
@@ -77,60 +52,64 @@ serve(async (req) => {
         },
       });
       
-      const metaText = await metaResponse.text();
-      console.log('Metainfo response status:', metaResponse.status);
+      const testText = await testResponse.text();
+      console.log('Response:', testResponse.status, testText.substring(0, 300));
       
-      let availableConnectors;
-      if (metaResponse.ok) {
+      attempts.push({ filter: filter || '(no filter)', status: testResponse.status, response: testText.substring(0, 500) });
+      
+      if (testResponse.ok) {
         try {
-          availableConnectors = JSON.parse(metaText);
+          successData = JSON.parse(testText);
         } catch {
-          availableConnectors = metaText;
+          successData = testText;
         }
-      } else {
-        // Try alternative endpoints
-        const altEndpoints = [
-          `${baseUrl}/metainfo`,
-          `${baseUrl}/connectorinfo`
-        ];
-        
-        for (const altUrl of altEndpoints) {
-          console.log('Trying alternative:', altUrl);
-          const altResponse = await fetch(altUrl, {
-            method: 'GET',
-            headers: {
-              'Authorization': `AfasToken ${btoa(afasToken)}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          
-          if (altResponse.ok) {
-            const altText = await altResponse.text();
-            try {
-              availableConnectors = JSON.parse(altText);
-            } catch {
-              availableConnectors = altText;
-            }
-            break;
-          }
-        }
-        
-        if (!availableConnectors) {
-          availableConnectors = `Could not list connectors. metainfo/get response: ${metaText}`;
-        }
+        break;
       }
-
+    }
+    
+    if (successData) {
       return new Response(
         JSON.stringify({ 
-          success: false, 
-          error: `Connector ${connectorName} not accessible`,
-          status: response.status,
-          details: responseText,
-          availableConnectors: availableConnectors
+          success: true, 
+          message: `Successfully retrieved data from ${connectorName}`,
+          data: successData,
+          attempts: attempts
         }),
-        { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+    
+    // All attempts failed - get connector schema to understand required fields
+    console.log('All filter attempts failed, fetching connector schema...');
+    
+    const schemaUrl = `${baseUrl}/metainfo/get/${connectorName}`;
+    const schemaResponse = await fetch(schemaUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': `AfasToken ${btoa(afasToken)}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    let schema = null;
+    if (schemaResponse.ok) {
+      try {
+        schema = JSON.parse(await schemaResponse.text());
+      } catch {
+        schema = await schemaResponse.text();
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: `Could not read from ${connectorName}`,
+        attempts: attempts,
+        connectorSchema: schema,
+        hint: 'The connector may require specific filter parameters. Check the schema for required fields.'
+      }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   } catch (error: unknown) {
     const errMessage = error instanceof Error ? error.message : String(error);
     console.error('Error reading from AFAS:', errMessage);
