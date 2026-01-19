@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.get-afas-schema]
 verify_jwt = false
+
+[functions.test-afas-read]
+verify_jwt = false
+
+[functions.test-afas-write]
+verify_jwt = false
