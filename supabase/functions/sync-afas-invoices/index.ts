@@ -20,58 +20,38 @@ interface AfasInvoice {
 interface ParsedInvoiceInfo {
   loanNumber: string | null;
   periodMonth: string | null;
+  periodYear: string | null;
   isInterest: boolean;
 }
 
-// Parse InvoiceNr to extract loan number and period
-// Format examples: "458-P01-2025", "458 P12 2025", "458-Rente-P01-2025"
-function parseInvoiceNr(invoiceNr: string, description?: string): ParsedInvoiceInfo {
+// Parse Description to extract loan number and period
+// Format examples from AFAS: "458 - Rente P12 2025", "484 - Rente P11 2025"
+function parseAfasDescription(description: string): ParsedInvoiceInfo {
   const result: ParsedInvoiceInfo = {
     loanNumber: null,
     periodMonth: null,
+    periodYear: null,
     isInterest: false
   };
 
-  if (!invoiceNr) return result;
+  if (!description) return result;
 
   // Check if it's an interest invoice (rente)
-  const combined = `${invoiceNr} ${description || ''}`.toLowerCase();
-  result.isInterest = combined.includes('rente') || combined.includes('interest');
+  const lowerDesc = description.toLowerCase();
+  result.isInterest = lowerDesc.includes('rente') || lowerDesc.includes('interest');
 
-  // Try to extract loan number - usually first number in the string
-  const loanMatch = invoiceNr.match(/^(\d+)/);
+  // Pattern: "458 - Rente P12 2025" or "484 - Rente P11 2025"
+  // Loan number is at the start before " - "
+  const loanMatch = description.match(/^(\d+)\s*-/);
   if (loanMatch) {
     result.loanNumber = loanMatch[1];
   }
 
-  // Try to extract period - formats like P01, P12, or month names
-  const periodPatterns = [
-    /[Pp](\d{1,2})/,           // P01, P12
-    /[Mm](\d{1,2})/,           // M01, M12
-    /-(\d{1,2})-\d{4}$/,       // -01-2025
-  ];
-
-  for (const pattern of periodPatterns) {
-    const match = invoiceNr.match(pattern);
-    if (match) {
-      result.periodMonth = match[1].padStart(2, '0');
-      break;
-    }
-  }
-
-  // Also check description for period if not found in invoice number
-  if (!result.periodMonth && description) {
-    const descPatterns = [
-      /[Pp](\d{1,2})\s*\d{4}/,  // P12 2025
-      /[Pp]eriod[e]?\s*(\d{1,2})/i, // Period 12, Periode 1
-    ];
-    for (const pattern of descPatterns) {
-      const match = description.match(pattern);
-      if (match) {
-        result.periodMonth = match[1].padStart(2, '0');
-        break;
-      }
-    }
+  // Period pattern: P12, P11, P01 etc.
+  const periodMatch = description.match(/[Pp](\d{1,2})\s*(\d{4})/);
+  if (periodMatch) {
+    result.periodMonth = periodMatch[1].padStart(2, '0');
+    result.periodYear = periodMatch[2];
   }
 
   return result;
@@ -185,8 +165,8 @@ serve(async (req) => {
       const invoiceNr = invoice.InvoiceNr?.toString() || '';
       const description = invoice.Description?.toString() || '';
       
-      // Parse invoice number to extract loan and period
-      const parsed = parseInvoiceNr(invoiceNr, description);
+      // Parse Description to extract loan and period (Description has the actual loan number)
+      const parsed = parseAfasDescription(description);
       
       // Only process interest invoices
       if (!parsed.isInterest) {
@@ -205,16 +185,14 @@ serve(async (req) => {
           loanId = loanInfo.id;
           matchStatus = 'matched';
 
-          // Try to match period
-          if (parsed.periodMonth && invoice.InvoiceDate) {
-            // Extract year from invoice date
-            const invoiceYear = invoice.InvoiceDate.substring(0, 4);
-            const periodKey = `${loanId}-${invoiceYear}-${parsed.periodMonth}`;
+          // Try to match period using year from description (more reliable than invoice date)
+          if (parsed.periodMonth && parsed.periodYear) {
+            const periodKey = `${loanId}-${parsed.periodYear}-${parsed.periodMonth}`;
             const foundPeriodId = periodMap.get(periodKey);
             if (foundPeriodId) {
               periodId = foundPeriodId;
             } else {
-              matchNotes = `Period not found for ${invoiceYear}-${parsed.periodMonth}`;
+              matchNotes = `Period not found for ${parsed.periodYear}-${parsed.periodMonth}`;
             }
           }
         } else {
