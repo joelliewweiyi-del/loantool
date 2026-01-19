@@ -7,7 +7,8 @@ import {
   LogOut,
   User,
   ChevronRight,
-  CalendarCheck
+  CalendarCheck,
+  ArrowRightLeft
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import raxLogo from '@/assets/rax-logo.png';
@@ -19,6 +20,7 @@ interface AppLayoutProps {
 const navigation = [
   { name: 'Loans', href: '/loans', icon: FileText },
   { name: 'Monthly Approval', href: '/monthly-approval', icon: CalendarCheck },
+  { name: 'AFAS Reconciliation', href: '/afas-reconciliation', icon: ArrowRightLeft },
 ];
 
 export function AppLayout({ children }: AppLayoutProps) {
