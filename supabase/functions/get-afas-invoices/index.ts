@@ -35,7 +35,7 @@ serve(async (req) => {
     
     console.log('Fetching all invoices from AFAS...');
     
-    const response = await fetch(`${baseUrl}/connectors/${connectorName}?take=1000&orderbyfieldids=InvoiceDate`, {
+    const response = await fetch(`${baseUrl}/connectors/${connectorName}?take=1000`, {
       method: 'GET',
       headers: {
         'Authorization': `AfasToken ${btoa(afasToken)}`,
