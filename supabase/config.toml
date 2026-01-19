@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.test-afas-connection]
 verify_jwt = false
+
+[functions.get-afas-schema]
+verify_jwt = false
