@@ -26,8 +26,8 @@ serve(async (req) => {
 
     const baseUrl = `https://${afasEnvId}.rest.afas.online/profitrestservices`;
     
-    // Try to read from Pocket_Financial_Entry_Invoices GetConnector
-    const connectorName = 'Pocket_Financial_Entry_Invoices';
+    // Try to read from Profit_Debtor_Invoices GetConnector (authorized)
+    const connectorName = 'Profit_Debtor_Invoices';
     
     // First, get the connector's metainfo to understand available fields
     const metaUrl = `${baseUrl}/metainfo/get/${connectorName}`;
