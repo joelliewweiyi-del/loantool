@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import Loans from "./pages/Loans";
 import LoanDetail from "./pages/LoanDetail";
 import MonthlyApproval from "./pages/MonthlyApproval";
+import AfasReconciliation from "./pages/AfasReconciliation";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -58,6 +59,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <MonthlyApproval />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/afas-reconciliation"
+        element={
+          <ProtectedRoute>
+            <AfasReconciliation />
           </ProtectedRoute>
         }
       />

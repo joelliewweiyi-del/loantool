@@ -74,6 +74,132 @@ export type Database = {
           },
         ]
       }
+      afas_invoice_sync: {
+        Row: {
+          afas_amount: number
+          afas_debtor_id: string | null
+          afas_description: string | null
+          afas_due_date: string | null
+          afas_invoice_date: string | null
+          afas_invoice_nr: string
+          afas_open_amount: number | null
+          afas_raw_data: Json | null
+          amount_difference: number | null
+          id: string
+          is_paid: boolean | null
+          last_updated_at: string
+          loan_id: string | null
+          match_notes: string | null
+          match_status: string
+          parsed_loan_number: string | null
+          parsed_period_month: string | null
+          payment_date: string | null
+          period_id: string | null
+          synced_at: string
+          tmo_expected_amount: number | null
+        }
+        Insert: {
+          afas_amount: number
+          afas_debtor_id?: string | null
+          afas_description?: string | null
+          afas_due_date?: string | null
+          afas_invoice_date?: string | null
+          afas_invoice_nr: string
+          afas_open_amount?: number | null
+          afas_raw_data?: Json | null
+          amount_difference?: number | null
+          id?: string
+          is_paid?: boolean | null
+          last_updated_at?: string
+          loan_id?: string | null
+          match_notes?: string | null
+          match_status?: string
+          parsed_loan_number?: string | null
+          parsed_period_month?: string | null
+          payment_date?: string | null
+          period_id?: string | null
+          synced_at?: string
+          tmo_expected_amount?: number | null
+        }
+        Update: {
+          afas_amount?: number
+          afas_debtor_id?: string | null
+          afas_description?: string | null
+          afas_due_date?: string | null
+          afas_invoice_date?: string | null
+          afas_invoice_nr?: string
+          afas_open_amount?: number | null
+          afas_raw_data?: Json | null
+          amount_difference?: number | null
+          id?: string
+          is_paid?: boolean | null
+          last_updated_at?: string
+          loan_id?: string | null
+          match_notes?: string | null
+          match_status?: string
+          parsed_loan_number?: string | null
+          parsed_period_month?: string | null
+          payment_date?: string | null
+          period_id?: string | null
+          synced_at?: string
+          tmo_expected_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "afas_invoice_sync_loan_id_fkey"
+            columns: ["loan_id"]
+            isOneToOne: false
+            referencedRelation: "loans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "afas_invoice_sync_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      afas_sync_runs: {
+        Row: {
+          completed_at: string | null
+          error_message: string | null
+          id: string
+          invoices_fetched: number | null
+          invoices_matched: number | null
+          invoices_unmatched: number | null
+          metadata: Json | null
+          started_at: string
+          status: string
+          sync_type: string
+        }
+        Insert: {
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          invoices_fetched?: number | null
+          invoices_matched?: number | null
+          invoices_unmatched?: number | null
+          metadata?: Json | null
+          started_at?: string
+          status?: string
+          sync_type?: string
+        }
+        Update: {
+          completed_at?: string | null
+          error_message?: string | null
+          id?: string
+          invoices_fetched?: number | null
+          invoices_matched?: number | null
+          invoices_unmatched?: number | null
+          metadata?: Json | null
+          started_at?: string
+          status?: string
+          sync_type?: string
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
