@@ -378,7 +378,7 @@ function LoanReconciliationPanel({
         processedTmoIds.add(tmoLoan.id);
         const tmoCommitment = tmoLoan.total_commitment || 0;
         const tmoPrincipal = tmoLoan.initial_principal || 0;
-        const difference = afasBalance.net - tmoPrincipal;
+        const difference = Math.abs(afasBalance.net) - tmoPrincipal;
         
         results.push({
           loanId: tmoLoan.id,
