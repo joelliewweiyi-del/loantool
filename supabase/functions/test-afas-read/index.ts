@@ -24,12 +24,16 @@ serve(async (req) => {
       );
     }
 
-    // Parse request body for custom connector name
+    // Parse request body for custom connector name and filters
     let connectorName = 'Profit_Debtor_Invoices';
+    let unitId: number | null = null;
     try {
       const body = await req.json();
       if (body?.connector) {
         connectorName = body.connector;
+      }
+      if (body?.unitId !== undefined && body?.unitId !== null) {
+        unitId = parseInt(body.unitId, 10);
       }
     } catch {
       // No body or invalid JSON, use default
@@ -74,10 +78,11 @@ serve(async (req) => {
     console.log('Schema:', JSON.stringify(schema)?.substring(0, 500));
     console.log('Primary field for sorting:', primaryField);
     
-    // Build filters - try without pagination first (orderbyfieldids requires indexable fields in AFAS)
+    // Build filters - add UnitId filter if specified
+    const unitFilter = unitId ? `filterfieldids=UnitId&filtervalues=${unitId}&operatortypes=1` : '';
     const filters = [
-      '', // No filter - just get all data (AFAS returns max 100 by default)
-      '?take=10', // Try take without orderby
+      unitFilter ? `?${unitFilter}` : '', // Filter by UnitId if specified
+      unitFilter ? `?${unitFilter}&take=100` : '?take=100', // With take limit
     ];
     
     const attempts: Array<{filter: string, status: number, response: string}> = [];
