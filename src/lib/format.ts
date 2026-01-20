@@ -52,6 +52,26 @@ export function formatDateTime(date: string | Date | null | undefined): string {
  * Format event type for display
  */
 export function formatEventType(type: string): string {
+  // Custom labels for specific event types
+  const labels: Record<string, string> = {
+    'pik_capitalization_posted': 'Interest Charge',
+    'principal_draw': 'Principal Draw',
+    'principal_repayment': 'Principal Repayment',
+    'interest_rate_set': 'Rate Set',
+    'interest_rate_change': 'Rate Change',
+    'commitment_set': 'Commitment Set',
+    'commitment_change': 'Commitment Change',
+    'commitment_cancel': 'Commitment Cancel',
+    'fee_invoice': 'Fee Invoice',
+    'cash_received': 'Cash Received',
+    'pik_flag_set': 'PIK Flag Set',
+  };
+  
+  if (labels[type]) {
+    return labels[type];
+  }
+  
+  // Fallback: convert snake_case to Title Case
   return type
     .split('_')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
