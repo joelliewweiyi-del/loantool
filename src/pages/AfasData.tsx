@@ -97,7 +97,8 @@ function ConnectorCard({ connectorId, connectorName, description, unitId }: {
       const { data, error } = await supabase.functions.invoke('test-afas-read', {
         body: { 
           connector: connectorId,
-          unitId: unitId === 'all' ? null : unitId
+          unitId: unitId === 'all' ? null : unitId,
+          take: 1000 // Increased from 100 to 1000
         }
       });
       if (error) throw error;

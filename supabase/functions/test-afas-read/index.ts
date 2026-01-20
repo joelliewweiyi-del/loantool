@@ -27,6 +27,7 @@ serve(async (req) => {
     // Parse request body for custom connector name and filters
     let connectorName = 'Profit_Debtor_Invoices';
     let unitId: number | null = null;
+    let take = 500; // Default to 500 rows
     try {
       const body = await req.json();
       if (body?.connector) {
@@ -34,6 +35,9 @@ serve(async (req) => {
       }
       if (body?.unitId !== undefined && body?.unitId !== null) {
         unitId = parseInt(body.unitId, 10);
+      }
+      if (body?.take !== undefined && body?.take !== null) {
+        take = Math.min(parseInt(body.take, 10), 5000); // Max 5000
       }
     } catch {
       // No body or invalid JSON, use default
@@ -89,8 +93,7 @@ serve(async (req) => {
     }
     
     const filters = [
-      unitFilter ? `?${unitFilter}` : '', // Filter by UnitId if specified and supported
-      unitFilter ? `?${unitFilter}&take=100` : '?take=100', // With take limit
+      unitFilter ? `?${unitFilter}&take=${take}` : `?take=${take}`, // With take limit
     ];
     
     const attempts: Array<{filter: string, status: number, response: string}> = [];
