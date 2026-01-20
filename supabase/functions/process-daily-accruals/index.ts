@@ -104,14 +104,14 @@ function getLoanStateAtDate(
   return state;
 }
 
-// Calculate daily interest (ACT/365)
+// Calculate daily interest (30/360)
 function calculateDailyInterest(principal: number, annualRate: number): number {
-  return (principal * annualRate) / 365;
+  return (principal * annualRate) / 360;
 }
 
-// Calculate daily commitment fee
+// Calculate daily commitment fee (30/360)
 function calculateDailyCommitmentFee(undrawnAmount: number, annualFeeRate: number): number {
-  return (undrawnAmount * annualFeeRate) / 365;
+  return (undrawnAmount * annualFeeRate) / 360;
 }
 
 Deno.serve(async (req) => {

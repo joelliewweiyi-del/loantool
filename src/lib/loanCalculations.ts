@@ -203,20 +203,21 @@ export function applyEventToState(state: LoanState, event: LoanEvent): LoanState
 }
 
 /**
- * Calculates daily interest using ACT/365 Fixed day count convention
+ * Calculates daily interest using 30/360 day count convention
+ * Daily rate = annual rate / 360
  */
 export function calculateDailyInterest(principal: number, annualRate: number): number {
-  return (principal * annualRate) / 365;
+  return (principal * annualRate) / 360;
 }
 
 /**
- * Calculates daily commitment fee on undrawn amount
+ * Calculates daily commitment fee on undrawn amount using 30/360
  */
 export function calculateDailyCommitmentFee(
   undrawnAmount: number,
   annualFeeRate: number
 ): number {
-  return (undrawnAmount * annualFeeRate) / 365;
+  return (undrawnAmount * annualFeeRate) / 360;
 }
 
 /**
@@ -314,7 +315,7 @@ export function calculateInterestSegments(
     
     if (new Date(segmentStart) <= segmentEnd) {
       const days = daysBetween(segmentStart, segmentEnd.toISOString().split('T')[0]) + 1;
-      const interest = currentState.outstandingPrincipal * currentState.currentRate * (days / 365);
+      const interest = currentState.outstandingPrincipal * currentState.currentRate * (days / 360);
       
       segments.push({
         startDate: segmentStart,
@@ -335,7 +336,7 @@ export function calculateInterestSegments(
   // Close final segment
   const days = daysBetween(segmentStart, endDate) + 1;
   if (days > 0) {
-    const interest = currentState.outstandingPrincipal * currentState.currentRate * (days / 365);
+    const interest = currentState.outstandingPrincipal * currentState.currentRate * (days / 360);
     
     segments.push({
       startDate: segmentStart,
@@ -397,7 +398,7 @@ export function calculateCommitmentFeeSegments(
     
     if (new Date(segmentStart) <= segmentEnd) {
       const days = daysBetween(segmentStart, segmentEnd.toISOString().split('T')[0]) + 1;
-      const fee = currentState.undrawnCommitment * feeRate * (days / 365);
+      const fee = currentState.undrawnCommitment * feeRate * (days / 360);
       
       segments.push({
         startDate: segmentStart,
@@ -418,7 +419,7 @@ export function calculateCommitmentFeeSegments(
   // Close final segment
   const days = daysBetween(segmentStart, endDate) + 1;
   if (days > 0) {
-    const fee = currentState.undrawnCommitment * feeRate * (days / 365);
+    const fee = currentState.undrawnCommitment * feeRate * (days / 360);
     
     segments.push({
       startDate: segmentStart,
