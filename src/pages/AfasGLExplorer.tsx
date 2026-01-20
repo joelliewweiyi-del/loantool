@@ -6,12 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Download, Database, Landmark, Building2, FileText, AlertCircle } from 'lucide-react';
+import { RefreshCw, Download, Database, Landmark, Building2, FileText, AlertCircle, Scale } from 'lucide-react';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { LoanReconciliationTab } from '@/components/afas/LoanReconciliationTab';
 
 // Administration books available in AFAS (1-10)
 const ADMINISTRATIONS = [
@@ -268,7 +269,7 @@ function ConnectorPanel({
 
 export default function AfasGLExplorer() {
   const [unitId, setUnitId] = useState('5');
-  const [activeTab, setActiveTab] = useState(CONNECTORS[0].id);
+  const [activeTab, setActiveTab] = useState('reconciliation');
 
   return (
     <div className="space-y-6">
@@ -298,6 +299,10 @@ export default function AfasGLExplorer() {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
+          <TabsTrigger value="reconciliation" className="gap-2">
+            <Scale className="h-4 w-4" />
+            Loan Reconciliation
+          </TabsTrigger>
           {CONNECTORS.map((connector) => {
             const Icon = connector.icon;
             return (
@@ -308,6 +313,10 @@ export default function AfasGLExplorer() {
             );
           })}
         </TabsList>
+
+        <TabsContent value="reconciliation" className="h-[calc(100vh-280px)]">
+          <LoanReconciliationTab unitId={unitId} />
+        </TabsContent>
 
         {CONNECTORS.map((connector) => (
           <TabsContent key={connector.id} value={connector.id} className="h-[calc(100vh-280px)]">
