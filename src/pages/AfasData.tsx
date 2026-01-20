@@ -49,7 +49,6 @@ const CONNECTOR_GROUPS = [
     icon: Landmark,
     connectors: [
       { id: 'Profit_Accounts', name: 'GL Accounts', description: 'Chart of accounts / grootboekrekeningen' },
-      { id: 'DDI_Profit_Grootboek', name: 'DDI Grootboek', description: 'Extended GL account info (DDI)' },
       { id: 'Profit_Period_balance', name: 'Period Balances', description: 'GL balances per period' },
       { id: 'Profit_Transactions_Allocated', name: 'Allocated Transactions', description: 'Verbijzonderde grootboekkaart' },
       { id: 'Profit_Balance_Allocated', name: 'Allocated Balances', description: 'Verbijzonderde kolommenbalans' },
@@ -77,11 +76,6 @@ const CONNECTOR_GROUPS = [
     name: 'Dimensions & Cost Centres',
     icon: Users,
     connectors: [
-      { id: 'DDI_Profit_Kostenplaatsen', name: 'DDI Kostenplaatsen', description: 'Cost centres (DDI)' },
-      { id: 'DDI_Profit_Kostendragers', name: 'DDI Kostendragers', description: 'Cost carriers (DDI)' },
-      { id: 'DDI_Profit_Dimensies', name: 'DDI Dimensies', description: 'Dimension 1' },
-      { id: 'DDI_Profit_Dimensies_2', name: 'DDI Dimensies 2', description: 'Dimension 2' },
-      { id: 'DDI_Profit_Dimensies_3', name: 'DDI Dimensies 3', description: 'Dimension 3' },
       { id: 'Profit_CostCentre', name: 'Cost Centres', description: 'Standard cost centres' },
       { id: 'Profit_CostCarrier', name: 'Cost Carriers', description: 'Standard cost carriers' },
     ]
