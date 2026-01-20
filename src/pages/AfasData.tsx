@@ -11,10 +11,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 
+interface AfasRows {
+  rows?: Record<string, unknown>[];
+  skip?: number;
+  take?: number;
+}
+
 interface ConnectorData {
   success: boolean;
   connector?: string;
-  data?: Record<string, unknown>[];
+  data?: AfasRows | Record<string, unknown>[];
   schema?: { fields?: { fieldId: string; dataType: string; label?: string }[] };
   error?: string;
   count?: number;
@@ -66,10 +72,14 @@ function ConnectorCard({ connectorId, connectorName, description }: {
     staleTime: 5 * 60 * 1000,
   });
 
-  const records = data?.data || [];
+  // Handle nested response: data.data.rows or data.data (depending on AFAS response)
+  const rawData = data?.data;
+  const records: Record<string, unknown>[] = Array.isArray(rawData) 
+    ? rawData 
+    : ((rawData as AfasRows)?.rows || []);
   const schema = data?.schema?.fields || [];
 
-  const allKeys = records.length > 0 
+  const allKeys: string[] = records.length > 0 
     ? [...new Set(records.flatMap(record => Object.keys(record)))]
     : [];
 
