@@ -347,8 +347,8 @@ function LoanReconciliationPanel({
       if (!loanId || loanId === '' || loanId === '0') continue;
       
       const existing = afasGrouped.get(loanId) || { credits: 0, debits: 0, net: 0, count: 0 };
-      const credit = Number(tx.Crd) || 0;
-      const debit = Number(tx.Deb) || 0;
+      const credit = Number(tx.AmtCredit) || 0;
+      const debit = Number(tx.AmtDebit) || 0;
       
       existing.credits += credit;
       existing.debits += debit;
@@ -708,10 +708,10 @@ export default function AfasGLExplorer() {
 
         <TabsContent value="reconciliation" className="h-[calc(100vh-280px)]">
           <LoanReconciliationPanel
-            afasData={balanceQuery.data}
-            afasLoading={balanceQuery.isLoading}
-            afasFetching={balanceQuery.isFetching}
-            refetchAfas={balanceQuery.refetch}
+            afasData={transactionsQuery.data}
+            afasLoading={transactionsQuery.isLoading}
+            afasFetching={transactionsQuery.isFetching}
+            refetchAfas={transactionsQuery.refetch}
             loans={loansQuery.data}
             loansLoading={loansQuery.isLoading}
             refetchLoans={loansQuery.refetch}
