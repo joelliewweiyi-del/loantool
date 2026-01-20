@@ -554,7 +554,6 @@ function LoanReconciliationPanel({
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">TMO Principal</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">TMO Commitment</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Delta (Net vs. Outstanding)</TableHead>
-                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Tx #</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -570,12 +569,11 @@ function LoanReconciliationPanel({
                     <TableCell className={`px-2 py-1 text-xs text-right font-mono font-semibold ${row.difference !== 0 ? (row.difference > 0 ? 'text-primary' : 'text-destructive') : ''}`}>
                       {row.difference !== 0 ? (row.difference > 0 ? '+' : '') + formatCurrency(row.difference) : '—'}
                     </TableCell>
-                    <TableCell className="px-2 py-1 text-xs text-right text-muted-foreground">{row.transactionCount}</TableCell>
                   </TableRow>
                 ))}
                 {reconciliationData.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
                       No reconciliation data available
                     </TableCell>
                   </TableRow>
