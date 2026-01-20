@@ -12,6 +12,7 @@ import MonthlyApproval from "./pages/MonthlyApproval";
 import AfasReconciliation from "./pages/AfasReconciliation";
 import AfasInvoices from "./pages/AfasInvoices";
 import AfasData from "./pages/AfasData";
+import AfasGLExplorer from "./pages/AfasGLExplorer";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -85,6 +86,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AfasData />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/afas-gl-explorer"
+        element={
+          <ProtectedRoute>
+            <AfasGLExplorer />
           </ProtectedRoute>
         }
       />

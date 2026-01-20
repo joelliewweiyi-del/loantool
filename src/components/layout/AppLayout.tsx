@@ -10,7 +10,8 @@ import {
   CalendarCheck,
   ArrowRightLeft,
   Receipt,
-  Database
+  Database,
+  Landmark
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import raxLogo from '@/assets/rax-logo.png';
@@ -25,6 +26,7 @@ const navigation = [
   { name: 'AFAS Invoices', href: '/afas-invoices', icon: Receipt },
   { name: 'AFAS Reconciliation', href: '/afas-reconciliation', icon: ArrowRightLeft },
   { name: 'AFAS Data', href: '/afas-data', icon: Database },
+  { name: 'AFAS GL Explorer', href: '/afas-gl-explorer', icon: Landmark },
 ];
 
 export function AppLayout({ children }: AppLayoutProps) {
