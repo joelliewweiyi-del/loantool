@@ -670,9 +670,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_principal_balance: {
+        Args: { p_as_of_date?: string; p_loan_id: string }
+        Returns: number
+      }
       determine_period_processing_mode: {
         Args: { p_period_id: string }
         Returns: string
+      }
+      get_loan_balances: {
+        Args: { p_as_of_date?: string }
+        Returns: {
+          loan_id: string
+          principal_balance: number
+        }[]
       }
       has_any_role: { Args: { _user_id: string }; Returns: boolean }
       has_role: {
