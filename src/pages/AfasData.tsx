@@ -51,7 +51,8 @@ const CONNECTOR_GROUPS = [
       { id: 'Profit_Accounts', name: 'GL Accounts', description: 'Chart of accounts / grootboekrekeningen' },
       { id: 'DDI_Profit_Grootboek', name: 'DDI Grootboek', description: 'Extended GL account info (DDI)' },
       { id: 'Profit_Period_balance', name: 'Period Balances', description: 'GL balances per period' },
-      { id: 'Profit_Transactions_Allocated', name: 'Allocated Transactions', description: 'Transactions with cost allocation' },
+      { id: 'Profit_Transactions_Allocated', name: 'Allocated Transactions', description: 'Verbijzonderde grootboekkaart' },
+      { id: 'Profit_Balance_Allocated', name: 'Allocated Balances', description: 'Verbijzonderde kolommenbalans' },
     ]
   },
   {
