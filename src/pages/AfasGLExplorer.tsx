@@ -378,7 +378,7 @@ function LoanReconciliationPanel({
         processedTmoIds.add(tmoLoan.id);
         const tmoCommitment = tmoLoan.total_commitment || 0;
         const tmoPrincipal = tmoLoan.initial_principal || 0;
-        const difference = afasBalance.net - tmoCommitment;
+        const difference = afasBalance.net - tmoPrincipal;
         
         results.push({
           loanId: tmoLoan.id,
@@ -423,7 +423,7 @@ function LoanReconciliationPanel({
           afasNet: 0,
           tmoCommitment: loan.total_commitment || 0,
           tmoPrincipal: loan.initial_principal || 0,
-          difference: -(loan.total_commitment || 0),
+          difference: -(loan.initial_principal || 0),
           status: 'missing_afas',
           transactionCount: 0
         });
