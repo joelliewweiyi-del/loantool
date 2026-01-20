@@ -102,7 +102,7 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Period-by-Period Accruals</CardTitle>
           <CardDescription className="text-xs">
-            ACT/365 Fixed · Click row to expand
+            30/360 Day Count · Click row to expand
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -119,11 +119,11 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
                     <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Period</th>
                     <th className="text-center py-3 px-4 font-semibold text-muted-foreground">Status</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Days</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Opening Principal</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Principal</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Rate</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Interest</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Commitment Fees</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Total Due</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Commit. Fee</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground bg-amber-50 dark:bg-amber-950/30">Interest Charge</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -244,14 +244,14 @@ function PeriodTableRow({
         <td className="py-4 px-4 text-right font-mono text-sm text-muted-foreground">
           {period.commitmentFeeAccrued > 0 ? formatCurrency(period.commitmentFeeAccrued) : '—'}
         </td>
-        <td className="py-4 px-4 text-right font-mono text-sm font-bold">
-          {formatCurrency(period.totalDue)}
+        <td className="py-4 px-4 text-right font-mono text-sm font-bold bg-amber-50/50 dark:bg-amber-950/20">
+          {period.pikCapitalized > 0 ? formatCurrency(period.pikCapitalized) : '—'}
         </td>
       </tr>
       
       {isExpanded && (
         <tr>
-          <td colSpan={9} className="p-0">
+          <td colSpan={10} className="p-0">
             <div className="bg-muted/30 border-b px-6 py-4 space-y-4">
               {/* Compact Summary Grid */}
               <div className="grid grid-cols-4 gap-4 text-xs">
