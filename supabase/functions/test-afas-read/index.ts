@@ -24,10 +24,18 @@ serve(async (req) => {
       );
     }
 
+    // Parse request body for custom connector name
+    let connectorName = 'Profit_Debtor_Invoices';
+    try {
+      const body = await req.json();
+      if (body?.connector) {
+        connectorName = body.connector;
+      }
+    } catch {
+      // No body or invalid JSON, use default
+    }
+
     const baseUrl = `https://${afasEnvId}.rest.afas.online/profitrestservices`;
-    
-    // Try to read from Profit_Debtor_Invoices GetConnector (authorized)
-    const connectorName = 'Profit_Debtor_Invoices';
     
     // First, get the connector's metainfo to understand available fields
     const metaUrl = `${baseUrl}/metainfo/get/${connectorName}`;
