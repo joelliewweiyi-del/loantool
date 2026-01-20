@@ -9,7 +9,8 @@ import {
   ChevronRight,
   CalendarCheck,
   ArrowRightLeft,
-  Receipt
+  Receipt,
+  Database
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import raxLogo from '@/assets/rax-logo.png';
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Monthly Approval', href: '/monthly-approval', icon: CalendarCheck },
   { name: 'AFAS Invoices', href: '/afas-invoices', icon: Receipt },
   { name: 'AFAS Reconciliation', href: '/afas-reconciliation', icon: ArrowRightLeft },
+  { name: 'AFAS Data', href: '/afas-data', icon: Database },
 ];
 
 export function AppLayout({ children }: AppLayoutProps) {
