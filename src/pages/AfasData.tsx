@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Database, FileText, BookOpen, Receipt, AlertCircle, Users } from 'lucide-react';
+import { RefreshCw, Database, FileText, BookOpen, Receipt, AlertCircle, Users, Landmark, Building2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight } from 'lucide-react';
@@ -45,25 +45,44 @@ interface ConnectorData {
 // Group connectors by category
 const CONNECTOR_GROUPS = [
   {
-    name: 'Debtor / Invoicing',
-    icon: Receipt,
+    name: 'Chart of Accounts / GL',
+    icon: Landmark,
     connectors: [
+      { id: 'Profit_Accounts', name: 'GL Accounts', description: 'Chart of accounts / grootboekrekeningen' },
+      { id: 'DDI_Profit_Grootboek', name: 'DDI Grootboek', description: 'Extended GL account info (DDI)' },
+      { id: 'Profit_Period_balance', name: 'Period Balances', description: 'GL balances per period' },
+      { id: 'Profit_Transactions_Allocated', name: 'Allocated Transactions', description: 'Transactions with cost allocation' },
+    ]
+  },
+  {
+    name: 'Debtor / Creditor',
+    icon: Building2,
+    connectors: [
+      { id: 'Profit_Debtor', name: 'Debtors', description: 'Debtor master data' },
+      { id: 'Profit_Creditor', name: 'Creditors', description: 'Creditor master data' },
       { id: 'Profit_Debtor_Invoices', name: 'Debtor Invoices', description: 'Open debtor invoices' },
+      { id: 'Profit_Creditor_Invoices', name: 'Creditor Invoices', description: 'Open creditor invoices' },
     ]
   },
   {
     name: 'Financial Transactions',
     icon: FileText,
     connectors: [
-      { id: 'profit_transactions', name: 'Transactions', description: 'GL transactions' },
-      { id: 'profit_journals', name: 'Journals', description: 'Journal definitions' },
+      { id: 'Profit_Transactions', name: 'Transactions', description: 'GL transactions' },
+      { id: 'Profit_Journals', name: 'Journals', description: 'Journal definitions' },
     ]
   },
   {
-    name: 'Master Data',
+    name: 'Dimensions & Cost Centres',
     icon: Users,
     connectors: [
-      { id: 'profit_costcentre', name: 'Cost Centres', description: 'HR cost centres (not GL dimensions)' },
+      { id: 'DDI_Profit_Kostenplaatsen', name: 'DDI Kostenplaatsen', description: 'Cost centres (DDI)' },
+      { id: 'DDI_Profit_Kostendragers', name: 'DDI Kostendragers', description: 'Cost carriers (DDI)' },
+      { id: 'DDI_Profit_Dimensies', name: 'DDI Dimensies', description: 'Dimension 1' },
+      { id: 'DDI_Profit_Dimensies_2', name: 'DDI Dimensies 2', description: 'Dimension 2' },
+      { id: 'DDI_Profit_Dimensies_3', name: 'DDI Dimensies 3', description: 'Dimension 3' },
+      { id: 'Profit_CostCentre', name: 'Cost Centres', description: 'Standard cost centres' },
+      { id: 'Profit_CostCarrier', name: 'Cost Carriers', description: 'Standard cost carriers' },
     ]
   },
 ];
