@@ -10,6 +10,22 @@ import { RefreshCw, Database, FileText, BookOpen, Receipt, AlertCircle, Users } 
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+// Administration books available in AFAS (1-10)
+const ADMINISTRATIONS = [
+  { id: 'all', label: 'All Administrations' },
+  { id: '1', label: '01 - Administration 1' },
+  { id: '2', label: '02 - Administration 2' },
+  { id: '3', label: '03 - Administration 3' },
+  { id: '4', label: '04 - Administration 4' },
+  { id: '5', label: '05 - RAX RED IV B.V.' },
+  { id: '6', label: '06 - Administration 6' },
+  { id: '7', label: '07 - Administration 7' },
+  { id: '8', label: '08 - Administration 8' },
+  { id: '9', label: '09 - Administration 9' },
+  { id: '10', label: '10 - Administration 10' },
+];
 
 interface AfasRows {
   rows?: Record<string, unknown>[];
@@ -52,19 +68,23 @@ const CONNECTOR_GROUPS = [
   },
 ];
 
-function ConnectorCard({ connectorId, connectorName, description }: { 
+function ConnectorCard({ connectorId, connectorName, description, unitId }: { 
   connectorId: string; 
   connectorName: string; 
   description: string;
+  unitId: string | null;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [schemaOpen, setSchemaOpen] = useState(false);
 
   const { data, isLoading, error, refetch, isFetching } = useQuery<ConnectorData>({
-    queryKey: ['afas-connector', connectorId],
+    queryKey: ['afas-connector', connectorId, unitId],
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke('test-afas-read', {
-        body: { connector: connectorId }
+        body: { 
+          connector: connectorId,
+          unitId: unitId === 'all' ? null : unitId
+        }
       });
       if (error) throw error;
       return data;
@@ -218,6 +238,7 @@ function formatCellValue(value: unknown): string {
 
 export default function AfasData() {
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedUnit, setSelectedUnit] = useState<string>('all');
 
   const handleRefreshAll = () => {
     setRefreshKey(prev => prev + 1);
@@ -233,7 +254,19 @@ export default function AfasData() {
             All available Profit connectors grouped by category
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          <Select value={selectedUnit} onValueChange={setSelectedUnit}>
+            <SelectTrigger className="w-[220px]">
+              <SelectValue placeholder="Select Administration" />
+            </SelectTrigger>
+            <SelectContent>
+              {ADMINISTRATIONS.map((admin) => (
+                <SelectItem key={admin.id} value={admin.id}>
+                  {admin.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Badge variant="outline" className="text-xs">
             Env: 36537
           </Badge>
@@ -261,10 +294,11 @@ export default function AfasData() {
             <div className="grid gap-3">
               {group.connectors.map((connector) => (
                 <ConnectorCard
-                  key={connector.id}
+                  key={`${connector.id}-${selectedUnit}`}
                   connectorId={connector.id}
                   connectorName={connector.name}
                   description={connector.description}
+                  unitId={selectedUnit}
                 />
               ))}
             </div>
