@@ -329,43 +329,71 @@ export default function LoanDetail() {
                     <tr>
                       <th>Date</th>
                       <th>Type</th>
+                      <th>Description</th>
                       <th className="text-right">Amount</th>
                       <th className="text-right">Rate</th>
                       <th>Status</th>
-                      <th>Created</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {[...events || []]
-                      .filter(event => event.event_type !== 'pik_capitalization_posted')
-                      .sort((a, b) => 
-                        new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime()
-                      ).map(event => (
-                      <tr key={event.id}>
-                        <td className="font-mono">{formatDate(event.effective_date)}</td>
-                        <td>{formatEventType(event.event_type)}</td>
-                        <td className="numeric">{formatCurrency(event.amount)}</td>
-                        <td className="numeric">{formatPercent(event.rate)}</td>
-                        <td><StatusBadge status={event.status} /></td>
-                        <td className="text-muted-foreground text-xs">
-                          {formatDateTime(event.created_at)}
-                        </td>
-                        <td className="text-right">
-                          {event.status === 'draft' && canApproveEvents && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleApproveEvent(event.id)}
-                              disabled={approveEvent.isPending}
-                            >
-                              <Check className="h-4 w-4 mr-1" />
-                              Approve
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                    {(() => {
+                      // Build a set of event IDs that have been reversed
+                      const reversedEventIds = new Set<string>();
+                      (events || []).forEach(event => {
+                        const meta = event.metadata as Record<string, unknown> | null;
+                        if (meta?.reverses_event_id) {
+                          reversedEventIds.add(meta.reverses_event_id as string);
+                        }
+                      });
+                      
+                      // Filter out system events and correction pairs
+                      const filtered = [...events || []]
+                        .filter(event => {
+                          // Hide PIK capitalizations (shown elsewhere)
+                          if (event.event_type === 'pik_capitalization_posted') return false;
+                          // Hide correction/reversal entries
+                          const meta = event.metadata as Record<string, unknown> | null;
+                          if (meta?.correction === true) return false;
+                          // Hide entries that have been reversed by another event
+                          if (reversedEventIds.has(event.id)) return false;
+                          return true;
+                        })
+                        .sort((a, b) => 
+                          new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime()
+                        );
+                      
+                      return filtered.map(event => {
+                        const meta = event.metadata as Record<string, unknown> | null;
+                        const description = meta?.description as string | undefined;
+                        
+                        return (
+                          <tr key={event.id}>
+                            <td className="font-mono">{formatDate(event.effective_date)}</td>
+                            <td>{formatEventType(event.event_type)}</td>
+                            <td className="text-muted-foreground text-sm max-w-[200px] truncate">
+                              {description || '—'}
+                            </td>
+                            <td className="numeric">{formatCurrency(event.amount)}</td>
+                            <td className="numeric">{formatPercent(event.rate)}</td>
+                            <td><StatusBadge status={event.status} /></td>
+                            <td className="text-right">
+                              {event.status === 'draft' && canApproveEvents && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleApproveEvent(event.id)}
+                                  disabled={approveEvent.isPending}
+                                >
+                                  <Check className="h-4 w-4 mr-1" />
+                                  Approve
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               )}
