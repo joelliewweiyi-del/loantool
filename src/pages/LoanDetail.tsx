@@ -350,8 +350,10 @@ export default function LoanDetail() {
                       // Filter out system events and correction pairs
                       const filtered = [...events || []]
                         .filter(event => {
-                          // Hide PIK capitalizations (shown elsewhere)
+                          // Hide PIK capitalizations (shown in accruals)
                           if (event.event_type === 'pik_capitalization_posted') return false;
+                          // Hide cash received (accounting entries, not economic events)
+                          if (event.event_type === 'cash_received') return false;
                           // Hide correction/reversal entries
                           const meta = event.metadata as Record<string, unknown> | null;
                           if (meta?.correction === true) return false;
