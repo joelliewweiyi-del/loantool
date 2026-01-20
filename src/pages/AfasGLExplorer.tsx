@@ -552,6 +552,7 @@ function LoanReconciliationPanel({
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Credits</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Debits</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Net</TableHead>
+                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">TMO Principal</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">TMO Commitment</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Difference</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Tx #</TableHead>
@@ -566,6 +567,7 @@ function LoanReconciliationPanel({
                     <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.afasCredits)}</TableCell>
                     <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.afasDebits)}</TableCell>
                     <TableCell className="px-2 py-1 text-xs text-right font-mono font-semibold">{formatCurrency(row.afasNet)}</TableCell>
+                    <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.tmoPrincipal)}</TableCell>
                     <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.tmoCommitment)}</TableCell>
                     <TableCell className={`px-2 py-1 text-xs text-right font-mono font-semibold ${row.difference !== 0 ? (row.difference > 0 ? 'text-primary' : 'text-destructive') : ''}`}>
                       {row.difference !== 0 ? (row.difference > 0 ? '+' : '') + formatCurrency(row.difference) : '—'}
@@ -575,7 +577,7 @@ function LoanReconciliationPanel({
                 ))}
                 {reconciliationData.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={10} className="text-center text-muted-foreground py-8">
                       No reconciliation data available
                     </TableCell>
                   </TableRow>
