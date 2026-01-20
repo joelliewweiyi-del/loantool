@@ -8,8 +8,6 @@ import {
   User,
   ChevronRight,
   CalendarCheck,
-  ArrowRightLeft,
-  Receipt,
   Database,
   Landmark
 } from 'lucide-react';
@@ -23,8 +21,6 @@ interface AppLayoutProps {
 const navigation = [
   { name: 'Loans', href: '/loans', icon: FileText },
   { name: 'Monthly Approval', href: '/monthly-approval', icon: CalendarCheck },
-  { name: 'AFAS Invoices', href: '/afas-invoices', icon: Receipt },
-  { name: 'AFAS Reconciliation', href: '/afas-reconciliation', icon: ArrowRightLeft },
   { name: 'AFAS Data', href: '/afas-data', icon: Database },
   { name: 'AFAS GL Explorer', href: '/afas-gl-explorer', icon: Landmark },
 ];
