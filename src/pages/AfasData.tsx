@@ -141,6 +141,8 @@ function ConnectorCard({ connectorId, connectorName, description, unitId }: {
                 <Skeleton className="h-5 w-16" />
               ) : data?.success ? (
                 <Badge variant="secondary" className="text-xs">{records.length} rows</Badge>
+              ) : data?.error?.includes('niet geautoriseerd') || data?.error?.includes('Could not read') ? (
+                <Badge variant="outline" className="text-xs text-warning border-warning/50 bg-warning/10">Not Authorized</Badge>
               ) : (
                 <Badge variant="destructive" className="text-xs">Error</Badge>
               )}
@@ -166,10 +168,17 @@ function ConnectorCard({ connectorId, connectorName, description, unitId }: {
                 <Skeleton className="h-6 w-full" />
               </div>
             ) : error || !data?.success ? (
-              <div className="flex items-center gap-2 text-destructive p-3 bg-destructive/10 rounded-lg text-sm">
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{data?.error || (error as Error)?.message || 'Failed to fetch'}</span>
-              </div>
+              data?.error?.includes('niet geautoriseerd') || data?.error?.includes('Could not read') ? (
+                <div className="flex items-center gap-2 text-warning p-3 bg-warning/10 border border-warning/30 rounded-lg text-sm">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>Connector not authorized. Enable <code className="font-mono bg-warning/20 px-1 rounded">{connectorId}</code> in AFAS for your token.</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-destructive p-3 bg-destructive/10 rounded-lg text-sm">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{data?.error || (error as Error)?.message || 'Failed to fetch'}</span>
+                </div>
+              )
             ) : (
               <>
                 {/* Schema */}
