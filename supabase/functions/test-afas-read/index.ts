@@ -78,10 +78,18 @@ serve(async (req) => {
     console.log('Schema:', JSON.stringify(schema)?.substring(0, 500));
     console.log('Primary field for sorting:', primaryField);
     
-    // Build filters - add UnitId filter if specified
-    const unitFilter = unitId ? `filterfieldids=UnitId&filtervalues=${unitId}&operatortypes=1` : '';
+    // Check if this connector has a UnitId field for administration filtering
+    const hasUnitIdField = schema?.fields?.some((f: { id: string }) => f.id === 'UnitId');
+    console.log('Has UnitId field:', hasUnitIdField);
+    
+    // Build filters - only add UnitId filter if the connector supports it
+    let unitFilter = '';
+    if (unitId && hasUnitIdField) {
+      unitFilter = `filterfieldids=UnitId&filtervalues=${unitId}&operatortypes=1`;
+    }
+    
     const filters = [
-      unitFilter ? `?${unitFilter}` : '', // Filter by UnitId if specified
+      unitFilter ? `?${unitFilter}` : '', // Filter by UnitId if specified and supported
       unitFilter ? `?${unitFilter}&take=100` : '?take=100', // With take limit
     ];
     
