@@ -9,8 +9,6 @@ import Auth from "./pages/Auth";
 import Loans from "./pages/Loans";
 import LoanDetail from "./pages/LoanDetail";
 import MonthlyApproval from "./pages/MonthlyApproval";
-import AfasReconciliation from "./pages/AfasReconciliation";
-import AfasInvoices from "./pages/AfasInvoices";
 import AfasData from "./pages/AfasData";
 import AfasGLExplorer from "./pages/AfasGLExplorer";
 import NotFound from "./pages/NotFound";
@@ -62,22 +60,6 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <MonthlyApproval />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/afas-reconciliation"
-        element={
-          <ProtectedRoute>
-            <AfasReconciliation />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/afas-invoices"
-        element={
-          <ProtectedRoute>
-            <AfasInvoices />
           </ProtectedRoute>
         }
       />
