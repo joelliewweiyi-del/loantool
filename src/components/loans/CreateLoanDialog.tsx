@@ -12,7 +12,6 @@ import { InterestType, LoanType, CommitmentFeeBasis } from '@/types/loan';
 interface LoanFormData {
   // Identity
   loan_number: string;
-  loan_name: string;
   borrower_name: string;
   loan_start_date: string;
   maturity_date: string;
@@ -36,7 +35,6 @@ interface LoanFormData {
 
 const initialFormData: LoanFormData = {
   loan_number: '',
-  loan_name: '',
   borrower_name: '',
   loan_start_date: '',
   maturity_date: '',
@@ -67,7 +65,6 @@ export function CreateLoanDialog() {
   const handleCreate = async () => {
     const payload = {
       loan_id: formData.loan_number,
-      loan_name: formData.loan_name || null,
       borrower_name: formData.borrower_name,
       loan_start_date: formData.loan_start_date || null,
       maturity_date: formData.maturity_date || null,
@@ -156,15 +153,6 @@ export function CreateLoanDialog() {
                   onChange={(e) => handleChange('loan_number', e.target.value)}
                   placeholder="e.g., 484"
                   required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="loan_name">Loan Name</Label>
-                <Input
-                  id="loan_name"
-                  value={formData.loan_name}
-                  onChange={(e) => handleChange('loan_name', e.target.value)}
-                  placeholder="e.g., Senior Secured Term Loan A"
                 />
               </div>
               <div className="space-y-2">

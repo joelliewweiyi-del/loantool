@@ -47,7 +47,6 @@ interface ConnectorData {
 interface Loan {
   id: string;
   loan_id: string;
-  loan_name: string | null;
   borrower_name: string;
   total_commitment: number | null;
   outstanding: number | null;
@@ -365,15 +364,10 @@ function LoanReconciliationPanel({
       afasGrouped.set(loanId, existing);
     }
 
-    // Create loan lookup by loan_id AND loan_name (fallback)
+    // Create loan lookup by loan_id
     const loanLookupById = new Map<string, Loan>();
-    const loanLookupByName = new Map<string, Loan>();
     for (const loan of (loans || [])) {
       loanLookupById.set(loan.loan_id, loan);
-      // Also allow matching by loan_name (e.g., "484")
-      if (loan.loan_name) {
-        loanLookupByName.set(loan.loan_name, loan);
-      }
     }
 
     // Build reconciliation records
@@ -382,8 +376,8 @@ function LoanReconciliationPanel({
 
     // Process all AFAS entries
     for (const [externalId, afasBalance] of afasGrouped) {
-      // Try to match by loan_id first, then by loan_name
-      const matchedLoan = loanLookupById.get(externalId) || loanLookupByName.get(externalId);
+      // Try to match by loan_id
+      const matchedLoan = loanLookupById.get(externalId);
       
       if (matchedLoan) {
         processedLoanIds.add(matchedLoan.id);
@@ -433,7 +427,7 @@ function LoanReconciliationPanel({
       if (!processedLoanIds.has(loan.id)) {
         const outstanding = loan.outstanding || 0;
         const commitment = loan.total_commitment || 0;
-        const displayId = loan.loan_id || loan.loan_name || loan.id.slice(0, 8);
+        const displayId = loan.loan_id || loan.id.slice(0, 8);
         // No AFAS data, so afasOutstanding = 0, difference = outstanding - 0 = outstanding
         results.push({
           loanId: loan.id,
@@ -676,7 +670,7 @@ export default function AfasGLExplorer() {
     queryFn: async () => {
       const { data: loans, error: loansError } = await supabase
         .from('loans')
-        .select('id, loan_id, loan_name, borrower_name, total_commitment, outstanding, status')
+        .select('id, loan_id, borrower_name, total_commitment, outstanding, status')
         .eq('status', 'active');
       if (loansError) throw loansError;
       return loans as Loan[];

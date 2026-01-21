@@ -76,7 +76,6 @@ export function BatchUploadDialog() {
     const headers = [
       'loan_id',
       'borrower_name',
-      'loan_name',
       'vehicle',
       'facility',
       'city',
@@ -97,7 +96,6 @@ export function BatchUploadDialog() {
     const exampleRow = [
       '484',
       'Acme Properties BV',
-      'Acme Office Tower',
       'RED IV',
       '',
       'Amsterdam',
@@ -179,7 +177,7 @@ export function BatchUploadDialog() {
               </ul>
               <p className="font-medium mt-3">Optional columns:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
-                <li><code className="bg-muted px-1 rounded">borrower_name</code>, <code className="bg-muted px-1 rounded">loan_name</code> - Loan identifiers</li>
+                <li><code className="bg-muted px-1 rounded">borrower_name</code> - Borrower legal name</li>
                 <li><code className="bg-muted px-1 rounded">vehicle</code> - "RED IV" (default) or "TLF"</li>
                 <li><code className="bg-muted px-1 rounded">interest_type</code> - "cash_pay" (default) or "pik"</li>
                 <li><code className="bg-muted px-1 rounded">interest_rate</code> - e.g. "8.5%" or "0.085"</li>
@@ -226,7 +224,6 @@ export function BatchUploadDialog() {
                       <tr>
                         <th className="text-left p-2">Loan_ID</th>
                         <th className="text-left p-2">Borrower</th>
-                        <th className="text-left p-2">Loan Name</th>
                         <th className="text-left p-2">Vehicle</th>
                         <th className="text-left p-2">Type</th>
                         <th className="text-right p-2">Outstanding</th>
@@ -238,7 +235,6 @@ export function BatchUploadDialog() {
                         <tr key={i} className="border-b">
                           <td className="p-2 font-medium">{loan.loan_id}</td>
                           <td className="p-2">{loan.borrower_name || '—'}</td>
-                          <td className="p-2">{loan.loan_name || '—'}</td>
                           <td className="p-2">
                             <span className="text-xs px-1.5 py-0.5 rounded bg-muted">
                               {loan.vehicle}

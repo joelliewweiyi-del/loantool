@@ -141,7 +141,8 @@ export default function LoanDetail() {
           </Link>
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">{loan.loan_name || loan.borrower_name}</h1>
+              <h1 className="text-2xl font-semibold">{loan.borrower_name}</h1>
+              <span className="font-mono text-sm text-muted-foreground">({(loan as any).loan_id})</span>
               <StatusBadge status={loan.status} />
               <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
                 {loan.loan_type === 'committed_facility' ? 'Construction' : 'Bullet'}
@@ -153,7 +154,7 @@ export default function LoanDetail() {
               )}
             </div>
             <p className="text-muted-foreground text-sm">
-              {loan.borrower_name} • Created {formatDate(loan.created_at)} • {loan.notice_frequency} notices
+              Created {formatDate(loan.created_at)} • {loan.notice_frequency} notices
             </p>
           </div>
         </div>
