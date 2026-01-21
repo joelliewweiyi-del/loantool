@@ -144,14 +144,13 @@ export default function LoanDetail() {
               <h1 className="text-2xl font-semibold">{loan.borrower_name}</h1>
               <span className="font-mono text-sm text-muted-foreground">({(loan as any).loan_id})</span>
               <StatusBadge status={loan.status} />
-              <span className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground">
-                {loan.loan_type === 'committed_facility' ? 'Construction' : 'Bullet'}
+              <span className={`text-xs px-2 py-1 rounded font-medium ${
+                loan.interest_type === 'pik' 
+                  ? 'bg-amber-100 text-amber-700' 
+                  : 'bg-muted text-muted-foreground'
+              }`}>
+                {loan.interest_type === 'pik' ? 'PIK' : 'Cash Pay'}
               </span>
-              {loan.interest_type === 'pik' && (
-                <span className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 font-medium">
-                  PIK
-                </span>
-              )}
             </div>
             <p className="text-muted-foreground text-sm">
               Created {formatDate(loan.created_at)} • {loan.notice_frequency} notices
