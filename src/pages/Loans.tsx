@@ -36,11 +36,11 @@ export default function Loans() {
 
   // Calculate portfolio summary metrics for current vehicle
   const activeLoans = vehicleLoans.filter(l => l.status === 'active');
-  const totalPrincipal = activeLoans.reduce((sum, l) => sum + (l.initial_principal || 0), 0);
+  const totalPrincipal = activeLoans.reduce((sum, l) => sum + (l.outstanding || 0), 0);
   const totalCommitment = activeLoans.reduce((sum, l) => sum + (l.total_commitment || 0), 0);
   const totalUndrawn = totalCommitment - totalPrincipal;
   const weightedRateSum = activeLoans.reduce((sum, l) => {
-    const principal = l.initial_principal || 0;
+    const principal = l.outstanding || 0;
     const rate = l.interest_rate || 0;
     return sum + principal * rate;
   }, 0);
@@ -160,7 +160,7 @@ export default function Loans() {
                       {loan.interest_type === 'pik' ? <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">PIK</span> : <span className="text-xs text-muted-foreground">—</span>}
                     </td>
                     <td><StatusBadge status={loan.status} /></td>
-                    <td className="numeric">{formatCurrency(loan.initial_principal)}</td>
+                    <td className="numeric">{formatCurrency(loan.outstanding)}</td>
                     <td className="numeric">{formatPercent(loan.interest_rate, 2)}</td>
                     <td className="text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
                     <td className="text-muted-foreground">{formatDate(loan.maturity_date)}</td>
