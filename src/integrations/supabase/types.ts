@@ -351,7 +351,6 @@ export type Database = {
           external_loan_id: string | null
           facility: string | null
           id: string
-          initial_outstanding: number | null
           interest_rate: number | null
           interest_type: string
           loan_name: string | null
@@ -360,6 +359,7 @@ export type Database = {
           ltv: number | null
           maturity_date: string | null
           notice_frequency: string
+          opening_outstanding: number | null
           payment_due_rule: string | null
           remarks: string | null
           rental_income: number | null
@@ -380,7 +380,6 @@ export type Database = {
           external_loan_id?: string | null
           facility?: string | null
           id?: string
-          initial_outstanding?: number | null
           interest_rate?: number | null
           interest_type?: string
           loan_name?: string | null
@@ -389,6 +388,7 @@ export type Database = {
           ltv?: number | null
           maturity_date?: string | null
           notice_frequency?: string
+          opening_outstanding?: number | null
           payment_due_rule?: string | null
           remarks?: string | null
           rental_income?: number | null
@@ -409,7 +409,6 @@ export type Database = {
           external_loan_id?: string | null
           facility?: string | null
           id?: string
-          initial_outstanding?: number | null
           interest_rate?: number | null
           interest_type?: string
           loan_name?: string | null
@@ -418,6 +417,7 @@ export type Database = {
           ltv?: number | null
           maturity_date?: string | null
           notice_frequency?: string
+          opening_outstanding?: number | null
           payment_due_rule?: string | null
           remarks?: string | null
           rental_income?: number | null
