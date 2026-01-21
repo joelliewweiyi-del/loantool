@@ -60,10 +60,10 @@ interface LoanBalance {
   afasCredits: number;
   afasDebits: number;
   afasNet: number;
-  tmoCommitment: number;
-  tmoPrincipal: number;
+  commitment: number;
+  outstanding: number;
   difference: number;
-  status: 'matched' | 'variance' | 'missing_tmo' | 'missing_afas';
+  status: 'matched' | 'variance' | 'missing_in_app' | 'missing_afas';
   transactionCount: number;
 }
 
@@ -125,7 +125,7 @@ function downloadReconciliationCSV(data: LoanBalance[], filename: string) {
   const headers = [
     'Loan ID', 'External ID', 'Borrower', 
     'AFAS Credits', 'AFAS Debits', 'AFAS Net (Commitment Remaining)',
-    'TMO Commitment', 'TMO Outstanding', 'Difference', 'Status', 'Tx Count'
+    'Commitment', 'Outstanding', 'Difference', 'Status', 'Tx Count'
   ];
   
   const csvRows = [
@@ -137,8 +137,8 @@ function downloadReconciliationCSV(data: LoanBalance[], filename: string) {
       row.afasCredits.toFixed(2),
       row.afasDebits.toFixed(2),
       row.afasNet.toFixed(2),
-      row.tmoCommitment.toFixed(2),
-      row.tmoPrincipal.toFixed(2),
+      row.commitment.toFixed(2),
+      row.outstanding.toFixed(2),
       row.difference.toFixed(2),
       row.status,
       row.transactionCount
@@ -328,7 +328,7 @@ function LoanReconciliationPanel({
   afasLoading: boolean;
   afasFetching: boolean;
   refetchAfas: () => void;
-  loans: Loan[] | undefined;
+  loans: (Loan & { calculated_principal?: number })[] | undefined;
   loansLoading: boolean;
   refetchLoans: () => void;
 }) {
@@ -363,7 +363,7 @@ function LoanReconciliationPanel({
     }
 
     // Create loan lookup by external_loan_id
-    const loanLookup = new Map<string, Loan>();
+    const loanLookup = new Map<string, Loan & { calculated_principal?: number }>();
     for (const loan of (loans || [])) {
       if (loan.external_loan_id) {
         loanLookup.set(loan.external_loan_id, loan);
@@ -372,52 +372,54 @@ function LoanReconciliationPanel({
 
     // Build reconciliation records
     const results: LoanBalance[] = [];
-    const processedTmoIds = new Set<string>();
+    const processedLoanIds = new Set<string>();
 
     // Process all AFAS entries
     for (const [externalId, afasBalance] of afasGrouped) {
-      const tmoLoan = loanLookup.get(externalId);
+      const matchedLoan = loanLookup.get(externalId);
       
-      if (tmoLoan) {
-        processedTmoIds.add(tmoLoan.id);
-        const tmoCommitment = tmoLoan.total_commitment || 0;
-        const tmoPrincipal = tmoLoan.outstanding || 0;
-        const difference = Math.abs(afasBalance.net) - tmoPrincipal;
+      if (matchedLoan) {
+        processedLoanIds.add(matchedLoan.id);
+        const commitment = matchedLoan.total_commitment || 0;
+        // Use calculated_principal from RPC if available, otherwise fall back to outstanding
+        const outstanding = matchedLoan.calculated_principal ?? matchedLoan.outstanding ?? 0;
+        const difference = Math.abs(afasBalance.net) - outstanding;
         
         results.push({
-          loanId: tmoLoan.id,
+          loanId: matchedLoan.id,
           externalLoanId: externalId,
-          borrowerName: tmoLoan.borrower_name,
+          borrowerName: matchedLoan.borrower_name,
           afasCredits: afasBalance.credits,
           afasDebits: afasBalance.debits,
           afasNet: afasBalance.net,
-          tmoCommitment,
-          tmoPrincipal,
+          commitment,
+          outstanding,
           difference,
           status: Math.abs(difference) < 0.01 ? 'matched' : 'variance',
           transactionCount: afasBalance.count
         });
       } else {
-        // In AFAS but not in TMO
+        // In AFAS but not in App
         results.push({
           loanId: '',
           externalLoanId: externalId,
-          borrowerName: '(Not in TMO)',
+          borrowerName: '(Not in App)',
           afasCredits: afasBalance.credits,
           afasDebits: afasBalance.debits,
           afasNet: afasBalance.net,
-          tmoCommitment: 0,
-          tmoPrincipal: 0,
+          commitment: 0,
+          outstanding: 0,
           difference: afasBalance.net,
-          status: 'missing_tmo',
+          status: 'missing_in_app',
           transactionCount: afasBalance.count
         });
       }
     }
 
-    // Add TMO loans not in AFAS
+    // Add App loans not in AFAS
     for (const loan of (loans || [])) {
-      if (!processedTmoIds.has(loan.id) && loan.external_loan_id) {
+      if (!processedLoanIds.has(loan.id) && loan.external_loan_id) {
+        const outstanding = loan.calculated_principal ?? loan.outstanding ?? 0;
         results.push({
           loanId: loan.id,
           externalLoanId: loan.external_loan_id,
@@ -425,9 +427,9 @@ function LoanReconciliationPanel({
           afasCredits: 0,
           afasDebits: 0,
           afasNet: 0,
-          tmoCommitment: loan.total_commitment || 0,
-          tmoPrincipal: loan.outstanding || 0,
-          difference: -(loan.outstanding || 0),
+          commitment: loan.total_commitment || 0,
+          outstanding,
+          difference: -outstanding,
           status: 'missing_afas',
           transactionCount: 0
         });
@@ -436,7 +438,7 @@ function LoanReconciliationPanel({
 
     // Sort by status priority, then by absolute difference
     return results.sort((a, b) => {
-      const statusOrder = { variance: 0, missing_tmo: 1, missing_afas: 2, matched: 3 };
+      const statusOrder = { variance: 0, missing_in_app: 1, missing_afas: 2, matched: 3 };
       const statusDiff = statusOrder[a.status] - statusOrder[b.status];
       if (statusDiff !== 0) return statusDiff;
       return Math.abs(b.difference) - Math.abs(a.difference);
@@ -447,12 +449,12 @@ function LoanReconciliationPanel({
   const stats = useMemo(() => {
     const matched = reconciliationData.filter(r => r.status === 'matched').length;
     const variance = reconciliationData.filter(r => r.status === 'variance').length;
-    const missingTmo = reconciliationData.filter(r => r.status === 'missing_tmo').length;
+    const missingInApp = reconciliationData.filter(r => r.status === 'missing_in_app').length;
     const missingAfas = reconciliationData.filter(r => r.status === 'missing_afas').length;
     const totalAfas = reconciliationData.reduce((sum, r) => sum + r.afasNet, 0);
-    const totalTmo = reconciliationData.reduce((sum, r) => sum + r.tmoCommitment, 0);
+    const totalOutstanding = reconciliationData.reduce((sum, r) => sum + r.outstanding, 0);
     
-    return { matched, variance, missingTmo, missingAfas, totalAfas, totalTmo };
+    return { matched, variance, missingInApp, missingAfas, totalAfas, totalOutstanding };
   }, [reconciliationData]);
 
   const isLoading = afasLoading || loansLoading;
@@ -469,8 +471,8 @@ function LoanReconciliationPanel({
         return <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30"><CheckCircle2 className="h-3 w-3 mr-1" />Matched</Badge>;
       case 'variance':
         return <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30"><AlertTriangle className="h-3 w-3 mr-1" />Variance</Badge>;
-      case 'missing_tmo':
-        return <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30"><XCircle className="h-3 w-3 mr-1" />Not in TMO</Badge>;
+      case 'missing_in_app':
+        return <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/30"><XCircle className="h-3 w-3 mr-1" />Not in App</Badge>;
       case 'missing_afas':
         return <Badge variant="outline" className="bg-secondary/50 text-secondary-foreground border-secondary"><XCircle className="h-3 w-3 mr-1" />Not in AFAS</Badge>;
     }
@@ -484,11 +486,11 @@ function LoanReconciliationPanel({
             <div>
               <CardTitle className="text-lg">Loan Balance Reconciliation</CardTitle>
               <CardDescription className="text-xs">
-                AFAS DimAx1 balances vs TMO commitment tracking
+                AFAS DimAx1 balances vs loan commitment tracking
               </CardDescription>
             </div>
             <Badge variant="outline" className="text-xs font-mono bg-muted">
-              GL 1751
+              Filtered: GL 1751
             </Badge>
           </div>
           <div className="flex items-center gap-2">
@@ -526,8 +528,8 @@ function LoanReconciliationPanel({
             <p className="text-xl font-bold text-warning">{stats.variance}</p>
           </Card>
           <Card className="p-3">
-            <p className="text-xs text-muted-foreground">Not in TMO</p>
-            <p className="text-xl font-bold text-destructive">{stats.missingTmo}</p>
+            <p className="text-xs text-muted-foreground">Not in App</p>
+            <p className="text-xl font-bold text-destructive">{stats.missingInApp}</p>
           </Card>
           <Card className="p-3">
             <p className="text-xs text-muted-foreground">Not in AFAS</p>
@@ -538,8 +540,8 @@ function LoanReconciliationPanel({
             <p className="text-lg font-semibold">{formatCurrency(stats.totalAfas)}</p>
           </Card>
           <Card className="p-3">
-            <p className="text-xs text-muted-foreground">TMO Total</p>
-            <p className="text-lg font-semibold">{formatCurrency(stats.totalTmo)}</p>
+            <p className="text-xs text-muted-foreground">Outstanding Total</p>
+            <p className="text-lg font-semibold">{formatCurrency(stats.totalOutstanding)}</p>
           </Card>
         </div>
 
@@ -560,21 +562,21 @@ function LoanReconciliationPanel({
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Credit</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Debit</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Net (Commitment Remaining)</TableHead>
-                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">TMO Outstanding</TableHead>
-                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">TMO Commitment</TableHead>
+                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Outstanding</TableHead>
+                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Commitment</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Delta (Net vs. Outstanding)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {reconciliationData.map((row, idx) => (
-                  <TableRow key={`${row.externalLoanId}-${idx}`} className={row.status === 'variance' ? 'bg-warning/5' : row.status === 'missing_tmo' ? 'bg-destructive/5' : row.status === 'missing_afas' ? 'bg-muted/30' : ''}>
+                  <TableRow key={`${row.externalLoanId}-${idx}`} className={row.status === 'variance' ? 'bg-warning/5' : row.status === 'missing_in_app' ? 'bg-destructive/5' : row.status === 'missing_afas' ? 'bg-muted/30' : ''}>
                     <TableCell className="px-2 py-1">{getStatusBadge(row.status)}</TableCell>
                     <TableCell className="px-2 py-1 font-mono text-xs">{row.externalLoanId}</TableCell>
                     <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.afasCredits)}</TableCell>
                     <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.afasDebits)}</TableCell>
                     <TableCell className="px-2 py-1 text-xs text-right font-mono font-semibold">{formatCurrency(row.afasNet)}</TableCell>
-                    <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.tmoPrincipal)}</TableCell>
-                    <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.tmoCommitment)}</TableCell>
+                    <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.outstanding)}</TableCell>
+                    <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.commitment)}</TableCell>
                     <TableCell className={`px-2 py-1 text-xs text-right font-mono font-semibold ${row.difference !== 0 ? (row.difference > 0 ? 'text-primary' : 'text-destructive') : ''}`}>
                       {row.difference !== 0 ? (row.difference > 0 ? '+' : '') + formatCurrency(row.difference) : '—'}
                     </TableCell>
@@ -650,16 +652,33 @@ export default function AfasGLExplorer() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch TMO loans
+  // Fetch loans with calculated principal balance from RPC
   const loansQuery = useQuery({
     queryKey: ['loans-for-reconciliation'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // First get loans
+      const { data: loans, error: loansError } = await supabase
         .from('loans')
         .select('id, external_loan_id, borrower_name, total_commitment, outstanding, status')
         .eq('status', 'active');
-      if (error) throw error;
-      return data as Loan[];
+      if (loansError) throw loansError;
+      
+      // Then get calculated principal balances using RPC
+      const { data: balances, error: balancesError } = await supabase
+        .rpc('get_loan_balances');
+      if (balancesError) throw balancesError;
+      
+      // Create lookup for calculated principals
+      const balanceLookup = new Map<string, number>();
+      for (const b of (balances || [])) {
+        balanceLookup.set(b.loan_id, Number(b.principal_balance) || 0);
+      }
+      
+      // Merge calculated principal into loans
+      return (loans || []).map(loan => ({
+        ...loan,
+        calculated_principal: balanceLookup.get(loan.id)
+      })) as (Loan & { calculated_principal?: number })[];
     },
     staleTime: 5 * 60 * 1000,
   });
