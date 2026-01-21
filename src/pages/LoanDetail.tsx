@@ -161,69 +161,39 @@ export default function LoanDetail() {
       </div>
 
       {/* Key Loan Metrics Bar */}
-      {(() => {
-        // Calculate arrangement fees (capitalized fees withheld at funding)
-        const arrangementFees = (events || [])
-          .filter(e => {
-            const meta = e.metadata as Record<string, unknown> | null;
-            return e.event_type === 'fee_invoice' && 
-                   e.status === 'approved' && 
-                   (meta?.fee_type === 'arrangement' || meta?.adjustment_type === 'fee_split');
-          })
-          .reduce((sum, e) => sum + (e.amount || 0), 0);
-        
-        // Net funding = total draws minus arrangement fees
-        const totalDraws = (events || [])
-          .filter(e => e.event_type === 'principal_draw' && e.status === 'approved')
-          .reduce((sum, e) => sum + (e.amount || 0), 0);
-        
-        const netFunding = totalDraws - arrangementFees;
-        const hasArrangementFees = arrangementFees > 0;
-
-        return (
-          <div className="grid grid-cols-7 gap-4 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Outstanding Amount</div>
-              <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(accrualsSummary.currentPrincipal)}</div>
-            </div>
-            {hasArrangementFees ? (
-              <div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Net Funding</div>
-                <div className="text-lg font-semibold font-mono">{formatCurrency(netFunding)}</div>
-                <div className="text-xs text-muted-foreground">excl. {formatCurrency(arrangementFees)} fee</div>
-              </div>
-            ) : (
-              <div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Commitment</div>
-                <div className="text-lg font-semibold font-mono">{formatCurrency(accrualsSummary.totalCommitment)}</div>
-              </div>
-            )}
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Rate</div>
-              <div className="text-lg font-semibold font-mono">{formatPercent(accrualsSummary.currentRate, 2)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">PIK Capitalized</div>
-              <div className="text-lg font-semibold font-mono text-amber-600">{formatCurrency(periodAccruals.reduce((sum, p) => sum + p.pikCapitalized, 0))}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Undrawn</div>
-              <div className="text-lg font-semibold font-mono text-accent-foreground">{formatCurrency(accrualsSummary.currentUndrawn)}</div>
-              {accrualsSummary.commitmentFeeRate > 0 && (
-                <div className="text-xs text-muted-foreground">@ {formatPercent(accrualsSummary.commitmentFeeRate, 2)}</div>
-              )}
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Start Date</div>
-              <div className="text-lg font-semibold font-mono">{formatDate(loan.loan_start_date)}</div>
-            </div>
-            <div>
-              <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Maturity Date</div>
-              <div className="text-lg font-semibold font-mono">{formatDate(loan.maturity_date)}</div>
-            </div>
-          </div>
-        );
-      })()}
+      <div className="grid grid-cols-7 gap-4 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Outstanding Amount</div>
+          <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(accrualsSummary.currentPrincipal)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Commitment</div>
+          <div className="text-lg font-semibold font-mono">{formatCurrency(accrualsSummary.totalCommitment)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Rate</div>
+          <div className="text-lg font-semibold font-mono">{formatPercent(accrualsSummary.currentRate, 2)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">PIK Capitalized</div>
+          <div className="text-lg font-semibold font-mono text-amber-600">{formatCurrency(periodAccruals.reduce((sum, p) => sum + p.pikCapitalized, 0))}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Undrawn</div>
+          <div className="text-lg font-semibold font-mono text-green-600">{formatCurrency(accrualsSummary.currentUndrawn)}</div>
+          {accrualsSummary.commitmentFeeRate > 0 && (
+            <div className="text-xs text-muted-foreground">@ {formatPercent(accrualsSummary.commitmentFeeRate, 2)}</div>
+          )}
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Start Date</div>
+          <div className="text-lg font-semibold font-mono">{formatDate(loan.loan_start_date)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Maturity Date</div>
+          <div className="text-lg font-semibold font-mono">{formatDate(loan.maturity_date)}</div>
+        </div>
+      </div>
 
       {/* Tabs */}
       <Tabs defaultValue="accruals" className="space-y-4">
