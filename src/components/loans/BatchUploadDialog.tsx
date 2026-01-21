@@ -224,7 +224,7 @@ export function BatchUploadDialog() {
                   <table className="w-full text-sm">
                     <thead className="bg-muted sticky top-0">
                       <tr>
-                        <th className="text-left p-2">#</th>
+                        <th className="text-left p-2">Loan_ID</th>
                         <th className="text-left p-2">Borrower</th>
                         <th className="text-left p-2">Loan Name</th>
                         <th className="text-left p-2">Vehicle</th>
@@ -236,8 +236,8 @@ export function BatchUploadDialog() {
                     <tbody>
                       {parsedLoans.map((loan, i) => (
                         <tr key={i} className="border-b">
-                          <td className="p-2 text-muted-foreground">{i + 1}</td>
-                          <td className="p-2 font-medium">{loan.borrower_name}</td>
+                          <td className="p-2 font-medium">{loan.loan_id}</td>
+                          <td className="p-2">{loan.borrower_name || '—'}</td>
                           <td className="p-2">{loan.loan_name || '—'}</td>
                           <td className="p-2">
                             <span className="text-xs px-1.5 py-0.5 rounded bg-muted">
