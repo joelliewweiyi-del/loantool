@@ -503,16 +503,15 @@ export function calculatePeriodAccruals(
   const interestSegments = calculateInterestSegments(sortedEvents, periodStart, periodEnd, initialCommitment);
   const interestAccrued = interestSegments.reduce((sum, seg) => sum + seg.interest, 0);
   
-  // Calculate daily accruals for detailed view
+  // Calculate daily accruals for detailed view (uses calendar days)
   const dailyAccruals = calculateDailyAccruals(sortedEvents, periodStart, periodEnd, commitmentFeeRate, initialCommitment);
-  const commitmentFeeAccrued = dailyAccruals.reduce((sum, day) => sum + day.commitmentFee, 0);
   
   // Calculate average undrawn amount for the period
   const avgUndrawnAmount = dailyAccruals.length > 0 
     ? dailyAccruals.reduce((sum, day) => sum + day.undrawn, 0) / dailyAccruals.length
     : 0;
   
-  // Build commitment fee segments
+  // Build commitment fee segments using 30/360 convention
   const commitmentFeeSegments = calculateCommitmentFeeSegments(
     sortedEvents, 
     periodStart, 
@@ -520,6 +519,9 @@ export function calculatePeriodAccruals(
     commitmentFeeRate, 
     initialCommitment
   );
+  
+  // Commitment fee accrued derives from segments (30/360), not daily accruals
+  const commitmentFeeAccrued = commitmentFeeSegments.reduce((sum, seg) => sum + seg.fee, 0);
   
   // Total due (cash pay interest + commitment fee + invoiced fees)
   const cashPayInterest = interestSegments
