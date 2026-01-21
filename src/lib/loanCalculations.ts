@@ -283,34 +283,40 @@ export function calculateDailyAccruals(
 /**
  * Identifies interest calculation segments when rate or principal changes.
  * Each segment represents a contiguous period with the same rate/principal.
+ * Uses 30E/360 day count convention - day 31 is treated as day 30.
  */
 export function calculateInterestSegments(
   events: LoanEvent[],
   startDate: string,
   endDate: string,
-  initialCommitment: number = 0
+  initialCommitment: number = 0,
+  loanInterestType: InterestType = 'cash_pay'
 ): InterestSegment[] {
   const segments: InterestSegment[] = [];
   const sortedEvents = sortEventsByDate(events);
   
   // Get state at start of period
-  const startState = getLoanStateAtDate(sortedEvents, startDate, initialCommitment);
+  const startState = getLoanStateAtDate(sortedEvents, startDate, initialCommitment, loanInterestType);
   
   // Find all events that affect interest calculation within the period
+  // Exclude events on period end date - they don't affect THIS period's accrual
   const relevantEventTypes = [
     'principal_draw',
     'principal_repayment',
     'interest_rate_set',
     'interest_rate_change',
     'pik_capitalization_posted',
+    'fee_invoice',
   ];
   
   const periodEvents = sortedEvents.filter(e => {
     const eventDate = new Date(e.effective_date);
     const periodStart = new Date(startDate);
     const periodEnd = new Date(endDate);
+    // Event must be AFTER start and BEFORE end (not on end date)
+    // Events on period end date affect the NEXT period, not this one
     return eventDate > periodStart && 
-           eventDate <= periodEnd && 
+           eventDate < periodEnd && 
            relevantEventTypes.includes(e.event_type);
   });
   
@@ -326,17 +332,19 @@ export function calculateInterestSegments(
     
     if (new Date(segmentStart) <= segmentEnd) {
       const days = daysBetween30360(segmentStart, segmentEnd.toISOString().split('T')[0]);
-      const interest = currentState.outstandingPrincipal * currentState.currentRate * (days / 360);
-      
-      segments.push({
-        startDate: segmentStart,
-        endDate: segmentEnd.toISOString().split('T')[0],
-        days,
-        principal: currentState.outstandingPrincipal,
-        rate: currentState.currentRate,
-        interest,
-        interestType: currentState.interestType,
-      });
+      if (days > 0) {
+        const interest = currentState.outstandingPrincipal * currentState.currentRate * (days / 360);
+        
+        segments.push({
+          startDate: segmentStart,
+          endDate: segmentEnd.toISOString().split('T')[0],
+          days,
+          principal: currentState.outstandingPrincipal,
+          rate: currentState.currentRate,
+          interest,
+          interestType: currentState.interestType,
+        });
+      }
     }
     
     // Apply event and start new segment
@@ -365,6 +373,7 @@ export function calculateInterestSegments(
 
 /**
  * Calculates commitment fee segments when undrawn amount changes.
+ * Uses 30E/360 day count convention - day 31 is treated as day 30.
  */
 export function calculateCommitmentFeeSegments(
   events: LoanEvent[],
@@ -380,20 +389,23 @@ export function calculateCommitmentFeeSegments(
   const startState = getLoanStateAtDate(sortedEvents, startDate, initialCommitment);
   
   // Find all events that affect undrawn amount within the period
+  // Exclude events on period end date - they don't affect THIS period's accrual
   const relevantEventTypes = [
     'principal_draw',
     'principal_repayment',
     'commitment_set',
     'commitment_change',
     'commitment_cancel',
+    'fee_invoice',
   ];
   
   const periodEvents = sortedEvents.filter(e => {
     const eventDate = new Date(e.effective_date);
     const periodStart = new Date(startDate);
     const periodEnd = new Date(endDate);
+    // Event must be AFTER start and BEFORE end (not on end date)
     return eventDate > periodStart && 
-           eventDate <= periodEnd && 
+           eventDate < periodEnd && 
            relevantEventTypes.includes(e.event_type);
   });
   
@@ -499,8 +511,8 @@ export function calculatePeriodAccruals(
     }
   }
   
-  // Calculate interest segments
-  const interestSegments = calculateInterestSegments(sortedEvents, periodStart, periodEnd, initialCommitment);
+  // Calculate interest segments - pass loan interest type for correct labeling
+  const interestSegments = calculateInterestSegments(sortedEvents, periodStart, periodEnd, initialCommitment, loanInterestType);
   const interestAccrued = interestSegments.reduce((sum, seg) => sum + seg.interest, 0);
   
   // Calculate daily accruals for detailed view (uses calendar days)
