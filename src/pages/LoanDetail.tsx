@@ -58,6 +58,10 @@ export default function LoanDetail() {
   const [rate, setRate] = useState('');
   const [feeType, setFeeType] = useState<string>('arrangement');
   const [feePaymentType, setFeePaymentType] = useState<'cash' | 'pik'>('cash');
+  const [lastEditedField, setLastEditedField] = useState<'amount' | 'rate' | null>(null);
+
+  // Get current principal for fee calculations
+  const currentPrincipal = accrualsSummary.currentPrincipal || 0;
 
   const canCreateEvents = isPM || isController;
   const canApproveEvents = isController;
@@ -285,7 +289,16 @@ export default function LoanDetail() {
                             type="number"
                             step="0.01"
                             value={amount}
-                            onChange={(e) => setAmount(e.target.value)}
+                            onChange={(e) => {
+                              const newAmount = e.target.value;
+                              setAmount(newAmount);
+                              setLastEditedField('amount');
+                              // Auto-calculate rate for fee_invoice when amount changes
+                              if (eventType === 'fee_invoice' && currentPrincipal > 0 && newAmount) {
+                                const calculatedRate = (parseFloat(newAmount) / currentPrincipal) * 100;
+                                setRate(calculatedRate.toFixed(4));
+                              }
+                            }}
                             placeholder="0.00"
                           />
                         </div>
@@ -295,11 +308,25 @@ export default function LoanDetail() {
                             type="number"
                             step="0.0001"
                             value={rate}
-                            onChange={(e) => setRate(e.target.value)}
+                            onChange={(e) => {
+                              const newRate = e.target.value;
+                              setRate(newRate);
+                              setLastEditedField('rate');
+                              // Auto-calculate amount for fee_invoice when rate changes
+                              if (eventType === 'fee_invoice' && currentPrincipal > 0 && newRate) {
+                                const calculatedAmount = (parseFloat(newRate) / 100) * currentPrincipal;
+                                setAmount(calculatedAmount.toFixed(2));
+                              }
+                            }}
                             placeholder="0.0000"
                           />
                         </div>
                       </div>
+                      {eventType === 'fee_invoice' && currentPrincipal > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Based on current principal of {formatCurrency(currentPrincipal)}
+                        </p>
+                      )}
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setIsEventOpen(false)}>
