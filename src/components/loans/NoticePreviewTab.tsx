@@ -272,7 +272,7 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
                   <span className="text-xs text-muted-foreground">Repayments</span>
                 </div>
               )}
-              {totalFees > 0 && (
+              {totalFees > 0 && isPik && (
                 <div className="flex items-center justify-center gap-1">
                   <span className="font-mono text-sm text-emerald-600">+{formatCurrency(totalFees)}</span>
                   <span className="text-xs text-muted-foreground">Fees Capitalised</span>
@@ -320,17 +320,19 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
                   
                   // Get description - match Event Ledger logic for fee invoices
                   const getEventDescription = () => {
+                    // First check if there's an explicit description in metadata
+                    if (meta?.description) return meta.description as string;
+                    
                     if (event.event_type === 'fee_invoice') {
                       const feeType = meta?.fee_type as string | undefined;
                       const paymentType = meta?.payment_type as string | undefined;
-                      // Show "withheld" for PIK arrangement fees
+                      // Show "withheld" for arrangement fees (PIK or cash withheld)
                       if ((meta?.adjustment_type === 'fee_split') || 
-                          (paymentType === 'pik' && feeType?.includes('arrangement'))) {
+                          feeType?.includes('arrangement')) {
                         return 'Arrangement fee (withheld from borrower)';
                       }
                       if (feeType) return `${feeType} fee`;
                     }
-                    if (meta?.description) return meta.description as string;
                     if (meta?.period_id) return 'Period interest';
                     return null;
                   };
