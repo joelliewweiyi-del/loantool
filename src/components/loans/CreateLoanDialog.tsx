@@ -66,7 +66,7 @@ export function CreateLoanDialog() {
 
   const handleCreate = async () => {
     const payload = {
-      loan_number: formData.loan_number,
+      loan_id: formData.loan_number,
       loan_name: formData.loan_name || null,
       borrower_name: formData.borrower_name,
       loan_start_date: formData.loan_start_date || null,

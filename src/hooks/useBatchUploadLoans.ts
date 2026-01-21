@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
 
 export interface CSVLoanRow {
-  loan_number: string;
+  loan_id: string;
   borrower_name?: string;
   loan_name?: string;
   vehicle?: string;
@@ -25,7 +25,7 @@ export interface CSVLoanRow {
 }
 
 export interface ParsedLoan {
-  loan_number: string;
+  loan_id: string;
   borrower_name: string;
   loan_name: string | null;
   vehicle: string;
@@ -123,10 +123,10 @@ export function validateAndParseLoans(rows: CSVLoanRow[]): {
   rows.forEach((row, index) => {
     const rowNum = index + 2; // +2 for header row and 0-indexing
     
-    // Loan number is required (primary key)
-    const loanNumber = row.loan_number?.trim();
-    if (!loanNumber) {
-      errors.push({ row: rowNum, field: 'loan_number', message: 'Loan number is required' });
+    // Loan ID is required (primary key)
+    const loanId = row.loan_id?.trim();
+    if (!loanId) {
+      errors.push({ row: rowNum, field: 'loan_id', message: 'Loan_ID is required' });
       return;
     }
     
@@ -172,7 +172,7 @@ export function validateAndParseLoans(rows: CSVLoanRow[]): {
     }
     
     const parsedLoan: ParsedLoan = {
-      loan_number: loanNumber,
+      loan_id: loanId,
       borrower_name: row.borrower_name?.trim() || '',
       loan_name: row.loan_name?.trim() || null,
       vehicle,
@@ -220,7 +220,7 @@ export function useBatchUploadLoans() {
           const { data: createdLoan, error: loanError } = await supabase
             .from('loans')
             .insert([{
-              loan_number: loan.loan_number,
+              loan_id: loan.loan_id,
               borrower_name: loan.borrower_name,
               loan_name: loan.loan_name,
               vehicle: loan.vehicle,
