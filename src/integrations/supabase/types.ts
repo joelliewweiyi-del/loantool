@@ -676,6 +676,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_correct_event_amount: {
+        Args: { p_event_id: string; p_new_amount: number }
+        Returns: undefined
+      }
       calculate_principal_balance: {
         Args: { p_as_of_date?: string; p_loan_id: string }
         Returns: number
