@@ -129,8 +129,8 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events
                   </div>
                 )}
                 <div className="text-right border-l pl-6">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Total Due</div>
-                  <div className="font-mono font-bold text-lg">{formatCurrency(latestPeriod.totalDue)}</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Interest Charge</div>
+                  <div className="font-mono font-bold text-lg">{formatCurrency(latestPeriod.interestAccrued + latestPeriod.commitmentFeeAccrued)}</div>
                 </div>
               </div>
             </div>
