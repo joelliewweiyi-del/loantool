@@ -132,8 +132,7 @@ export default function Loans() {
                   <th>Category</th>
                   <th>PIK</th>
                   <th>Status</th>
-                  <th className="text-right">OUTSTANDING
-              </th>
+                  <th className="text-right">Outstanding</th>
                   <th className="text-right">Rate</th>
                   <th>Start</th>
                   <th>Maturity</th>
