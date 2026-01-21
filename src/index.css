@@ -184,7 +184,11 @@
   }
 
   .data-table th {
-    @apply text-left font-medium text-muted-foreground uppercase text-xs tracking-wider py-3 px-4 border-b;
+    @apply font-medium text-muted-foreground uppercase text-xs tracking-wider py-3 px-4 border-b;
+  }
+
+  .data-table th[class*="text-right"] {
+    text-align: right;
   }
 
   .data-table td {
