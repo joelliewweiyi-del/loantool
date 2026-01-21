@@ -97,8 +97,14 @@ export function daysBetween(startDate: string | Date, endDate: string | Date): n
  * Adjustments:
  * - If D1 is 31, change D1 to 30
  * - If D2 is 31 and D1 is 30 or 31, change D2 to 30
+ * 
+ * @param inclusive - If true, adds 1 to include both start and end dates (for period counting)
  */
-export function daysBetween30360(startDate: string | Date, endDate: string | Date): number {
+export function daysBetween30360(
+  startDate: string | Date, 
+  endDate: string | Date,
+  inclusive: boolean = true
+): number {
   const start = typeof startDate === 'string' ? new Date(startDate) : new Date(startDate);
   const end = typeof endDate === 'string' ? new Date(endDate) : new Date(endDate);
   
@@ -114,7 +120,10 @@ export function daysBetween30360(startDate: string | Date, endDate: string | Dat
   if (d1 === 31) d1 = 30;
   if (d2 === 31 && d1 >= 30) d2 = 30;
   
-  return (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
+  const days = (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
+  
+  // Add 1 for inclusive counting (both start and end dates count)
+  return inclusive ? days + 1 : days;
 }
 
 /**
