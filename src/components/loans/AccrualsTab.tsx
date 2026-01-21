@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
 import { formatCurrency, formatDate, formatPercent } from '@/lib/format';
-import { LoanEvent, PeriodStatus } from '@/types/loan';
+import { LoanEvent, PeriodStatus, InterestType } from '@/types/loan';
 import { PeriodAccrual, AccrualsSummary, InterestSegment, DailyAccrual } from '@/lib/loanCalculations';
 import { StatusBadge } from './LoanStatusBadge';
 import { useCreateInterestChargeEvent } from '@/hooks/useLoans';
@@ -12,9 +13,11 @@ import {
   ChevronDown, 
   ChevronRight, 
   Calendar,
-  Wallet,
   ArrowUpRight,
-  Info
+  Info,
+  Clock,
+  CheckCircle2,
+  CircleDashed
 } from 'lucide-react';
 import {
   Tooltip,
@@ -29,15 +32,17 @@ interface AccrualsTabProps {
   isLoading: boolean;
   loanId?: string;
   events?: LoanEvent[];
+  interestType?: InterestType;
 }
 
-export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events }: AccrualsTabProps) {
+export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events, interestType = 'cash_pay' }: AccrualsTabProps) {
   const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(new Set());
   const [showDailyBreakdown, setShowDailyBreakdown] = useState<string | null>(null);
   const createInterestCharge = useCreateInterestChargeEvent();
   const { isController, isPM } = useAuth();
 
-  const canCreateInterestCharge = isPM || isController;
+  const isPik = interestType === 'pik';
+  const canCreateInterestCharge = isPik && (isPM || isController);
 
   // Check if a period has an existing interest charge event (draft or approved)
   const getInterestChargeStatus = (periodId: string): 'none' | 'draft' | 'approved' => {
@@ -118,19 +123,13 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events
                   <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Rate</div>
                   <div className="font-mono font-semibold">{formatPercent(latestPeriod.openingRate, 2)}</div>
                 </div>
-                <div className="text-right">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Interest Accrued</div>
-                  <div className="font-mono font-semibold text-primary">{formatCurrency(latestPeriod.interestAccrued)}</div>
-                </div>
-                {latestPeriod.commitmentFeeAccrued > 0 && (
-                  <div className="text-right">
-                    <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Commitment Fees</div>
-                    <div className="font-mono font-semibold">{formatCurrency(latestPeriod.commitmentFeeAccrued)}</div>
-                  </div>
-                )}
                 <div className="text-right border-l pl-6">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Interest Charge</div>
-                  <div className="font-mono font-bold text-lg">{formatCurrency(latestPeriod.interestAccrued + latestPeriod.commitmentFeeAccrued)}</div>
+                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
+                    {isPik ? 'Interest Charge' : 'Interest Due'}
+                  </div>
+                  <div className="font-mono font-bold text-lg text-primary">
+                    {formatCurrency(latestPeriod.interestAccrued + latestPeriod.commitmentFeeAccrued)}
+                  </div>
                 </div>
               </div>
             </div>
@@ -141,25 +140,32 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events
       {/* Period Breakdown */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Period-by-Period Accruals</CardTitle>
-          <CardDescription className="text-xs flex items-center gap-1">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex items-center gap-1 cursor-help underline decoration-dotted underline-offset-2">
-                    30/360 Day Count
-                    <Info className="h-3 w-3" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="max-w-xs text-xs">
-                  <p className="font-semibold mb-1">30/360 Day Count Convention</p>
-                  <p>Each month is treated as 30 days, and the year as 360 days. This standardizes daily accrual rates across all months for consistency.</p>
-                  <p className="mt-1 text-muted-foreground">Daily Rate = Annual Rate ÷ 360</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <span>· Click row to expand</span>
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base">Period-by-Period Accruals</CardTitle>
+              <CardDescription className="text-xs flex items-center gap-1">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center gap-1 cursor-help underline decoration-dotted underline-offset-2">
+                        30/360 Day Count
+                        <Info className="h-3 w-3" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-xs text-xs">
+                      <p className="font-semibold mb-1">30/360 Day Count Convention</p>
+                      <p>Each month is treated as 30 days, and the year as 360 days. This standardizes daily accrual rates across all months for consistency.</p>
+                      <p className="mt-1 text-muted-foreground">Daily Rate = Annual Rate ÷ 360</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <span>· Click row to expand</span>
+              </CardDescription>
+            </div>
+            <Badge variant={isPik ? 'default' : 'secondary'} className="text-xs">
+              {isPik ? 'PIK Loan' : 'Cash Pay'}
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           {periodAccruals.length === 0 ? (
@@ -176,13 +182,14 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events
                     <th className="text-center py-3 px-4 font-semibold text-muted-foreground">Status</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Days</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Opening</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Draws</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Rate</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Interest</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Commit. Fee</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground bg-accent/30">Interest Charge</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">
+                      {isPik ? 'Interest Charge' : 'Interest Due'}
+                    </th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground bg-primary/10">Closing</th>
-                    <th className="text-center py-3 px-4 font-semibold text-muted-foreground w-32">Action</th>
+                    <th className="text-center py-3 px-4 font-semibold text-muted-foreground w-32">
+                      {isPik ? 'Capitalized' : 'Payment'}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -207,6 +214,7 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events
                         canCreateInterestCharge={canCreateInterestCharge}
                         onCreateInterestCharge={() => handleCreateInterestCharge(period)}
                         isCreatingCharge={createInterestCharge.isPending}
+                        isPik={isPik}
                       />
                     );
                   })}
@@ -217,28 +225,6 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events
         </CardContent>
       </Card>
     </div>
-  );
-}
-
-interface SummaryCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  subtext: string;
-}
-
-function SummaryCard({ icon, label, value, subtext }: SummaryCardProps) {
-  return (
-    <Card>
-      <CardContent className="pt-4">
-        <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-          {icon}
-          {label}
-        </div>
-        <div className="text-2xl font-bold">{value}</div>
-        <div className="text-xs text-muted-foreground mt-1">{subtext}</div>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -253,6 +239,7 @@ interface PeriodTableRowProps {
   canCreateInterestCharge: boolean;
   onCreateInterestCharge: () => void;
   isCreatingCharge: boolean;
+  isPik: boolean;
 }
 
 function PeriodTableRow({ 
@@ -266,6 +253,7 @@ function PeriodTableRow({
   canCreateInterestCharge,
   onCreateInterestCharge,
   isCreatingCharge,
+  isPik,
 }: PeriodTableRowProps) {
   const getStatusBorderColor = (status: string) => {
     switch (status) {
@@ -277,7 +265,18 @@ function PeriodTableRow({
     }
   };
 
-  const totalCharge = period.interestAccrued + period.commitmentFeeAccrued;
+  const totalInterestDue = period.interestAccrued + period.commitmentFeeAccrued;
+
+  // Determine payment status (placeholder for AFAS integration)
+  const getPaymentStatus = (): 'pending' | 'invoiced' | 'paid' => {
+    // For now, derive from period status
+    // In future: check AFAS invoice sync table
+    if (period.status === 'sent') return 'invoiced';
+    if (period.status === 'approved') return 'invoiced';
+    return 'pending';
+  };
+
+  const paymentStatus = getPaymentStatus();
 
   return (
     <>
@@ -311,70 +310,79 @@ function PeriodTableRow({
         <td className="py-4 px-4 text-right font-mono text-sm font-medium">
           {formatCurrency(period.openingPrincipal)}
         </td>
-        <td className="py-4 px-4 text-right font-mono text-sm">
-          {(() => {
-            const totalDraws = period.principalDrawn + period.feesInvoiced;
-            return totalDraws > 0 ? (
-              <span className="text-emerald-600">+{formatCurrency(totalDraws)}</span>
-            ) : (
-              <span className="text-muted-foreground">—</span>
-            );
-          })()}
-        </td>
         <td className="py-4 px-4 text-right font-mono text-sm text-muted-foreground">
           {formatPercent(period.openingRate, 2)}
         </td>
         <td className="py-4 px-4 text-right font-mono text-sm text-primary font-semibold">
-          {formatCurrency(period.interestAccrued)}
-        </td>
-        <td className="py-4 px-4 text-right font-mono text-sm text-muted-foreground">
-          {period.commitmentFeeAccrued > 0 ? formatCurrency(period.commitmentFeeAccrued) : '—'}
-        </td>
-        <td className="py-4 px-4 text-right font-mono text-sm font-bold bg-accent/30">
-          <div className="flex items-center justify-end gap-2">
-            {formatCurrency(totalCharge)}
-            {chargeStatus === 'draft' && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">DRAFT</span>
-            )}
-            {chargeStatus === 'approved' && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">✓</span>
-            )}
-          </div>
+          {formatCurrency(totalInterestDue)}
         </td>
         <td className="py-4 px-4 text-right font-mono text-sm font-bold bg-primary/10">
           {formatCurrency(period.closingPrincipal)}
         </td>
         <td className="py-4 px-4 text-center">
-          {chargeStatus === 'none' && canCreateInterestCharge && totalCharge > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCreateInterestCharge();
-              }}
-              disabled={isCreatingCharge}
-              className="h-7 text-xs"
-            >
-              <ArrowUpRight className="h-3 w-3 mr-1" />
-              Roll Up
-            </Button>
-          )}
-          {chargeStatus === 'draft' && (
-            <span className="text-xs text-muted-foreground">Pending</span>
-          )}
-          {chargeStatus === 'approved' && (
-            <span className="text-xs text-muted-foreground">Rolled</span>
+          {isPik ? (
+            // PIK loan: show capitalization status with Roll Up action
+            <>
+              {chargeStatus === 'none' && canCreateInterestCharge && totalInterestDue > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCreateInterestCharge();
+                  }}
+                  disabled={isCreatingCharge}
+                  className="h-7 text-xs"
+                >
+                  <ArrowUpRight className="h-3 w-3 mr-1" />
+                  Roll Up
+                </Button>
+              )}
+              {chargeStatus === 'draft' && (
+                <span className="inline-flex items-center gap-1 text-xs text-yellow-600">
+                  <Clock className="h-3 w-3" />
+                  Draft
+                </span>
+              )}
+              {chargeStatus === 'approved' && (
+                <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Rolled
+                </span>
+              )}
+            </>
+          ) : (
+            // Cash pay loan: show payment status (future AFAS link)
+            <>
+              {paymentStatus === 'pending' && (
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <CircleDashed className="h-3 w-3" />
+                  Pending
+                </span>
+              )}
+              {paymentStatus === 'invoiced' && (
+                <span className="inline-flex items-center gap-1 text-xs text-blue-600">
+                  <Clock className="h-3 w-3" />
+                  Invoiced
+                </span>
+              )}
+              {paymentStatus === 'paid' && (
+                <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                  <CheckCircle2 className="h-3 w-3" />
+                  Paid
+                </span>
+              )}
+            </>
           )}
         </td>
       </tr>
       
       {isExpanded && (
         <tr>
-          <td colSpan={12} className="p-0">
+          <td colSpan={9} className="p-0">
             <div className="bg-muted/30 border-b px-6 py-4 space-y-4">
               {/* Compact Summary Grid */}
-              <div className="grid grid-cols-4 gap-4 text-xs">
+              <div className="grid grid-cols-5 gap-4 text-xs">
                 <div className="space-y-1">
                   <div className="text-muted-foreground uppercase tracking-wide">Opening</div>
                   <div className="font-mono">{formatCurrency(period.openingPrincipal)} @ {formatPercent(period.openingRate, 2)}</div>
@@ -384,9 +392,15 @@ function PeriodTableRow({
                   <div className="font-mono">{formatCurrency(period.closingPrincipal)} @ {formatPercent(period.closingRate, 2)}</div>
                 </div>
                 <div className="space-y-1">
-                  <div className="text-muted-foreground uppercase tracking-wide">Commitment</div>
-                  <div className="font-mono">{formatCurrency(period.openingCommitment)}</div>
+                  <div className="text-muted-foreground uppercase tracking-wide">Interest</div>
+                  <div className="font-mono text-primary">{formatCurrency(period.interestAccrued)}</div>
                 </div>
+                {period.commitmentFeeAccrued > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-muted-foreground uppercase tracking-wide">Commit. Fee</div>
+                    <div className="font-mono">{formatCurrency(period.commitmentFeeAccrued)}</div>
+                  </div>
+                )}
                 <div className="space-y-1">
                   <div className="text-muted-foreground uppercase tracking-wide">Undrawn</div>
                   <div className="font-mono text-green-600">{formatCurrency(period.openingUndrawn)}</div>
@@ -416,7 +430,7 @@ function PeriodTableRow({
                   )}
                   {period.pikCapitalized > 0 && (
                     <div>
-                      <span className="text-muted-foreground">Interest Charge: </span>
+                      <span className="text-muted-foreground">PIK Capitalized: </span>
                       <span className="font-mono text-amber-600">+{formatCurrency(period.pikCapitalized)}</span>
                     </div>
                   )}
@@ -447,7 +461,7 @@ function PeriodTableRow({
                 </div>
               )}
 
-              {/* Commitment Fee Segments */}
+              {/* Commitment Fee Segments - only show if there are fees */}
               {period.commitmentFeeSegments.length > 0 && period.commitmentFeeRate > 0 && (
                 <div className="pt-2 border-t">
                   <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Commitment Fees</div>
