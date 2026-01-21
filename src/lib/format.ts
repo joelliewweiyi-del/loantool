@@ -89,14 +89,16 @@ export function daysBetween(startDate: string | Date, endDate: string | Date): n
 }
 
 /**
- * Calculate days between two dates using 30/360 convention (US NASD method).
+ * Calculate days between two dates using 30E/360 convention (European/Eurobond method).
  * Each month is treated as 30 days, year as 360 days.
  * 
  * Formula: (Y2 - Y1) × 360 + (M2 - M1) × 30 + (D2 - D1)
  * 
- * Adjustments:
+ * Adjustments (30E/360):
  * - If D1 is 31, change D1 to 30
- * - If D2 is 31 and D1 is 30 or 31, change D2 to 30
+ * - If D2 is 31, change D2 to 30
+ * 
+ * This ensures every full month = 30 days regardless of actual calendar days.
  * 
  * @param inclusive - If true, adds 1 to include both start and end dates (for period counting)
  */
@@ -116,9 +118,10 @@ export function daysBetween30360(
   let m2 = end.getUTCMonth() + 1;
   let y2 = end.getUTCFullYear();
   
-  // Adjustment rules (US NASD 30/360)
+  // Adjustment rules (30E/360 European method)
+  // Always cap day 31 to 30 for both dates
   if (d1 === 31) d1 = 30;
-  if (d2 === 31 && d1 >= 30) d2 = 30;
+  if (d2 === 31) d2 = 30;
   
   const days = (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
   
