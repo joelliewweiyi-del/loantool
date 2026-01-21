@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { StatusBadge } from '@/components/loans/LoanStatusBadge';
 import { CreateLoanDialog } from '@/components/loans/CreateLoanDialog';
+import { BatchUploadDialog } from '@/components/loans/BatchUploadDialog';
 import { formatDate, formatCurrency, formatPercent } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -65,7 +66,12 @@ export default function Loans() {
           </p>
         </div>
         
-        {canCreate && <CreateLoanDialog />}
+        {canCreate && (
+          <div className="flex items-center gap-2">
+            <BatchUploadDialog />
+            <CreateLoanDialog />
+          </div>
+        )}
       </div>
 
       {/* Vehicle Tabs */}
