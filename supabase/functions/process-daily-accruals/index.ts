@@ -31,6 +31,7 @@ interface Loan {
   interest_type: string;
   total_commitment: number | null;
   commitment_fee_rate: number | null;
+  loan_start_date: string | null;
 }
 
 // Apply event to state
@@ -69,6 +70,12 @@ function applyEventToState(state: LoanState, event: LoanEvent): LoanState {
       break;
     case 'pik_capitalization_posted':
       newState.outstandingPrincipal += event.amount || 0;
+      break;
+    case 'fee_invoice':
+      // PIK fees add to principal
+      if (event.metadata?.fee_type === 'pik') {
+        newState.outstandingPrincipal += event.amount || 0;
+      }
       break;
   }
   
@@ -114,6 +121,20 @@ function calculateDailyCommitmentFee(undrawnAmount: number, annualFeeRate: numbe
   return (undrawnAmount * annualFeeRate) / 360;
 }
 
+// Generate array of dates between start and end (inclusive)
+function getDateRange(startDate: string, endDate: string): string[] {
+  const dates: string[] = [];
+  const current = new Date(startDate);
+  const end = new Date(endDate);
+  
+  while (current <= end) {
+    dates.push(current.toISOString().split('T')[0]);
+    current.setDate(current.getDate() + 1);
+  }
+  
+  return dates;
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -127,18 +148,33 @@ Deno.serve(async (req) => {
 
     console.log('Starting daily accrual processing...');
 
-    // Parse request body for optional date override
-    let processingDate = new Date().toISOString().split('T')[0];
+    // Parse request body for optional date override or range
+    let processingDates: string[] = [];
+    let backfillMode = false;
+    
     try {
       const body = await req.json();
-      if (body?.date) {
-        processingDate = body.date;
+      if (body?.backfill) {
+        // Backfill mode: generate accruals for loans from their start date to end_date
+        backfillMode = true;
+        const endDate = body.end_date || new Date().toISOString().split('T')[0];
+        console.log(`Backfill mode enabled, end date: ${endDate}`);
+        
+        // We'll handle this per-loan below
+        processingDates = [endDate]; // Just store end date for now
+      } else if (body?.start_date && body?.end_date) {
+        // Date range mode
+        processingDates = getDateRange(body.start_date, body.end_date);
+        console.log(`Processing date range: ${body.start_date} to ${body.end_date} (${processingDates.length} days)`);
+      } else if (body?.date) {
+        processingDates = [body.date];
+      } else {
+        processingDates = [new Date().toISOString().split('T')[0]];
       }
     } catch {
       // No body or invalid JSON, use today's date
+      processingDates = [new Date().toISOString().split('T')[0]];
     }
-
-    console.log(`Processing accruals for date: ${processingDate}`);
 
     // Create processing job record
     const { data: job, error: jobError } = await supabase
@@ -147,7 +183,12 @@ Deno.serve(async (req) => {
         job_type: 'daily_accrual',
         status: 'running',
         started_at: new Date().toISOString(),
-        metadata: { processing_date: processingDate }
+        metadata: { 
+          processing_dates: processingDates.length > 10 
+            ? `${processingDates[0]} to ${processingDates[processingDates.length - 1]}` 
+            : processingDates,
+          backfill_mode: backfillMode
+        }
       })
       .select()
       .single();
@@ -173,25 +214,13 @@ Deno.serve(async (req) => {
 
     let processedCount = 0;
     let errorCount = 0;
-    const errors: Array<{ loan_id: string; error: string }> = [];
+    let skippedCount = 0;
+    const errors: Array<{ loan_id: string; date?: string; error: string }> = [];
 
     // Process each loan
     for (const loan of (loans as Loan[]) || []) {
       try {
-        // Check if accrual already exists for this date
-        const { data: existingAccrual } = await supabase
-          .from('accrual_entries')
-          .select('id')
-          .eq('loan_id', loan.id)
-          .eq('accrual_date', processingDate)
-          .single();
-
-        if (existingAccrual) {
-          console.log(`Accrual already exists for loan ${loan.id} on ${processingDate}, skipping`);
-          continue;
-        }
-
-        // Fetch events for this loan
+        // Fetch events for this loan once
         const { data: events, error: eventsError } = await supabase
           .from('loan_events')
           .select('*')
@@ -202,28 +231,84 @@ Deno.serve(async (req) => {
           throw eventsError;
         }
 
-        // Find the period this date belongs to
-        const { data: period } = await supabase
-          .from('periods')
-          .select('id')
-          .eq('loan_id', loan.id)
-          .lte('period_start', processingDate)
-          .gte('period_end', processingDate)
-          .single();
+        // In backfill mode, determine the date range for this specific loan
+        let loanDates = processingDates;
+        if (backfillMode) {
+          // Find the earliest event date for this loan
+          const sortedEvents = (events as LoanEvent[]).sort(
+            (a, b) => new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime()
+          );
+          const earliestEventDate = sortedEvents[0]?.effective_date;
+          const loanStartDate = loan.loan_start_date;
+          
+          // Use the earlier of loan_start_date or first event date
+          let startDate = earliestEventDate;
+          if (loanStartDate && (!startDate || loanStartDate < startDate)) {
+            startDate = loanStartDate;
+          }
+          
+          if (!startDate) {
+            console.log(`Loan ${loan.id} has no start date or events, skipping`);
+            skippedCount++;
+            continue;
+          }
+          
+          const endDate = processingDates[0]; // end_date stored here
+          loanDates = getDateRange(startDate, endDate);
+          console.log(`Loan ${loan.id}: backfilling ${loanDates.length} days from ${startDate} to ${endDate}`);
+        }
 
-        // Get loan state at this date
-        const initialCommitment = loan.total_commitment || 0;
-        const state = getLoanStateAtDate(events as LoanEvent[], processingDate, initialCommitment);
-        
-        // Calculate daily accruals
-        const dailyInterest = calculateDailyInterest(state.outstandingPrincipal, state.currentRate);
-        const commitmentFeeRate = loan.commitment_fee_rate || 0;
-        const dailyCommitmentFee = calculateDailyCommitmentFee(state.undrawnCommitment, commitmentFeeRate);
-
-        // Insert accrual entry
-        const { error: insertError } = await supabase
+        // Fetch existing accruals for this loan to avoid duplicates
+        const { data: existingAccruals } = await supabase
           .from('accrual_entries')
-          .insert({
+          .select('accrual_date')
+          .eq('loan_id', loan.id);
+
+        const existingDates = new Set((existingAccruals || []).map(a => a.accrual_date));
+
+        // Fetch all periods for this loan
+        const { data: periods } = await supabase
+          .from('periods')
+          .select('id, period_start, period_end')
+          .eq('loan_id', loan.id);
+
+        const initialCommitment = loan.total_commitment || 0;
+        const commitmentFeeRate = loan.commitment_fee_rate || 0;
+
+        // Process each date
+        const accrualInserts: Array<{
+          loan_id: string;
+          period_id: string | null;
+          accrual_date: string;
+          principal_balance: number;
+          interest_rate: number;
+          daily_interest: number;
+          commitment_balance: number;
+          commitment_fee_rate: number;
+          daily_commitment_fee: number;
+          is_pik: boolean;
+        }> = [];
+
+        for (const processingDate of loanDates) {
+          // Skip if accrual already exists
+          if (existingDates.has(processingDate)) {
+            skippedCount++;
+            continue;
+          }
+
+          // Find the period this date belongs to
+          const period = (periods || []).find(
+            p => processingDate >= p.period_start && processingDate <= p.period_end
+          );
+
+          // Get loan state at this date
+          const state = getLoanStateAtDate(events as LoanEvent[], processingDate, initialCommitment);
+          
+          // Calculate daily accruals
+          const dailyInterest = calculateDailyInterest(state.outstandingPrincipal, state.currentRate);
+          const dailyCommitmentFee = calculateDailyCommitmentFee(state.undrawnCommitment, commitmentFeeRate);
+
+          accrualInserts.push({
             loan_id: loan.id,
             period_id: period?.id || null,
             accrual_date: processingDate,
@@ -235,13 +320,23 @@ Deno.serve(async (req) => {
             daily_commitment_fee: dailyCommitmentFee,
             is_pik: loan.interest_type === 'pik',
           });
-
-        if (insertError) {
-          throw insertError;
         }
 
-        processedCount++;
-        console.log(`Processed accrual for loan ${loan.id}: interest=${dailyInterest.toFixed(2)}, fee=${dailyCommitmentFee.toFixed(2)}`);
+        // Batch insert accruals (in chunks of 500 to avoid hitting limits)
+        const chunkSize = 500;
+        for (let i = 0; i < accrualInserts.length; i += chunkSize) {
+          const chunk = accrualInserts.slice(i, i + chunkSize);
+          const { error: insertError } = await supabase
+            .from('accrual_entries')
+            .insert(chunk);
+
+          if (insertError) {
+            throw insertError;
+          }
+        }
+
+        processedCount += accrualInserts.length;
+        console.log(`Processed ${accrualInserts.length} accruals for loan ${loan.id} (${loan.borrower_name})`);
 
       } catch (loanError) {
         errorCount++;
@@ -255,11 +350,17 @@ Deno.serve(async (req) => {
     const { error: updateError } = await supabase
       .from('processing_jobs')
       .update({
-        status: errorCount > 0 ? 'completed' : 'completed',
+        status: 'completed',
         completed_at: new Date().toISOString(),
         processed_count: processedCount,
         error_count: errorCount,
         error_details: errors.length > 0 ? errors : null,
+        metadata: {
+          processed_count: processedCount,
+          skipped_count: skippedCount,
+          error_count: errorCount,
+          backfill_mode: backfillMode
+        }
       })
       .eq('id', job.id);
 
@@ -267,14 +368,14 @@ Deno.serve(async (req) => {
       console.error('Failed to update job record:', updateError);
     }
 
-    console.log(`Daily accrual processing complete. Processed: ${processedCount}, Errors: ${errorCount}`);
+    console.log(`Daily accrual processing complete. Processed: ${processedCount}, Skipped: ${skippedCount}, Errors: ${errorCount}`);
 
     return new Response(
       JSON.stringify({
         success: true,
         job_id: job.id,
-        processing_date: processingDate,
         processed_count: processedCount,
+        skipped_count: skippedCount,
         error_count: errorCount,
         errors: errors.length > 0 ? errors : undefined,
       }),
