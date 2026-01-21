@@ -49,7 +49,7 @@ interface Loan {
   external_loan_id: string | null;
   borrower_name: string;
   total_commitment: number | null;
-  initial_principal: number | null;
+  initial_outstanding: number | null;
   status: string;
 }
 
@@ -377,7 +377,7 @@ function LoanReconciliationPanel({
       if (tmoLoan) {
         processedTmoIds.add(tmoLoan.id);
         const tmoCommitment = tmoLoan.total_commitment || 0;
-        const tmoPrincipal = tmoLoan.initial_principal || 0;
+        const tmoPrincipal = tmoLoan.initial_outstanding || 0;
         const difference = Math.abs(afasBalance.net) - tmoPrincipal;
         
         results.push({
@@ -422,8 +422,8 @@ function LoanReconciliationPanel({
           afasDebits: 0,
           afasNet: 0,
           tmoCommitment: loan.total_commitment || 0,
-          tmoPrincipal: loan.initial_principal || 0,
-          difference: -(loan.initial_principal || 0),
+          tmoPrincipal: loan.initial_outstanding || 0,
+          difference: -(loan.initial_outstanding || 0),
           status: 'missing_afas',
           transactionCount: 0
         });
@@ -647,7 +647,7 @@ export default function AfasGLExplorer() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('loans')
-        .select('id, external_loan_id, borrower_name, total_commitment, initial_principal, status')
+        .select('id, external_loan_id, borrower_name, total_commitment, initial_outstanding, status')
         .eq('status', 'active');
       if (error) throw error;
       return data as Loan[];
