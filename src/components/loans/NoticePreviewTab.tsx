@@ -6,23 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import { formatCurrency, formatDate, formatPercent, formatEventType } from '@/lib/format';
 import { PeriodAccrual, AccrualsSummary } from '@/lib/loanCalculations';
 import { Loan, LoanEvent } from '@/types/loan';
-import { getCurrentDateString } from '@/lib/simulatedDate';
-import {
-  FileText, 
-  Download, 
-  Send, 
-  Eye,
-  CheckCircle2,
-  Clock,
-  AlertTriangle,
-  Printer,
-  ChevronRight,
-  ArrowRight,
-  TrendingUp,
-  TrendingDown,
-  Percent,
-  CircleDollarSign
-} from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import raxLogo from '@/assets/rax-logo.png';
 
 interface NoticePreviewTabProps {
@@ -135,22 +119,18 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
             {/* Notice Header Actions */}
             <div className="bg-muted/50 border-b px-6 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FileText className="h-5 w-5 text-muted-foreground" />
                 <span className="font-medium">Interest Notice Preview</span>
                 <NoticeStatusBadge status={selectedPeriod.status} />
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm">
-                  <Printer className="h-4 w-4 mr-2" />
                   Print
                 </Button>
                 <Button variant="outline" size="sm">
-                  <Download className="h-4 w-4 mr-2" />
                   Download PDF
                 </Button>
                 {selectedPeriod.status === 'approved' && (
                   <Button size="sm">
-                    <Send className="h-4 w-4 mr-2" />
                     Send to Borrower
                   </Button>
                 )}
@@ -170,7 +150,6 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
         ) : (
           <Card className="h-full flex items-center justify-center">
             <div className="text-center text-muted-foreground py-12">
-              <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>Select a period to preview its interest notice</p>
             </div>
           </Card>
@@ -232,7 +211,7 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
         </div>
         <div className="text-right">
           <p className="text-sm text-muted-foreground mb-1">Notice Date:</p>
-          <p className="font-mono">{formatDate(getCurrentDateString())}</p>
+          <p className="font-mono">{formatDate(period.periodEnd)}</p>
           <p className="text-sm text-muted-foreground mt-3 mb-1">Reference:</p>
           <p className="font-mono text-sm">{period.periodId.slice(0, 8).toUpperCase()}</p>
         </div>
@@ -271,53 +250,46 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
         </div>
       </div>
 
-      {/* Principal Flow - The Core Summary */}
+      {/* Principal Movement Summary */}
       <div>
-        <h3 className="font-semibold mb-4 flex items-center gap-2">
-          <CircleDollarSign className="h-4 w-4" />
-          Principal Flow
-        </h3>
+        <h3 className="font-semibold mb-4 text-sm uppercase tracking-wide text-muted-foreground">Principal Summary</h3>
         <div className="bg-muted/20 rounded-lg p-4">
           <div className="flex items-center justify-between text-sm">
             <div className="text-center flex-1">
               <p className="text-muted-foreground text-xs mb-1">Opening Principal</p>
               <p className="font-mono font-semibold text-lg">{formatCurrency(period.openingPrincipal)}</p>
             </div>
-            <ArrowRight className="h-4 w-4 text-muted-foreground mx-2" />
+            <div className="text-muted-foreground mx-2">→</div>
             <div className="text-center flex-1 space-y-1">
               {totalDraws > 0 && (
-                <div className="flex items-center justify-center gap-1 text-emerald-600">
-                  <TrendingUp className="h-3 w-3" />
-                  <span className="font-mono text-sm">+{formatCurrency(totalDraws)}</span>
-                  <span className="text-xs text-muted-foreground">draws</span>
+                <div className="flex items-center justify-center gap-1">
+                  <span className="font-mono text-sm text-emerald-600">+{formatCurrency(totalDraws)}</span>
+                  <span className="text-xs text-muted-foreground">Drawdowns</span>
                 </div>
               )}
               {totalRepayments > 0 && (
-                <div className="flex items-center justify-center gap-1 text-destructive">
-                  <TrendingDown className="h-3 w-3" />
-                  <span className="font-mono text-sm">-{formatCurrency(totalRepayments)}</span>
-                  <span className="text-xs text-muted-foreground">repayments</span>
+                <div className="flex items-center justify-center gap-1">
+                  <span className="font-mono text-sm text-destructive">-{formatCurrency(totalRepayments)}</span>
+                  <span className="text-xs text-muted-foreground">Repayments</span>
                 </div>
               )}
               {totalFees > 0 && (
-                <div className="flex items-center justify-center gap-1 text-emerald-600">
-                  <TrendingUp className="h-3 w-3" />
-                  <span className="font-mono text-sm">+{formatCurrency(totalFees)}</span>
-                  <span className="text-xs text-muted-foreground">fees (PIK)</span>
+                <div className="flex items-center justify-center gap-1">
+                  <span className="font-mono text-sm text-emerald-600">+{formatCurrency(totalFees)}</span>
+                  <span className="text-xs text-muted-foreground">Fees Capitalised</span>
                 </div>
               )}
               {isPik && interestCharge > 0 && (
-                <div className="flex items-center justify-center gap-1 text-amber-600">
-                  <TrendingUp className="h-3 w-3" />
-                  <span className="font-mono text-sm">+{formatCurrency(interestCharge)}</span>
-                  <span className="text-xs text-muted-foreground">interest (PIK)</span>
+                <div className="flex items-center justify-center gap-1">
+                  <span className="font-mono text-sm text-amber-600">+{formatCurrency(interestCharge)}</span>
+                  <span className="text-xs text-muted-foreground">Interest Capitalised</span>
                 </div>
               )}
               {totalDraws === 0 && totalRepayments === 0 && totalFees === 0 && (!isPik || interestCharge === 0) && (
                 <span className="text-muted-foreground text-xs">No movements</span>
               )}
             </div>
-            <ArrowRight className="h-4 w-4 text-muted-foreground mx-2" />
+            <div className="text-muted-foreground mx-2">→</div>
             <div className="text-center flex-1">
               <p className="text-muted-foreground text-xs mb-1">Closing Principal</p>
               <p className="font-mono font-semibold text-lg">{formatCurrency(period.closingPrincipal)}</p>
@@ -326,18 +298,15 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
         </div>
       </div>
 
-      {/* Event Ledger Summary */}
+      {/* Period Transactions */}
       {events.length > 0 && (
         <div>
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <FileText className="h-4 w-4" />
-            Event Ledger (Period Activity)
-          </h3>
+          <h3 className="font-semibold mb-4 text-sm uppercase tracking-wide text-muted-foreground">Period Transactions</h3>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-muted-foreground">
                 <th className="text-left py-2 font-medium">Date</th>
-                <th className="text-left font-medium">Event</th>
+                <th className="text-left font-medium">Transaction</th>
                 <th className="text-left font-medium">Description</th>
                 <th className="text-right font-medium">Amount</th>
                 <th className="text-right font-medium">Rate</th>
@@ -345,7 +314,7 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
             </thead>
             <tbody>
               {events
-                .filter(e => e.event_type !== 'cash_received') // Hide accounting entries
+                .filter(e => e.event_type !== 'cash_received')
                 .sort((a, b) => new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime())
                 .map((event) => {
                   const meta = event.metadata as Record<string, unknown>;
@@ -389,10 +358,7 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
 
       {/* Interest Calculation Details */}
       <div>
-        <h3 className="font-semibold mb-4 flex items-center gap-2">
-          <Percent className="h-4 w-4" />
-          Interest Calculation
-        </h3>
+        <h3 className="font-semibold mb-4 text-sm uppercase tracking-wide text-muted-foreground">Interest Calculation</h3>
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-muted-foreground">
@@ -560,28 +526,24 @@ function NoticeStatusBadge({ status }: { status: string }) {
     case 'sent':
       return (
         <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
-          <CheckCircle2 className="h-3 w-3 mr-1" />
           Sent
         </Badge>
       );
     case 'approved':
       return (
         <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">
-          <Eye className="h-3 w-3 mr-1" />
           Ready
         </Badge>
       );
     case 'submitted':
       return (
         <Badge variant="secondary">
-          <Clock className="h-3 w-3 mr-1" />
           Pending
         </Badge>
       );
     default:
       return (
         <Badge variant="outline">
-          <AlertTriangle className="h-3 w-3 mr-1" />
           Draft
         </Badge>
       );
@@ -603,7 +565,7 @@ function WorkflowStep({ number, title, description, completed }: WorkflowStepPro
           ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
           : 'bg-muted text-muted-foreground'
       }`}>
-        {completed ? <CheckCircle2 className="h-4 w-4" /> : number}
+        {completed ? '✓' : number}
       </div>
       <div>
         <p className={`text-sm font-medium ${completed ? 'text-foreground' : 'text-muted-foreground'}`}>
