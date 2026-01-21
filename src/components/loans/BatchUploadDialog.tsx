@@ -74,6 +74,7 @@ export function BatchUploadDialog() {
 
   const downloadTemplate = () => {
     const headers = [
+      'loan_number',
       'borrower_name',
       'loan_name',
       'vehicle',
@@ -91,10 +92,10 @@ export function BatchUploadDialog() {
       'commitment_fee_basis',
       'notice_frequency',
       'payment_due_rule',
-      'external_loan_id',
     ];
     
     const exampleRow = [
+      '484',
       'Acme Properties BV',
       'Acme Office Tower',
       'RED IV',
@@ -112,7 +113,6 @@ export function BatchUploadDialog() {
       'undrawn_only',
       'monthly',
       'last_business_day',
-      'LOAN-001',
     ];
     
     const csv = [headers.join(','), exampleRow.join(',')].join('\n');
@@ -172,6 +172,7 @@ export function BatchUploadDialog() {
             <div className="text-sm text-muted-foreground space-y-2">
               <p className="font-medium">Required columns:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
+                <li><code className="bg-muted px-1 rounded">loan_number</code> - Unique loan ID (e.g. 484)</li>
                 <li><code className="bg-muted px-1 rounded">loan_start_date</code> - Start date (e.g. 2024-01-15)</li>
                 <li><code className="bg-muted px-1 rounded">maturity_date</code> - Maturity date</li>
                 <li><code className="bg-muted px-1 rounded">facility</code> - Required for TLF vehicle only</li>

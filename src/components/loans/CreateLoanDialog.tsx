@@ -11,6 +11,7 @@ import { InterestType, LoanType, CommitmentFeeBasis } from '@/types/loan';
 
 interface LoanFormData {
   // Identity
+  loan_number: string;
   loan_name: string;
   borrower_name: string;
   loan_start_date: string;
@@ -34,6 +35,7 @@ interface LoanFormData {
 }
 
 const initialFormData: LoanFormData = {
+  loan_number: '',
   loan_name: '',
   borrower_name: '',
   loan_start_date: '',
@@ -64,6 +66,7 @@ export function CreateLoanDialog() {
 
   const handleCreate = async () => {
     const payload = {
+      loan_number: formData.loan_number,
       loan_name: formData.loan_name || null,
       borrower_name: formData.borrower_name,
       loan_start_date: formData.loan_start_date || null,
@@ -93,7 +96,7 @@ export function CreateLoanDialog() {
 
   const isCommittedFacility = formData.loan_type === 'committed_facility';
   const isTLF = formData.vehicle === 'TLF';
-  const canSubmit = formData.borrower_name && formData.loan_start_date && (formData.vehicle !== 'TLF' || formData.facility);
+  const canSubmit = formData.loan_number && formData.loan_start_date && (formData.vehicle !== 'TLF' || formData.facility);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -146,6 +149,16 @@ export function CreateLoanDialog() {
                 </div>
               )}
               <div className="space-y-2">
+                <Label htmlFor="loan_number">Loan ID *</Label>
+                <Input
+                  id="loan_number"
+                  value={formData.loan_number}
+                  onChange={(e) => handleChange('loan_number', e.target.value)}
+                  placeholder="e.g., 484"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="loan_name">Loan Name</Label>
                 <Input
                   id="loan_name"
@@ -155,13 +168,12 @@ export function CreateLoanDialog() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="borrower_name">Borrower Legal Name *</Label>
+                <Label htmlFor="borrower_name">Borrower Legal Name</Label>
                 <Input
                   id="borrower_name"
                   value={formData.borrower_name}
                   onChange={(e) => handleChange('borrower_name', e.target.value)}
                   placeholder="Enter borrower name"
-                  required
                 />
               </div>
               <div className="space-y-2">

@@ -100,6 +100,7 @@ export function useCreateLoan() {
 
   return useMutation({
     mutationFn: async (data: {
+      loan_number: string;
       borrower_name: string;
       loan_name?: string | null;
       payment_due_rule?: string | null;

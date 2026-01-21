@@ -4,7 +4,8 @@ import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
 
 export interface CSVLoanRow {
-  borrower_name: string;
+  loan_number: string;
+  borrower_name?: string;
   loan_name?: string;
   vehicle?: string;
   facility?: string;
@@ -21,18 +22,18 @@ export interface CSVLoanRow {
   commitment_fee_basis?: string;
   notice_frequency?: string;
   payment_due_rule?: string;
-  external_loan_id?: string;
 }
 
 export interface ParsedLoan {
+  loan_number: string;
   borrower_name: string;
   loan_name: string | null;
   vehicle: string;
   facility: string | null;
   city: string | null;
   category: string | null;
-  loan_start_date: string | null;
-  maturity_date: string | null;
+  loan_start_date: string;
+  maturity_date: string;
   interest_rate: number | null;
   interest_type: string;
   loan_type: string;
@@ -42,7 +43,6 @@ export interface ParsedLoan {
   commitment_fee_basis: string | null;
   notice_frequency: string;
   payment_due_rule: string | null;
-  external_loan_id: string | null;
 }
 
 export interface ValidationError {
@@ -123,6 +123,13 @@ export function validateAndParseLoans(rows: CSVLoanRow[]): {
   rows.forEach((row, index) => {
     const rowNum = index + 2; // +2 for header row and 0-indexing
     
+    // Loan number is required (primary key)
+    const loanNumber = row.loan_number?.trim();
+    if (!loanNumber) {
+      errors.push({ row: rowNum, field: 'loan_number', message: 'Loan number is required' });
+      return;
+    }
+    
     // Start date is required
     const startDate = parseDate(row.loan_start_date);
     if (!startDate) {
@@ -165,6 +172,7 @@ export function validateAndParseLoans(rows: CSVLoanRow[]): {
     }
     
     const parsedLoan: ParsedLoan = {
+      loan_number: loanNumber,
       borrower_name: row.borrower_name?.trim() || '',
       loan_name: row.loan_name?.trim() || null,
       vehicle,
@@ -182,7 +190,6 @@ export function validateAndParseLoans(rows: CSVLoanRow[]): {
       commitment_fee_basis: row.commitment_fee_basis?.trim() || 'undrawn_only',
       notice_frequency: row.notice_frequency?.trim() || 'monthly',
       payment_due_rule: row.payment_due_rule?.trim() || null,
-      external_loan_id: row.external_loan_id?.trim() || null,
     };
     
     loans.push(parsedLoan);
@@ -213,6 +220,7 @@ export function useBatchUploadLoans() {
           const { data: createdLoan, error: loanError } = await supabase
             .from('loans')
             .insert([{
+              loan_number: loan.loan_number,
               borrower_name: loan.borrower_name,
               loan_name: loan.loan_name,
               vehicle: loan.vehicle,
@@ -230,7 +238,6 @@ export function useBatchUploadLoans() {
               commitment_fee_basis: loan.commitment_fee_basis,
               notice_frequency: loan.notice_frequency,
               payment_due_rule: loan.payment_due_rule,
-              external_loan_id: loan.external_loan_id,
             }])
             .select()
             .single();
