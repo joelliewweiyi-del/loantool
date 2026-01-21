@@ -120,6 +120,7 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
                     <th className="text-center py-3 px-4 font-semibold text-muted-foreground">Status</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Days</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Opening</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Draws</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Rate</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Interest</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Commit. Fee</th>
@@ -236,6 +237,13 @@ function PeriodTableRow({
         <td className="py-4 px-4 text-right font-mono text-sm font-medium">
           {formatCurrency(period.openingPrincipal)}
         </td>
+        <td className="py-4 px-4 text-right font-mono text-sm">
+          {period.principalDrawn > 0 ? (
+            <span className="text-green-600">+{formatCurrency(period.principalDrawn)}</span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </td>
         <td className="py-4 px-4 text-right font-mono text-sm text-muted-foreground">
           {formatPercent(period.openingRate, 2)}
         </td>
@@ -255,7 +263,7 @@ function PeriodTableRow({
       
       {isExpanded && (
         <tr>
-          <td colSpan={10} className="p-0">
+          <td colSpan={11} className="p-0">
             <div className="bg-muted/30 border-b px-6 py-4 space-y-4">
               {/* Compact Summary Grid */}
               <div className="grid grid-cols-4 gap-4 text-xs">
