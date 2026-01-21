@@ -56,7 +56,7 @@ serve(async (req) => {
         loan_id,
         loans (
           id,
-          name,
+          loan_name,
           borrower_name,
           external_loan_id,
           interest_type,
@@ -141,7 +141,7 @@ serve(async (req) => {
     const invoiceNumber = `INT-${loan.external_loan_id || period.loan_id.slice(0, 8)}-${period.period_end}`;
     
     // Build description
-    const description = `Interest ${period.period_start} - ${period.period_end} | ${loan.name}`;
+    const description = `Interest ${period.period_start} - ${period.period_end} | ${loan.loan_name}`;
 
     // AFAS FiEntries payload - single line for total
     const afasPayload = {
@@ -191,7 +191,7 @@ serve(async (req) => {
           },
           loan: {
             id: loan.id,
-            name: loan.name,
+            name: loan.loan_name,
             external_loan_id: loan.external_loan_id
           },
           amounts: {
