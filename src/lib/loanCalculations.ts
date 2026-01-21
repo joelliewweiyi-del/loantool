@@ -196,8 +196,9 @@ export function applyEventToState(state: LoanState, event: LoanEvent): LoanState
       break;
       
     case 'fee_invoice':
-      // PIK fees are capitalized (added to principal)
-      if ((event.metadata as Record<string, unknown>)?.fee_type === 'pik') {
+      // PIK fees are capitalized (added to principal) when payment_type is 'pik'
+      const feeMetadata = event.metadata as Record<string, unknown>;
+      if (feeMetadata?.payment_type === 'pik') {
         newState.outstandingPrincipal += event.amount || 0;
         newState.undrawnCommitment = Math.max(0, newState.totalCommitment - newState.outstandingPrincipal);
       }
