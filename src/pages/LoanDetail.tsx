@@ -397,6 +397,8 @@ export default function LoanDetail() {
                           // Hide correction/reversal entries
                           const meta = event.metadata as Record<string, unknown> | null;
                           if (meta?.correction === true) return false;
+                          // Hide fee_split adjustment repayments (the reversing entry - keep the fee_invoice)
+                          if (event.event_type === 'principal_repayment' && meta?.adjustment_type === 'fee_split') return false;
                           // Hide entries that have been reversed by another event
                           if (reversedEventIds.has(event.id)) return false;
                           // Hide auto-generated system events that are already approved
