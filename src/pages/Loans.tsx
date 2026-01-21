@@ -76,8 +76,7 @@ export default function Loans() {
             RED IV
             <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{redIVCount}</span>
           </TabsTrigger>
-          <TabsTrigger value="TLF" className="flex items-center gap-2">
-            <Briefcase className="h-4 w-4" />
+          <TabsTrigger value="TLF" className="flex items-center gap-2">TOTAL OUTSTANDING<Briefcase className="h-4 w-4" />
             TLF
             <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{tlfCount}</span>
           </TabsTrigger>
