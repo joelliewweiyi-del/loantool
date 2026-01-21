@@ -47,6 +47,7 @@ interface ConnectorData {
 interface Loan {
   id: string;
   external_loan_id: string | null;
+  loan_name: string | null;
   borrower_name: string;
   total_commitment: number | null;
   outstanding: number | null;
@@ -362,11 +363,16 @@ function LoanReconciliationPanel({
       afasGrouped.set(loanId, existing);
     }
 
-    // Create loan lookup by external_loan_id
-    const loanLookup = new Map<string, Loan & { calculated_principal?: number }>();
+    // Create loan lookup by external_loan_id AND loan_name (fallback)
+    const loanLookupByExternal = new Map<string, Loan & { calculated_principal?: number }>();
+    const loanLookupByName = new Map<string, Loan & { calculated_principal?: number }>();
     for (const loan of (loans || [])) {
       if (loan.external_loan_id) {
-        loanLookup.set(loan.external_loan_id, loan);
+        loanLookupByExternal.set(loan.external_loan_id, loan);
+      }
+      // Also allow matching by loan_name (e.g., "484")
+      if (loan.loan_name) {
+        loanLookupByName.set(loan.loan_name, loan);
       }
     }
 
@@ -376,7 +382,8 @@ function LoanReconciliationPanel({
 
     // Process all AFAS entries
     for (const [externalId, afasBalance] of afasGrouped) {
-      const matchedLoan = loanLookup.get(externalId);
+      // Try to match by external_loan_id first, then by loan_name
+      const matchedLoan = loanLookupByExternal.get(externalId) || loanLookupByName.get(externalId);
       
       if (matchedLoan) {
         processedLoanIds.add(matchedLoan.id);
@@ -416,13 +423,14 @@ function LoanReconciliationPanel({
       }
     }
 
-    // Add App loans not in AFAS
+    // Add App loans not in AFAS (show ALL loans, even without external_loan_id)
     for (const loan of (loans || [])) {
-      if (!processedLoanIds.has(loan.id) && loan.external_loan_id) {
+      if (!processedLoanIds.has(loan.id)) {
         const outstanding = loan.calculated_principal ?? loan.outstanding ?? 0;
+        const displayId = loan.external_loan_id || loan.loan_name || loan.id.slice(0, 8);
         results.push({
           loanId: loan.id,
-          externalLoanId: loan.external_loan_id,
+          externalLoanId: displayId,
           borrowerName: loan.borrower_name,
           afasCredits: 0,
           afasDebits: 0,
@@ -656,10 +664,10 @@ export default function AfasGLExplorer() {
   const loansQuery = useQuery({
     queryKey: ['loans-for-reconciliation'],
     queryFn: async () => {
-      // First get loans
+      // First get loans (include loan_name for matching)
       const { data: loans, error: loansError } = await supabase
         .from('loans')
-        .select('id, external_loan_id, borrower_name, total_commitment, outstanding, status')
+        .select('id, external_loan_id, loan_name, borrower_name, total_commitment, outstanding, status')
         .eq('status', 'active');
       if (loansError) throw loansError;
       
