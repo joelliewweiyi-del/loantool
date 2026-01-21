@@ -680,6 +680,10 @@ export type Database = {
         Args: { p_event_id: string; p_new_amount: number }
         Returns: undefined
       }
+      admin_correct_event_metadata: {
+        Args: { p_event_id: string; p_new_metadata: Json }
+        Returns: undefined
+      }
       calculate_principal_balance: {
         Args: { p_as_of_date?: string; p_loan_id: string }
         Returns: number
