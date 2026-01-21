@@ -91,7 +91,9 @@ export function useAccruals(loanId: string | undefined): UseAccrualsResult {
       loanInterestType
     );
 
-    const summary = calculateAccrualsSummary(periodAccruals);
+    // Pass approved events to calculate current principal from event ledger only
+    const approvedEvents = events.filter(e => e.status === 'approved');
+    const summary = calculateAccrualsSummary(periodAccruals, approvedEvents);
 
     return { periodAccruals, summary };
   }, [loan, events, periods]);
