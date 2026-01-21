@@ -56,6 +56,7 @@ export default function LoanDetail() {
   const [effectiveDate, setEffectiveDate] = useState('');
   const [amount, setAmount] = useState('');
   const [rate, setRate] = useState('');
+  const [description, setDescription] = useState('');
   const [feeType, setFeeType] = useState<string>('arrangement');
   const [feePaymentType, setFeePaymentType] = useState<'cash' | 'pik'>('cash');
   const [lastEditedField, setLastEditedField] = useState<'amount' | 'rate' | null>(null);
@@ -70,6 +71,9 @@ export default function LoanDetail() {
     if (!id || !user) return;
     
     const metadata: Record<string, unknown> = {};
+    if (description) {
+      metadata.description = description;
+    }
     if (eventType === 'fee_invoice') {
       metadata.fee_type = feeType;
       metadata.payment_type = feePaymentType;
@@ -93,6 +97,7 @@ export default function LoanDetail() {
     setEffectiveDate('');
     setAmount('');
     setRate('');
+    setDescription('');
     setFeeType('arrangement');
     setFeePaymentType('cash');
   };
@@ -327,6 +332,14 @@ export default function LoanDetail() {
                           Based on current principal of {formatCurrency(currentPrincipal)}
                         </p>
                       )}
+                      <div className="space-y-2">
+                        <Label>Description (optional)</Label>
+                        <Input
+                          value={description}
+                          onChange={(e) => setDescription(e.target.value)}
+                          placeholder="e.g., Initial draw, Q4 extension fee..."
+                        />
+                      </div>
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setIsEventOpen(false)}>
