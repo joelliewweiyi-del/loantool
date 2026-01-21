@@ -170,7 +170,7 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
   const paymentDueDate = new Date(period.periodEnd);
   paymentDueDate.setDate(paymentDueDate.getDate() + 5);
 
-  // Categorize events for display
+  // Categorize events for display only
   const principalDraws = events.filter(e => e.event_type === 'principal_draw');
   const principalRepayments = events.filter(e => e.event_type === 'principal_repayment');
   const rateChanges = events.filter(e => e.event_type === 'interest_rate_change' || e.event_type === 'interest_rate_set');
@@ -180,13 +180,14 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
     e.event_type === 'commitment_change' || e.event_type === 'commitment_cancel'
   );
 
-  // Calculate totals from events
-  const totalDraws = principalDraws.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const totalRepayments = principalRepayments.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const totalFees = feeInvoices.reduce((sum, e) => sum + (e.amount || 0), 0);
-  const totalPikCapitalized = pikCapitalizations.reduce((sum, e) => sum + (e.amount || 0), 0);
+  // CRITICAL: Use period accrual totals (derived from event ledger) for consistency
+  // This ensures Notice matches Accruals tab exactly
+  const totalDraws = period.principalDrawn;
+  const totalRepayments = period.principalRepaid;
+  const totalFees = period.feesInvoiced;
+  const totalPikCapitalized = period.pikCapitalized;
 
-  // Interest charge (from accruals)
+  // Interest charge (from accruals - already calculated from event ledger)
   const interestCharge = period.interestAccrued + period.commitmentFeeAccrued;
 
   // PIK vs Cash determination
@@ -316,9 +317,25 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
                 .sort((a, b) => new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime())
                 .map((event) => {
                   const meta = event.metadata as Record<string, unknown>;
-                  const description = (meta?.description as string) || 
-                    (meta?.fee_type ? `${meta.fee_type} fee` : null) ||
-                    (meta?.period_id ? 'Period interest' : null);
+                  
+                  // Get description - match Event Ledger logic for fee invoices
+                  const getEventDescription = () => {
+                    if (event.event_type === 'fee_invoice') {
+                      const feeType = meta?.fee_type as string | undefined;
+                      const paymentType = meta?.payment_type as string | undefined;
+                      // Show "withheld" for PIK arrangement fees
+                      if ((meta?.adjustment_type === 'fee_split') || 
+                          (paymentType === 'pik' && feeType?.includes('arrangement'))) {
+                        return 'Arrangement fee (withheld from borrower)';
+                      }
+                      if (feeType) return `${feeType} fee`;
+                    }
+                    if (meta?.description) return meta.description as string;
+                    if (meta?.period_id) return 'Period interest';
+                    return null;
+                  };
+                  
+                  const description = getEventDescription();
                   
                   return (
                     <tr key={event.id} className="border-b border-border/50">
