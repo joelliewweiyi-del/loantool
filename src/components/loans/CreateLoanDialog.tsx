@@ -17,6 +17,8 @@ interface LoanFormData {
   maturity_date: string;
   vehicle: string;
   facility: string;
+  city: string;
+  category: string;
   // Interest
   interest_rate: string;
   interest_type: InterestType;
@@ -38,6 +40,8 @@ const initialFormData: LoanFormData = {
   maturity_date: '',
   vehicle: 'RED IV',
   facility: '',
+  city: '',
+  category: '',
   interest_rate: '',
   interest_type: 'cash_pay',
   loan_type: 'term_loan',
@@ -78,6 +82,8 @@ export function CreateLoanDialog() {
       payment_due_rule: formData.payment_due_rule || null,
       vehicle: formData.vehicle,
       facility: formData.vehicle === 'TLF' ? formData.facility || null : null,
+      city: formData.city || null,
+      category: formData.category || null,
     };
 
     await createLoan.mutateAsync(payload);
@@ -175,6 +181,24 @@ export function CreateLoanDialog() {
                   type="date"
                   value={formData.maturity_date}
                   onChange={(e) => handleChange('maturity_date', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="city">City</Label>
+                <Input
+                  id="city"
+                  value={formData.city}
+                  onChange={(e) => handleChange('city', e.target.value)}
+                  placeholder="e.g., Amsterdam"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="category">Category</Label>
+                <Input
+                  id="category"
+                  value={formData.category}
+                  onChange={(e) => handleChange('category', e.target.value)}
+                  placeholder="e.g., Office, Residential"
                 />
               </div>
             </div>
