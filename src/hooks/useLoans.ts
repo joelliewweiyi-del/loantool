@@ -108,7 +108,7 @@ export function useCreateLoan() {
       interest_rate?: number | null;
       interest_type?: string;
       loan_type?: string;
-      initial_principal?: number | null;
+      initial_outstanding?: number | null;
       total_commitment?: number | null;
       commitment_fee_rate?: number | null;
       commitment_fee_basis?: string | null;
@@ -164,13 +164,13 @@ export function useCreateLoan() {
         });
       }
 
-      // 3. Principal Draw (if initial_principal provided)
-      if (data.initial_principal && data.initial_principal > 0) {
+      // 3. Principal Draw (if initial_outstanding provided)
+      if (data.initial_outstanding && data.initial_outstanding > 0) {
         foundingEvents.push({
           loan_id: createdLoan.id,
           event_type: 'principal_draw',
           effective_date: effectiveDate,
-          amount: data.initial_principal,
+          amount: data.initial_outstanding,
           rate: null,
           status: 'approved',
           created_by: userId,

@@ -351,7 +351,7 @@ export type Database = {
           external_loan_id: string | null
           facility: string | null
           id: string
-          initial_principal: number | null
+          initial_outstanding: number | null
           interest_rate: number | null
           interest_type: string
           loan_name: string | null
@@ -380,7 +380,7 @@ export type Database = {
           external_loan_id?: string | null
           facility?: string | null
           id?: string
-          initial_principal?: number | null
+          initial_outstanding?: number | null
           interest_rate?: number | null
           interest_type?: string
           loan_name?: string | null
@@ -409,7 +409,7 @@ export type Database = {
           external_loan_id?: string | null
           facility?: string | null
           id?: string
-          initial_principal?: number | null
+          initial_outstanding?: number | null
           interest_rate?: number | null
           interest_type?: string
           loan_name?: string | null
