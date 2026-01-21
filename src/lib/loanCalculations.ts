@@ -610,9 +610,14 @@ export interface AccrualsSummary {
 }
 
 /**
- * Calculates summary statistics for all period accruals
+ * Calculates summary statistics for all period accruals.
+ * The currentPrincipal is based on the last rolled-up period (with approved PIK capitalization),
+ * not future projected accruals.
  */
-export function calculateAccrualsSummary(periodAccruals: PeriodAccrual[]): AccrualsSummary {
+export function calculateAccrualsSummary(
+  periodAccruals: PeriodAccrual[],
+  approvedEvents?: LoanEvent[]
+): AccrualsSummary {
   if (periodAccruals.length === 0) {
     return {
       totalDays: 0,
@@ -646,6 +651,39 @@ export function calculateAccrualsSummary(periodAccruals: PeriodAccrual[]): Accru
   
   const averageRate = totalPrincipalDays > 0 ? weightedRateSum / totalPrincipalDays : 0;
   
+  // Find the current principal based on approved events only
+  // This ensures we don't show projected/unapproved accruals in the header
+  let currentPrincipal = 0;
+  
+  if (approvedEvents && approvedEvents.length > 0) {
+    // Calculate outstanding from approved events only
+    for (const event of approvedEvents) {
+      if (event.status !== 'approved') continue;
+      
+      switch (event.event_type) {
+        case 'principal_draw':
+          currentPrincipal += event.amount || 0;
+          break;
+        case 'principal_repayment':
+          currentPrincipal -= event.amount || 0;
+          currentPrincipal = Math.max(0, currentPrincipal);
+          break;
+        case 'pik_capitalization_posted':
+          currentPrincipal += event.amount || 0;
+          break;
+        case 'fee_invoice':
+          const meta = event.metadata as Record<string, unknown>;
+          if (meta?.payment_type === 'pik') {
+            currentPrincipal += event.amount || 0;
+          }
+          break;
+      }
+    }
+  } else {
+    // Fallback to last period closing if no events provided
+    currentPrincipal = lastPeriod.closingPrincipal;
+  }
+  
   return {
     totalDays: periodAccruals.reduce((sum, pa) => sum + pa.days, 0),
     totalInterestAccrued: periodAccruals.reduce((sum, pa) => sum + pa.interestAccrued, 0),
@@ -653,11 +691,11 @@ export function calculateAccrualsSummary(periodAccruals: PeriodAccrual[]): Accru
     totalFeesInvoiced: periodAccruals.reduce((sum, pa) => sum + pa.feesInvoiced, 0),
     totalPikCapitalized: periodAccruals.reduce((sum, pa) => sum + pa.pikCapitalized, 0),
     totalDue: periodAccruals.reduce((sum, pa) => sum + pa.totalDue, 0),
-    currentPrincipal: lastPeriod.closingPrincipal,
+    currentPrincipal,
     currentRate: lastPeriod.closingRate,
     averageRate,
     totalCommitment: lastPeriod.closingCommitment,
-    currentUndrawn: lastPeriod.closingUndrawn,
+    currentUndrawn: lastPeriod.closingCommitment - currentPrincipal,
     commitmentFeeRate: lastPeriod.commitmentFeeRate,
   };
 }
