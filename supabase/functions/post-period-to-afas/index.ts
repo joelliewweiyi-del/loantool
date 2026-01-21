@@ -58,7 +58,7 @@ serve(async (req) => {
           id,
           loan_name,
           borrower_name,
-          external_loan_id,
+          loan_number,
           interest_type,
           commitment_fee_rate,
           total_commitment
@@ -138,7 +138,7 @@ serve(async (req) => {
     }
 
     // Generate invoice number
-    const invoiceNumber = `INT-${loan.external_loan_id || period.loan_id.slice(0, 8)}-${period.period_end}`;
+    const invoiceNumber = `INT-${loan.loan_number}-${period.period_end}`;
     
     // Build description
     const description = `Interest ${period.period_start} - ${period.period_end} | ${loan.loan_name}`;
@@ -155,8 +155,8 @@ serve(async (req) => {
               .toISOString().split('T')[0], // Due date = 30 days later
             InNu: invoiceNumber,
             Ds: description,
-            // Link to debtor via DimAx1 if external_loan_id exists
-            ...(loan.external_loan_id ? { DbId: loan.external_loan_id } : {}),
+            // Link to debtor via loan_number
+            DbId: loan.loan_number,
           },
           Objects: {
             FiEntriesLines: {

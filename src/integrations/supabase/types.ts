@@ -348,12 +348,12 @@ export type Database = {
           commitment_fee_basis: string | null
           commitment_fee_rate: number | null
           created_at: string
-          external_loan_id: string | null
           facility: string | null
           id: string
           interest_rate: number | null
           interest_type: string
           loan_name: string | null
+          loan_number: string
           loan_start_date: string | null
           loan_type: string
           ltv: number | null
@@ -377,12 +377,12 @@ export type Database = {
           commitment_fee_basis?: string | null
           commitment_fee_rate?: number | null
           created_at?: string
-          external_loan_id?: string | null
           facility?: string | null
           id?: string
           interest_rate?: number | null
           interest_type?: string
           loan_name?: string | null
+          loan_number: string
           loan_start_date?: string | null
           loan_type?: string
           ltv?: number | null
@@ -406,12 +406,12 @@ export type Database = {
           commitment_fee_basis?: string | null
           commitment_fee_rate?: number | null
           created_at?: string
-          external_loan_id?: string | null
           facility?: string | null
           id?: string
           interest_rate?: number | null
           interest_type?: string
           loan_name?: string | null
+          loan_number?: string
           loan_start_date?: string | null
           loan_type?: string
           ltv?: number | null
