@@ -194,7 +194,15 @@ export function applyEventToState(state: LoanState, event: LoanEvent): LoanState
       newState.outstandingPrincipal += event.amount || 0;
       break;
       
-    // cash_received and fee_invoice don't affect loan state, just record cash flows
+    case 'fee_invoice':
+      // PIK fees are capitalized (added to principal)
+      if ((event.metadata as Record<string, unknown>)?.fee_type === 'pik') {
+        newState.outstandingPrincipal += event.amount || 0;
+        newState.undrawnCommitment = Math.max(0, newState.totalCommitment - newState.outstandingPrincipal);
+      }
+      break;
+      
+    // cash_received doesn't affect loan state, just records cash flows
     default:
       break;
   }
