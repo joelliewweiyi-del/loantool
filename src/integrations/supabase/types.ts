@@ -359,7 +359,7 @@ export type Database = {
           ltv: number | null
           maturity_date: string | null
           notice_frequency: string
-          opening_outstanding: number | null
+          outstanding: number | null
           payment_due_rule: string | null
           remarks: string | null
           rental_income: number | null
@@ -388,7 +388,7 @@ export type Database = {
           ltv?: number | null
           maturity_date?: string | null
           notice_frequency?: string
-          opening_outstanding?: number | null
+          outstanding?: number | null
           payment_due_rule?: string | null
           remarks?: string | null
           rental_income?: number | null
@@ -417,7 +417,7 @@ export type Database = {
           ltv?: number | null
           maturity_date?: string | null
           notice_frequency?: string
-          opening_outstanding?: number | null
+          outstanding?: number | null
           payment_due_rule?: string | null
           remarks?: string | null
           rental_income?: number | null
