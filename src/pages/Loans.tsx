@@ -134,8 +134,8 @@ export default function Loans() {
                   <th>Status</th>
                   <th className="text-right">Outstanding</th>
                   <th className="text-right">Rate</th>
-                  <th>Start</th>
-                  <th>Maturity</th>
+                  <th className="text-right">Start</th>
+                  <th className="text-right">Maturity</th>
                   <th></th>
                 </tr>
               </thead>
@@ -161,8 +161,8 @@ export default function Loans() {
                     <td><StatusBadge status={loan.status} /></td>
                     <td className="numeric">{formatCurrency(loan.outstanding)}</td>
                     <td className="numeric">{formatPercent(loan.interest_rate, 2)}</td>
-                    <td className="text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
-                    <td className="text-muted-foreground">{formatDate(loan.maturity_date)}</td>
+                    <td className="text-right text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
+                    <td className="text-right text-muted-foreground">{formatDate(loan.maturity_date)}</td>
                     <td className="text-right">
                       <Link to={`/loans/${loan.id}`} className="text-primary hover:underline inline-flex items-center gap-1">
                         View <ChevronRight className="h-3 w-3" />
