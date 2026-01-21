@@ -22,7 +22,7 @@ interface LoanFormData {
   interest_type: InterestType;
   // Structure
   loan_type: LoanType;
-  initial_outstanding: string;
+  opening_outstanding: string;
   total_commitment: string;
   commitment_fee_rate: string;
   commitment_fee_basis: CommitmentFeeBasis;
@@ -41,7 +41,7 @@ const initialFormData: LoanFormData = {
   interest_rate: '',
   interest_type: 'cash_pay',
   loan_type: 'term_loan',
-  initial_outstanding: '',
+  opening_outstanding: '',
   total_commitment: '',
   commitment_fee_rate: '',
   commitment_fee_basis: 'undrawn_only',
@@ -67,7 +67,7 @@ export function CreateLoanDialog() {
       interest_rate: formData.interest_rate ? parseFloat(formData.interest_rate) / 100 : null,
       interest_type: formData.interest_type,
       loan_type: formData.loan_type,
-      initial_outstanding: formData.initial_outstanding ? parseFloat(formData.initial_outstanding) : null,
+      opening_outstanding: formData.opening_outstanding ? parseFloat(formData.opening_outstanding) : null,
       total_commitment: formData.loan_type === 'committed_facility' && formData.total_commitment 
         ? parseFloat(formData.total_commitment) : null,
       commitment_fee_rate: formData.loan_type === 'committed_facility' && formData.commitment_fee_rate 
@@ -241,13 +241,13 @@ export function CreateLoanDialog() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="initial_outstanding">Initial Outstanding (EUR)</Label>
+                <Label htmlFor="opening_outstanding">Opening Outstanding (EUR)</Label>
                 <Input
-                  id="initial_outstanding"
+                  id="opening_outstanding"
                   type="number"
                   step="0.01"
-                  value={formData.initial_outstanding}
-                  onChange={(e) => handleChange('initial_outstanding', e.target.value)}
+                  value={formData.opening_outstanding}
+                  onChange={(e) => handleChange('opening_outstanding', e.target.value)}
                   placeholder="0.00"
                 />
               </div>
