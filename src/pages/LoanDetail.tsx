@@ -453,7 +453,8 @@ export default function LoanDetail() {
               loan={loan}
               periodAccruals={periodAccruals} 
               summary={accrualsSummary} 
-              isLoading={accrualsLoading} 
+              isLoading={accrualsLoading}
+              events={events}
             />
           )}
         </TabsContent>

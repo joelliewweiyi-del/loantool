@@ -3,9 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { formatCurrency, formatDate, formatPercent } from '@/lib/format';
-import { PeriodAccrual, AccrualsSummary, InterestSegment } from '@/lib/loanCalculations';
-import { Loan } from '@/types/loan';
+import { formatCurrency, formatDate, formatPercent, formatEventType } from '@/lib/format';
+import { PeriodAccrual, AccrualsSummary } from '@/lib/loanCalculations';
+import { Loan, LoanEvent } from '@/types/loan';
 import { getCurrentDateString } from '@/lib/simulatedDate';
 import {
   FileText, 
@@ -17,9 +17,11 @@ import {
   AlertTriangle,
   Printer,
   ChevronRight,
-  Building2,
-  Calendar,
-  DollarSign
+  ArrowRight,
+  TrendingUp,
+  TrendingDown,
+  Percent,
+  CircleDollarSign
 } from 'lucide-react';
 import raxLogo from '@/assets/rax-logo.png';
 
@@ -28,9 +30,10 @@ interface NoticePreviewTabProps {
   periodAccruals: PeriodAccrual[];
   summary: AccrualsSummary;
   isLoading: boolean;
+  events?: LoanEvent[];
 }
 
-export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading }: NoticePreviewTabProps) {
+export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, events = [] }: NoticePreviewTabProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodAccrual | null>(
     periodAccruals.length > 0 ? periodAccruals[periodAccruals.length - 1] : null
   );
@@ -43,6 +46,16 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading }: N
   const sortedPeriods = [...periodAccruals].sort(
     (a, b) => new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
   );
+
+  // Get events for selected period
+  const periodEvents = selectedPeriod 
+    ? events.filter(e => {
+        const eventDate = new Date(e.effective_date);
+        const start = new Date(selectedPeriod.periodStart);
+        const end = new Date(selectedPeriod.periodEnd);
+        return eventDate >= start && eventDate <= end && e.status === 'approved';
+      })
+    : [];
 
   return (
     <div className="grid grid-cols-12 gap-6">
@@ -70,7 +83,7 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading }: N
                     <div className="flex items-center gap-2 mt-1">
                       <NoticeStatusBadge status={period.status} />
                       <span className="text-xs text-muted-foreground">
-                        {formatCurrency(period.totalDue)}
+                        {formatCurrency(period.interestAccrued + period.commitmentFeeAccrued)}
                       </span>
                     </div>
                   </div>
@@ -90,25 +103,25 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading }: N
             <WorkflowStep 
               number={1} 
               title="Period Accrued" 
-              description="Daily interest calculated automatically"
+              description="Daily interest calculated (30/360)"
               completed={true}
             />
             <WorkflowStep 
               number={2} 
-              title="Monthly Approval" 
-              description="Controller reviews & batch approves"
-              completed={selectedPeriod?.status === 'approved' || selectedPeriod?.status === 'sent'}
+              title="Interest Rolled Up" 
+              description="PM creates interest charge event"
+              completed={selectedPeriod?.status !== 'open'}
             />
             <WorkflowStep 
               number={3} 
-              title="Notice Generated" 
-              description="PDF created with calculations"
+              title="Controller Approved" 
+              description="Events approved & locked"
               completed={selectedPeriod?.status === 'approved' || selectedPeriod?.status === 'sent'}
             />
             <WorkflowStep 
               number={4} 
-              title="Sent to Borrower" 
-              description="Email with PDF attachment"
+              title="Notice Sent" 
+              description="PDF generated & emailed"
               completed={selectedPeriod?.status === 'sent'}
             />
           </CardContent>
@@ -150,6 +163,7 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading }: N
                 loan={loan} 
                 period={selectedPeriod} 
                 summary={summary}
+                events={periodEvents}
               />
             </CardContent>
           </Card>
@@ -170,11 +184,34 @@ interface NoticeDocumentProps {
   loan: Loan;
   period: PeriodAccrual;
   summary: AccrualsSummary;
+  events: LoanEvent[];
 }
 
-function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
+function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) {
   const paymentDueDate = new Date(period.periodEnd);
-  paymentDueDate.setDate(paymentDueDate.getDate() + 5); // Assume 5 business days
+  paymentDueDate.setDate(paymentDueDate.getDate() + 5);
+
+  // Categorize events for display
+  const principalDraws = events.filter(e => e.event_type === 'principal_draw');
+  const principalRepayments = events.filter(e => e.event_type === 'principal_repayment');
+  const rateChanges = events.filter(e => e.event_type === 'interest_rate_change' || e.event_type === 'interest_rate_set');
+  const feeInvoices = events.filter(e => e.event_type === 'fee_invoice');
+  const pikCapitalizations = events.filter(e => e.event_type === 'pik_capitalization_posted');
+  const commitmentChanges = events.filter(e => 
+    e.event_type === 'commitment_change' || e.event_type === 'commitment_cancel'
+  );
+
+  // Calculate totals from events
+  const totalDraws = principalDraws.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalRepayments = principalRepayments.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalFees = feeInvoices.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalPikCapitalized = pikCapitalizations.reduce((sum, e) => sum + (e.amount || 0), 0);
+
+  // Interest charge (from accruals)
+  const interestCharge = period.interestAccrued + period.commitmentFeeAccrued;
+
+  // PIK vs Cash determination
+  const isPik = loan.interest_type === 'pik';
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 font-barlow">
@@ -209,26 +246,151 @@ function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
             <p className="font-mono font-medium mt-1">
               {formatDate(period.periodStart)} – {formatDate(period.periodEnd)}
             </p>
-            <p className="text-xs text-muted-foreground">({period.days} days)</p>
+            <p className="text-xs text-muted-foreground">({period.days} days • 30/360)</p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Amount Due</p>
+            <p className="text-sm text-muted-foreground">
+              {isPik ? 'Amount Capitalized' : 'Amount Due'}
+            </p>
             <p className="text-2xl font-bold text-primary mt-1">
-              {formatCurrency(period.totalDue)}
+              {formatCurrency(interestCharge)}
             </p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Payment Due Date</p>
+            <p className="text-sm text-muted-foreground">
+              {isPik ? 'Interest Type' : 'Payment Due Date'}
+            </p>
             <p className="font-mono font-medium mt-1">
-              {formatDate(paymentDueDate.toISOString())}
+              {isPik ? (
+                <span className="text-amber-600 font-semibold">PIK (Rolled Up)</span>
+              ) : (
+                formatDate(paymentDueDate.toISOString())
+              )}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Calculation Details */}
+      {/* Principal Flow - The Core Summary */}
       <div>
-        <h3 className="font-semibold mb-4">
+        <h3 className="font-semibold mb-4 flex items-center gap-2">
+          <CircleDollarSign className="h-4 w-4" />
+          Principal Flow
+        </h3>
+        <div className="bg-muted/20 rounded-lg p-4">
+          <div className="flex items-center justify-between text-sm">
+            <div className="text-center flex-1">
+              <p className="text-muted-foreground text-xs mb-1">Opening Principal</p>
+              <p className="font-mono font-semibold text-lg">{formatCurrency(period.openingPrincipal)}</p>
+            </div>
+            <ArrowRight className="h-4 w-4 text-muted-foreground mx-2" />
+            <div className="text-center flex-1 space-y-1">
+              {totalDraws > 0 && (
+                <div className="flex items-center justify-center gap-1 text-emerald-600">
+                  <TrendingUp className="h-3 w-3" />
+                  <span className="font-mono text-sm">+{formatCurrency(totalDraws)}</span>
+                  <span className="text-xs text-muted-foreground">draws</span>
+                </div>
+              )}
+              {totalRepayments > 0 && (
+                <div className="flex items-center justify-center gap-1 text-destructive">
+                  <TrendingDown className="h-3 w-3" />
+                  <span className="font-mono text-sm">-{formatCurrency(totalRepayments)}</span>
+                  <span className="text-xs text-muted-foreground">repayments</span>
+                </div>
+              )}
+              {totalFees > 0 && (
+                <div className="flex items-center justify-center gap-1 text-emerald-600">
+                  <TrendingUp className="h-3 w-3" />
+                  <span className="font-mono text-sm">+{formatCurrency(totalFees)}</span>
+                  <span className="text-xs text-muted-foreground">fees (PIK)</span>
+                </div>
+              )}
+              {isPik && interestCharge > 0 && (
+                <div className="flex items-center justify-center gap-1 text-amber-600">
+                  <TrendingUp className="h-3 w-3" />
+                  <span className="font-mono text-sm">+{formatCurrency(interestCharge)}</span>
+                  <span className="text-xs text-muted-foreground">interest (PIK)</span>
+                </div>
+              )}
+              {totalDraws === 0 && totalRepayments === 0 && totalFees === 0 && (!isPik || interestCharge === 0) && (
+                <span className="text-muted-foreground text-xs">No movements</span>
+              )}
+            </div>
+            <ArrowRight className="h-4 w-4 text-muted-foreground mx-2" />
+            <div className="text-center flex-1">
+              <p className="text-muted-foreground text-xs mb-1">Closing Principal</p>
+              <p className="font-mono font-semibold text-lg">{formatCurrency(period.closingPrincipal)}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Event Ledger Summary */}
+      {events.length > 0 && (
+        <div>
+          <h3 className="font-semibold mb-4 flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Event Ledger (Period Activity)
+          </h3>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-muted-foreground">
+                <th className="text-left py-2 font-medium">Date</th>
+                <th className="text-left font-medium">Event</th>
+                <th className="text-left font-medium">Description</th>
+                <th className="text-right font-medium">Amount</th>
+                <th className="text-right font-medium">Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events
+                .filter(e => e.event_type !== 'cash_received') // Hide accounting entries
+                .sort((a, b) => new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime())
+                .map((event) => {
+                  const meta = event.metadata as Record<string, unknown>;
+                  const description = (meta?.description as string) || 
+                    (meta?.fee_type ? `${meta.fee_type} fee` : null) ||
+                    (meta?.period_id ? 'Period interest' : null);
+                  
+                  return (
+                    <tr key={event.id} className="border-b border-border/50">
+                      <td className="py-2 font-mono text-xs">{formatDate(event.effective_date)}</td>
+                      <td className="py-2">
+                        <span className="text-xs">{formatEventType(event.event_type)}</span>
+                      </td>
+                      <td className="py-2 text-xs text-muted-foreground">
+                        {description || '—'}
+                      </td>
+                      <td className="text-right font-mono py-2">
+                        {event.amount ? (
+                          <span className={
+                            event.event_type === 'principal_repayment' 
+                              ? 'text-destructive' 
+                              : event.event_type === 'principal_draw' || event.event_type === 'pik_capitalization_posted'
+                                ? 'text-emerald-600'
+                                : ''
+                          }>
+                            {event.event_type === 'principal_repayment' ? '-' : ''}
+                            {formatCurrency(event.amount)}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td className="text-right font-mono py-2 text-muted-foreground">
+                        {event.rate ? formatPercent(event.rate) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Interest Calculation Details */}
+      <div>
+        <h3 className="font-semibold mb-4 flex items-center gap-2">
+          <Percent className="h-4 w-4" />
           Interest Calculation
         </h3>
         <table className="w-full text-sm">
@@ -310,13 +472,20 @@ function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
       <div className="bg-primary/5 rounded-lg p-6">
         <div className="flex justify-between items-center">
           <div>
-            <h3 className="font-semibold text-lg">Total Amount Due</h3>
+            <h3 className="font-semibold text-lg">
+              {isPik ? 'Total Interest Capitalized' : 'Total Amount Due'}
+            </h3>
             <p className="text-sm text-muted-foreground">
-              Please remit payment by {formatDate(paymentDueDate.toISOString())}
+              {isPik 
+                ? 'Added to principal balance'
+                : `Please remit payment by ${formatDate(paymentDueDate.toISOString())}`
+              }
             </p>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-bold text-primary">{formatCurrency(period.totalDue)}</p>
+            <p className={`text-3xl font-bold ${isPik ? 'text-amber-600' : 'text-primary'}`}>
+              {formatCurrency(interestCharge)}
+            </p>
           </div>
         </div>
       </div>
@@ -334,12 +503,11 @@ function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
               <span className="font-mono">{formatCurrency(period.commitmentFeeAccrued)}</span>
             </div>
           )}
-          {period.feesInvoiced > 0 && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Other Fees</span>
-              <span className="font-mono">{formatCurrency(period.feesInvoiced)}</span>
-            </div>
-          )}
+          <Separator className="my-1" />
+          <div className="flex justify-between font-semibold">
+            <span>Total Interest Charge</span>
+            <span className="font-mono">{formatCurrency(interestCharge)}</span>
+          </div>
         </div>
         <div className="space-y-2">
           <div className="flex justify-between">
@@ -350,32 +518,37 @@ function NoticeDocument({ loan, period, summary }: NoticeDocumentProps) {
             <span className="text-muted-foreground">Closing Principal</span>
             <span className="font-mono">{formatCurrency(period.closingPrincipal)}</span>
           </div>
-          {period.pikCapitalized > 0 && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">PIK Capitalized</span>
-              <span className="font-mono text-amber-600">+{formatCurrency(period.pikCapitalized)}</span>
-            </div>
-          )}
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>Net Change</span>
+            <span className={`font-mono ${period.closingPrincipal > period.openingPrincipal ? 'text-emerald-600' : 'text-destructive'}`}>
+              {period.closingPrincipal >= period.openingPrincipal ? '+' : ''}
+              {formatCurrency(period.closingPrincipal - period.openingPrincipal)}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Payment Instructions */}
-      <Separator />
-      <div className="text-sm text-muted-foreground space-y-2">
-        <h4 className="font-medium text-foreground">Payment Instructions</h4>
-        <p>Please wire the amount due to the following account:</p>
-        <div className="bg-muted/30 rounded p-4 font-mono text-xs space-y-1">
-          <p>Bank: [Bank Name]</p>
-          <p>Account Name: Rax Finance</p>
-          <p>IBAN: [IBAN Number]</p>
-          <p>BIC/SWIFT: [BIC Code]</p>
-          <p>Reference: {period.periodId.slice(0, 8).toUpperCase()}</p>
-        </div>
-      </div>
+      {/* Payment Instructions (only for cash pay) */}
+      {!isPik && (
+        <>
+          <Separator />
+          <div className="text-sm text-muted-foreground space-y-2">
+            <h4 className="font-medium text-foreground">Payment Instructions</h4>
+            <p>Please wire the amount due to the following account:</p>
+            <div className="bg-muted/30 rounded p-4 font-mono text-xs space-y-1">
+              <p>Bank: [Bank Name]</p>
+              <p>Account Name: Rax Finance</p>
+              <p>IBAN: [IBAN Number]</p>
+              <p>BIC/SWIFT: [BIC Code]</p>
+              <p>Reference: {period.periodId.slice(0, 8).toUpperCase()}</p>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Footer */}
       <div className="text-center text-xs text-muted-foreground pt-4 border-t">
-        <p>This notice was generated automatically. Day count convention: ACT/365 Fixed.</p>
+        <p>This notice was generated automatically. Day count convention: 30E/360 (Eurobond).</p>
         <p>For questions, contact your relationship manager.</p>
       </div>
     </div>
