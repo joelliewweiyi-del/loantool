@@ -79,7 +79,7 @@ export function formatEventType(type: string): string {
 }
 
 /**
- * Calculate days between two dates using ACT/365 Fixed
+ * Calculate days between two dates using actual calendar days
  */
 export function daysBetween(startDate: string | Date, endDate: string | Date): number {
   const start = typeof startDate === 'string' ? new Date(startDate) : startDate;
@@ -89,8 +89,44 @@ export function daysBetween(startDate: string | Date, endDate: string | Date): n
 }
 
 /**
+ * Calculate days between two dates using 30/360 convention (US NASD method).
+ * Each month is treated as 30 days, year as 360 days.
+ * 
+ * Formula: (Y2 - Y1) × 360 + (M2 - M1) × 30 + (D2 - D1)
+ * 
+ * Adjustments:
+ * - If D1 is 31, change D1 to 30
+ * - If D2 is 31 and D1 is 30 or 31, change D2 to 30
+ */
+export function daysBetween30360(startDate: string | Date, endDate: string | Date): number {
+  const start = typeof startDate === 'string' ? new Date(startDate) : new Date(startDate);
+  const end = typeof endDate === 'string' ? new Date(endDate) : new Date(endDate);
+  
+  let d1 = start.getUTCDate();
+  let m1 = start.getUTCMonth() + 1;
+  let y1 = start.getUTCFullYear();
+  
+  let d2 = end.getUTCDate();
+  let m2 = end.getUTCMonth() + 1;
+  let y2 = end.getUTCFullYear();
+  
+  // Adjustment rules (US NASD 30/360)
+  if (d1 === 31) d1 = 30;
+  if (d2 === 31 && d1 >= 30) d2 = 30;
+  
+  return (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
+}
+
+/**
  * Calculate day count fraction for ACT/365 Fixed
  */
 export function dayCountFraction(days: number): number {
   return days / 365;
+}
+
+/**
+ * Calculate day count fraction for 30/360
+ */
+export function dayCountFraction30360(days: number): number {
+  return days / 360;
 }
