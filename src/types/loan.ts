@@ -36,7 +36,7 @@ export interface Loan {
   interest_rate: number | null;
   interest_type: InterestType;
   loan_type: LoanType;
-  opening_outstanding: number | null;
+  outstanding: number | null;
   total_commitment: number | null;
   commitment_fee_rate: number | null;
   commitment_fee_basis: CommitmentFeeBasis | null;
