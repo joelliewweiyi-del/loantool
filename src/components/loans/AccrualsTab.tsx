@@ -13,8 +13,15 @@ import {
   ChevronRight, 
   Calendar,
   Wallet,
-  ArrowUpRight
+  ArrowUpRight,
+  Info
 } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface AccrualsTabProps {
   periodAccruals: PeriodAccrual[];
@@ -135,8 +142,23 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Period-by-Period Accruals</CardTitle>
-          <CardDescription className="text-xs">
-            30/360 Day Count · Click row to expand
+          <CardDescription className="text-xs flex items-center gap-1">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex items-center gap-1 cursor-help underline decoration-dotted underline-offset-2">
+                    30/360 Day Count
+                    <Info className="h-3 w-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs text-xs">
+                  <p className="font-semibold mb-1">30/360 Day Count Convention</p>
+                  <p>Each month is treated as 30 days, and the year as 360 days. This standardizes daily accrual rates across all months for consistency.</p>
+                  <p className="mt-1 text-muted-foreground">Daily Rate = Annual Rate ÷ 360</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <span>· Click row to expand</span>
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
