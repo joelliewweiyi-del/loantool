@@ -245,7 +245,7 @@ function PeriodTableRow({
           {period.commitmentFeeAccrued > 0 ? formatCurrency(period.commitmentFeeAccrued) : '—'}
         </td>
         <td className="py-4 px-4 text-right font-mono text-sm font-bold bg-amber-50/50 dark:bg-amber-950/20">
-          {period.pikCapitalized > 0 ? formatCurrency(period.pikCapitalized) : '—'}
+          {formatCurrency(period.interestAccrued + period.commitmentFeeAccrued)}
         </td>
       </tr>
       
