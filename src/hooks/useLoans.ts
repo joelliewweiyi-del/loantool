@@ -116,6 +116,12 @@ export function useCreateLoan() {
       vehicle?: string;
       facility?: string | null;
     }) => {
+      // Get current user for created_by
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error('Not authenticated');
+      const userId = user.user.id;
+
+      // Create the loan
       const { data: loan, error } = await supabase
         .from('loans')
         .insert([data])
@@ -123,11 +129,72 @@ export function useCreateLoan() {
         .single();
       
       if (error) throw error;
-      return loan as Loan;
+      const createdLoan = loan as Loan;
+
+      // Auto-generate founding events based on loan creation data
+      const foundingEvents: Database['public']['Tables']['loan_events']['Insert'][] = [];
+
+      const effectiveDate = data.loan_start_date || new Date().toISOString().split('T')[0];
+
+      // 1. Commitment Set (if total_commitment provided)
+      if (data.total_commitment && data.total_commitment > 0) {
+        foundingEvents.push({
+          loan_id: createdLoan.id,
+          event_type: 'commitment_set',
+          effective_date: effectiveDate,
+          amount: data.total_commitment,
+          rate: null,
+          status: 'approved',
+          created_by: userId,
+          metadata: { auto_generated: true, description: 'Initial commitment' },
+        });
+      }
+
+      // 2. Interest Rate Set (if interest_rate provided)
+      if (data.interest_rate && data.interest_rate > 0) {
+        foundingEvents.push({
+          loan_id: createdLoan.id,
+          event_type: 'interest_rate_set',
+          effective_date: effectiveDate,
+          amount: null,
+          rate: data.interest_rate,
+          status: 'approved',
+          created_by: userId,
+          metadata: { auto_generated: true, description: 'Initial rate' },
+        });
+      }
+
+      // 3. Principal Draw (if initial_principal provided)
+      if (data.initial_principal && data.initial_principal > 0) {
+        foundingEvents.push({
+          loan_id: createdLoan.id,
+          event_type: 'principal_draw',
+          effective_date: effectiveDate,
+          amount: data.initial_principal,
+          rate: null,
+          status: 'approved',
+          created_by: userId,
+          metadata: { auto_generated: true, description: 'Initial principal draw' },
+        });
+      }
+
+      // Insert all founding events
+      if (foundingEvents.length > 0) {
+        const { error: eventsError } = await supabase
+          .from('loan_events')
+          .insert(foundingEvents);
+        
+        if (eventsError) {
+          console.error('Failed to create founding events:', eventsError);
+          // Don't throw - loan was created, just events failed
+        }
+      }
+
+      return createdLoan;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['loans'] });
-      toast({ title: 'Loan created successfully' });
+      toast({ title: 'Loan created with founding events' });
     },
     onError: (error) => {
       toast({ 
