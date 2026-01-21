@@ -331,7 +331,7 @@ function LoanReconciliationPanel({
   afasLoading: boolean;
   afasFetching: boolean;
   refetchAfas: () => void;
-  loans: (Loan & { calculated_principal?: number })[] | undefined;
+  loans: Loan[] | undefined;
   loansLoading: boolean;
   refetchLoans: () => void;
 }) {
@@ -366,8 +366,8 @@ function LoanReconciliationPanel({
     }
 
     // Create loan lookup by external_loan_id AND loan_name (fallback)
-    const loanLookupByExternal = new Map<string, Loan & { calculated_principal?: number }>();
-    const loanLookupByName = new Map<string, Loan & { calculated_principal?: number }>();
+    const loanLookupByExternal = new Map<string, Loan>();
+    const loanLookupByName = new Map<string, Loan>();
     for (const loan of (loans || [])) {
       if (loan.external_loan_id) {
         loanLookupByExternal.set(loan.external_loan_id, loan);
@@ -390,8 +390,8 @@ function LoanReconciliationPanel({
       if (matchedLoan) {
         processedLoanIds.add(matchedLoan.id);
         const commitment = matchedLoan.total_commitment || 0;
-        // Use calculated_principal from RPC if available, otherwise fall back to outstanding
-        const outstanding = matchedLoan.calculated_principal ?? matchedLoan.outstanding ?? 0;
+        // Use outstanding directly from loans table (auto-synced when events are approved)
+        const outstanding = matchedLoan.outstanding || 0;
         // AFAS Outstanding = Commitment - AFAS Net (commitment remaining)
         const afasOutstanding = commitment - afasBalance.net;
         // Delta = Outstanding - AFAS Outstanding
@@ -433,7 +433,7 @@ function LoanReconciliationPanel({
     // Add App loans not in AFAS (show ALL loans, even without external_loan_id)
     for (const loan of (loans || [])) {
       if (!processedLoanIds.has(loan.id)) {
-        const outstanding = loan.calculated_principal ?? loan.outstanding ?? 0;
+        const outstanding = loan.outstanding || 0;
         const commitment = loan.total_commitment || 0;
         const displayId = loan.external_loan_id || loan.loan_name || loan.id.slice(0, 8);
         // No AFAS data, so afasOutstanding = 0, difference = outstanding - 0 = outstanding
@@ -672,33 +672,16 @@ export default function AfasGLExplorer() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch loans with calculated principal balance from RPC
+  // Fetch loans - outstanding is already auto-synced when events are approved
   const loansQuery = useQuery({
     queryKey: ['loans-for-reconciliation'],
     queryFn: async () => {
-      // First get loans (include loan_name for matching)
       const { data: loans, error: loansError } = await supabase
         .from('loans')
         .select('id, external_loan_id, loan_name, borrower_name, total_commitment, outstanding, status')
         .eq('status', 'active');
       if (loansError) throw loansError;
-      
-      // Then get calculated principal balances using RPC
-      const { data: balances, error: balancesError } = await supabase
-        .rpc('get_loan_balances');
-      if (balancesError) throw balancesError;
-      
-      // Create lookup for calculated principals
-      const balanceLookup = new Map<string, number>();
-      for (const b of (balances || [])) {
-        balanceLookup.set(b.loan_id, Number(b.principal_balance) || 0);
-      }
-      
-      // Merge calculated principal into loans
-      return (loans || []).map(loan => ({
-        ...loan,
-        calculated_principal: balanceLookup.get(loan.id)
-      })) as (Loan & { calculated_principal?: number })[];
+      return loans as Loan[];
     },
     staleTime: 5 * 60 * 1000,
   });
