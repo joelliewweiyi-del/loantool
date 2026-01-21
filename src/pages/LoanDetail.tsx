@@ -468,6 +468,7 @@ export default function LoanDetail() {
             isLoading={accrualsLoading}
             loanId={id}
             events={events}
+            interestType={(loan?.interest_type as 'cash_pay' | 'pik') || 'cash_pay'}
           />
         </TabsContent>
 
