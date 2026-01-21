@@ -414,17 +414,19 @@ export default function LoanDetail() {
                         const meta = event.metadata as Record<string, unknown> | null;
                         const description = meta?.description as string | undefined;
                         
-                        // Special description for fee invoices that were withheld from principal
+                        // Special description for fee invoices
                         const getEventDescription = () => {
                           // First check if there's an explicit description in metadata
                           if (description) return description;
                           
                           if (event.event_type === 'fee_invoice') {
                             const feeType = meta?.fee_type as string | undefined;
-                            // Show "withheld" for arrangement fees (any payment type)
-                            if ((meta?.adjustment_type === 'fee_split') || 
-                                feeType?.includes('arrangement')) {
-                              return 'Arrangement fee (withheld from borrower)';
+                            const paymentType = meta?.payment_type as string | undefined;
+                            // Arrangement fees: different labels for PIK vs cash
+                            if ((meta?.adjustment_type === 'fee_split') || feeType?.includes('arrangement')) {
+                              return paymentType === 'pik' 
+                                ? 'Arrangement fee (capitalised)'
+                                : 'Arrangement fee (withheld from borrower)';
                             }
                             if (feeType) return `${feeType} fee`;
                           }

@@ -326,10 +326,11 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
                     if (event.event_type === 'fee_invoice') {
                       const feeType = meta?.fee_type as string | undefined;
                       const paymentType = meta?.payment_type as string | undefined;
-                      // Show "withheld" for arrangement fees (PIK or cash withheld)
-                      if ((meta?.adjustment_type === 'fee_split') || 
-                          feeType?.includes('arrangement')) {
-                        return 'Arrangement fee (withheld from borrower)';
+                      // Arrangement fees: different labels for PIK vs cash
+                      if ((meta?.adjustment_type === 'fee_split') || feeType?.includes('arrangement')) {
+                        return paymentType === 'pik' 
+                          ? 'Arrangement fee (capitalised)'
+                          : 'Arrangement fee (withheld from borrower)';
                       }
                       if (feeType) return `${feeType} fee`;
                     }
