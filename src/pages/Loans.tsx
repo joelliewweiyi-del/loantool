@@ -133,6 +133,7 @@ export default function Loans() {
             </div> : <table className="data-table">
               <thead>
                 <tr>
+                  <th>Loan_ID</th>
                   <th>Loan</th>
                   {activeVehicle === 'TLF' && <th>Facility</th>}
                   <th>City</th>
@@ -148,6 +149,7 @@ export default function Loans() {
               </thead>
               <tbody>
                 {filteredLoans.map(loan => <tr key={loan.id}>
+                    <td className="font-mono font-medium">{(loan as any).loan_id || '—'}</td>
                     <td>
                       <div className="font-medium">{loan.loan_name || loan.borrower_name}</div>
                     </td>
