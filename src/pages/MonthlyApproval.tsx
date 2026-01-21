@@ -308,7 +308,7 @@ export default function MonthlyApproval() {
                 {data?.periods?.map((period) => (
                   <TableRow key={period.id} className={period.has_economic_events ? 'bg-amber-50/50 dark:bg-amber-950/20' : ''}>
                     <TableCell className="font-medium font-mono text-sm">
-                      {period.loans?.loan_name || period.loan_id?.slice(0, 8) || 'Unknown'}
+                      {period.loans?.loan_id || period.loan_id?.slice(0, 8) || 'Unknown'}
                     </TableCell>
                     <TableCell className="font-mono text-sm">
                       {formatDate(period.period_start)} – {formatDate(period.period_end)}

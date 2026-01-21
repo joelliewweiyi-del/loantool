@@ -6,7 +6,6 @@ import type { Database } from '@/integrations/supabase/types';
 export interface CSVLoanRow {
   loan_id: string;
   borrower_name?: string;
-  loan_name?: string;
   vehicle?: string;
   facility?: string;
   city?: string;
@@ -27,7 +26,6 @@ export interface CSVLoanRow {
 export interface ParsedLoan {
   loan_id: string;
   borrower_name: string;
-  loan_name: string | null;
   vehicle: string;
   facility: string | null;
   city: string | null;
@@ -174,7 +172,6 @@ export function validateAndParseLoans(rows: CSVLoanRow[]): {
     const parsedLoan: ParsedLoan = {
       loan_id: loanId,
       borrower_name: row.borrower_name?.trim() || '',
-      loan_name: row.loan_name?.trim() || null,
       vehicle,
       facility: row.facility?.trim() || null,
       city: row.city?.trim() || null,
@@ -222,7 +219,6 @@ export function useBatchUploadLoans() {
             .insert([{
               loan_id: loan.loan_id,
               borrower_name: loan.borrower_name,
-              loan_name: loan.loan_name,
               vehicle: loan.vehicle,
               facility: loan.facility,
               city: loan.city,

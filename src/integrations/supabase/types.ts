@@ -353,7 +353,6 @@ export type Database = {
           interest_rate: number | null
           interest_type: string
           loan_id: string
-          loan_name: string | null
           loan_start_date: string | null
           loan_type: string
           ltv: number | null
@@ -382,7 +381,6 @@ export type Database = {
           interest_rate?: number | null
           interest_type?: string
           loan_id: string
-          loan_name?: string | null
           loan_start_date?: string | null
           loan_type?: string
           ltv?: number | null
@@ -411,7 +409,6 @@ export type Database = {
           interest_rate?: number | null
           interest_type?: string
           loan_id?: string
-          loan_name?: string | null
           loan_start_date?: string | null
           loan_type?: string
           ltv?: number | null

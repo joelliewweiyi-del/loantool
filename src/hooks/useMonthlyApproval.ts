@@ -6,7 +6,7 @@ import { MonthlyApproval, Period } from '@/types/loan';
 export interface PeriodWithLoan extends Period {
   loans?: {
     borrower_name: string;
-    loan_name: string | null;
+    loan_id: string;
   };
 }
 
@@ -67,7 +67,7 @@ export function useMonthlyApprovalDetails(yearMonth: string | undefined) {
           *,
           loans:loan_id (
             borrower_name,
-            loan_name
+            loan_id
           )
         `)
         .gte('period_end', startOfMonth)

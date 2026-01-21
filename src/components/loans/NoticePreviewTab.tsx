@@ -205,9 +205,7 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
         <div>
           <p className="text-sm text-muted-foreground mb-1">To:</p>
           <p className="font-semibold text-lg">{loan.borrower_name}</p>
-          {loan.loan_name && (
-            <p className="text-muted-foreground">{loan.loan_name}</p>
-          )}
+          <p className="text-muted-foreground font-mono text-sm">{(loan as any).loan_id}</p>
         </div>
         <div className="text-right">
           <p className="text-sm text-muted-foreground mb-1">Notice Date:</p>

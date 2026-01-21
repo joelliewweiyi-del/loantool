@@ -33,7 +33,7 @@ export default function Loans() {
 
   // Filter by vehicle first
   const vehicleLoans = loans?.filter(loan => (loan as any).vehicle === activeVehicle) || [];
-  const filteredLoans = vehicleLoans.filter(loan => loan.borrower_name.toLowerCase().includes(searchQuery.toLowerCase()) || loan.loan_name?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).city?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).category?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const filteredLoans = vehicleLoans.filter(loan => loan.borrower_name.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).loan_id?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).city?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).category?.toLowerCase().includes(searchQuery.toLowerCase()));
 
   // Calculate portfolio summary metrics for current vehicle
   const activeLoans = vehicleLoans.filter(l => l.status === 'active');
@@ -134,7 +134,7 @@ export default function Loans() {
               <thead>
                 <tr>
                   <th>Loan_ID</th>
-                  <th>Loan</th>
+                  <th>Borrower</th>
                   {activeVehicle === 'TLF' && <th>Facility</th>}
                   <th>City</th>
                   <th>Category</th>
@@ -151,7 +151,7 @@ export default function Loans() {
                 {filteredLoans.map(loan => <tr key={loan.id}>
                     <td className="font-mono font-medium">{(loan as any).loan_id || '—'}</td>
                     <td>
-                      <div className="font-medium">{loan.loan_name || loan.borrower_name}</div>
+                      <div className="font-medium">{loan.borrower_name}</div>
                     </td>
                     {activeVehicle === 'TLF' && <td>
                         <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">

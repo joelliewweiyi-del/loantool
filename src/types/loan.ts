@@ -28,7 +28,6 @@ export interface Loan {
   id: string;
   loan_id: string;
   borrower_name: string;
-  loan_name: string | null;
   status: LoanStatus;
   notice_frequency: string;
   payment_due_rule: string | null;
