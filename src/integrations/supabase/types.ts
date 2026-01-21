@@ -531,6 +531,9 @@ export type Database = {
       }
       periods: {
         Row: {
+          afas_invoice_number: string | null
+          afas_post_error: string | null
+          afas_posted_at: string | null
           approved_at: string | null
           auto_processed_at: string | null
           created_at: string
@@ -548,6 +551,9 @@ export type Database = {
           submitted_at: string | null
         }
         Insert: {
+          afas_invoice_number?: string | null
+          afas_post_error?: string | null
+          afas_posted_at?: string | null
           approved_at?: string | null
           auto_processed_at?: string | null
           created_at?: string
@@ -565,6 +571,9 @@ export type Database = {
           submitted_at?: string | null
         }
         Update: {
+          afas_invoice_number?: string | null
+          afas_post_error?: string | null
+          afas_posted_at?: string | null
           approved_at?: string | null
           auto_processed_at?: string | null
           created_at?: string
