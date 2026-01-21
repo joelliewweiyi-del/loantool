@@ -62,8 +62,9 @@ interface LoanBalance {
   afasDebits: number;
   afasNet: number;
   commitment: number;
+  afasOutstanding: number; // commitment - afasNet
   outstanding: number;
-  difference: number;
+  difference: number; // outstanding - afasOutstanding
   status: 'matched' | 'variance' | 'missing_in_app' | 'missing_afas';
   transactionCount: number;
 }
@@ -126,7 +127,7 @@ function downloadReconciliationCSV(data: LoanBalance[], filename: string) {
   const headers = [
     'Loan ID', 'External ID', 'Borrower', 
     'AFAS Credits', 'AFAS Debits', 'AFAS Net (Commitment Remaining)',
-    'Commitment', 'Outstanding', 'Difference', 'Status', 'Tx Count'
+    'Commitment', 'AFAS Outstanding', 'Outstanding', 'Delta', 'Status', 'Tx Count'
   ];
   
   const csvRows = [
@@ -139,6 +140,7 @@ function downloadReconciliationCSV(data: LoanBalance[], filename: string) {
       row.afasDebits.toFixed(2),
       row.afasNet.toFixed(2),
       row.commitment.toFixed(2),
+      row.afasOutstanding.toFixed(2),
       row.outstanding.toFixed(2),
       row.difference.toFixed(2),
       row.status,
@@ -390,7 +392,10 @@ function LoanReconciliationPanel({
         const commitment = matchedLoan.total_commitment || 0;
         // Use calculated_principal from RPC if available, otherwise fall back to outstanding
         const outstanding = matchedLoan.calculated_principal ?? matchedLoan.outstanding ?? 0;
-        const difference = Math.abs(afasBalance.net) - outstanding;
+        // AFAS Outstanding = Commitment - AFAS Net (commitment remaining)
+        const afasOutstanding = commitment - afasBalance.net;
+        // Delta = Outstanding - AFAS Outstanding
+        const difference = outstanding - afasOutstanding;
         
         results.push({
           loanId: matchedLoan.id,
@@ -400,13 +405,14 @@ function LoanReconciliationPanel({
           afasDebits: afasBalance.debits,
           afasNet: afasBalance.net,
           commitment,
+          afasOutstanding,
           outstanding,
           difference,
           status: Math.abs(difference) < 0.01 ? 'matched' : 'variance',
           transactionCount: afasBalance.count
         });
       } else {
-        // In AFAS but not in App
+        // In AFAS but not in App - can't calculate afasOutstanding without commitment
         results.push({
           loanId: '',
           externalLoanId: externalId,
@@ -415,8 +421,9 @@ function LoanReconciliationPanel({
           afasDebits: afasBalance.debits,
           afasNet: afasBalance.net,
           commitment: 0,
+          afasOutstanding: 0,
           outstanding: 0,
-          difference: afasBalance.net,
+          difference: 0,
           status: 'missing_in_app',
           transactionCount: afasBalance.count
         });
@@ -427,7 +434,9 @@ function LoanReconciliationPanel({
     for (const loan of (loans || [])) {
       if (!processedLoanIds.has(loan.id)) {
         const outstanding = loan.calculated_principal ?? loan.outstanding ?? 0;
+        const commitment = loan.total_commitment || 0;
         const displayId = loan.external_loan_id || loan.loan_name || loan.id.slice(0, 8);
+        // No AFAS data, so afasOutstanding = 0, difference = outstanding - 0 = outstanding
         results.push({
           loanId: loan.id,
           externalLoanId: displayId,
@@ -435,9 +444,10 @@ function LoanReconciliationPanel({
           afasCredits: 0,
           afasDebits: 0,
           afasNet: 0,
-          commitment: loan.total_commitment || 0,
+          commitment,
+          afasOutstanding: 0,
           outstanding,
-          difference: -outstanding,
+          difference: outstanding,
           status: 'missing_afas',
           transactionCount: 0
         });
@@ -570,9 +580,10 @@ function LoanReconciliationPanel({
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Credit</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Debit</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Net (Commitment Remaining)</TableHead>
-                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Outstanding</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Commitment</TableHead>
-                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Delta (Net vs. Outstanding)</TableHead>
+                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Outstanding</TableHead>
+                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Outstanding</TableHead>
+                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Delta</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -583,8 +594,9 @@ function LoanReconciliationPanel({
                     <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.afasCredits)}</TableCell>
                     <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.afasDebits)}</TableCell>
                     <TableCell className="px-2 py-1 text-xs text-right font-mono font-semibold">{formatCurrency(row.afasNet)}</TableCell>
-                    <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.outstanding)}</TableCell>
                     <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.commitment)}</TableCell>
+                    <TableCell className="px-2 py-1 text-xs text-right font-mono font-semibold">{formatCurrency(row.afasOutstanding)}</TableCell>
+                    <TableCell className="px-2 py-1 text-xs text-right font-mono">{formatCurrency(row.outstanding)}</TableCell>
                     <TableCell className={`px-2 py-1 text-xs text-right font-mono font-semibold ${row.difference !== 0 ? (row.difference > 0 ? 'text-primary' : 'text-destructive') : ''}`}>
                       {row.difference !== 0 ? (row.difference > 0 ? '+' : '') + formatCurrency(row.difference) : '—'}
                     </TableCell>
@@ -592,7 +604,7 @@ function LoanReconciliationPanel({
                 ))}
                 {reconciliationData.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                       No reconciliation data available
                     </TableCell>
                   </TableRow>
