@@ -193,6 +193,7 @@ export function applyEventToState(state: LoanState, event: LoanEvent): LoanState
     case 'pik_capitalization_posted':
       // PIK interest is capitalized (added to principal)
       newState.outstandingPrincipal += event.amount || 0;
+      newState.undrawnCommitment = Math.max(0, newState.totalCommitment - newState.outstandingPrincipal);
       break;
       
     case 'fee_invoice':
