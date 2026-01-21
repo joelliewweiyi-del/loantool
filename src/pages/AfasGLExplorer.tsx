@@ -124,8 +124,8 @@ function downloadReconciliationCSV(data: LoanBalance[], filename: string) {
   
   const headers = [
     'Loan ID', 'External ID', 'Borrower', 
-    'AFAS Credits', 'AFAS Debits', 'AFAS Net',
-    'TMO Commitment', 'TMO Principal', 'Difference', 'Status', 'Tx Count'
+    'AFAS Credits', 'AFAS Debits', 'AFAS Net (Commitment Remaining)',
+    'TMO Commitment', 'TMO Outstanding', 'Difference', 'Status', 'Tx Count'
   ];
   
   const csvRows = [
@@ -480,11 +480,16 @@ function LoanReconciliationPanel({
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <div>
-            <CardTitle className="text-lg">Loan Balance Reconciliation</CardTitle>
-            <CardDescription className="text-xs">
-              AFAS DimAx1 balances vs TMO commitment tracking (using Allocated Balances data)
-            </CardDescription>
+          <div className="flex items-center gap-3">
+            <div>
+              <CardTitle className="text-lg">Loan Balance Reconciliation</CardTitle>
+              <CardDescription className="text-xs">
+                AFAS DimAx1 balances vs TMO commitment tracking
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="text-xs font-mono bg-muted">
+              GL 1751
+            </Badge>
           </div>
           <div className="flex items-center gap-2">
             <Button 
@@ -554,8 +559,8 @@ function LoanReconciliationPanel({
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0">Loan ID</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Credit</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Debit</TableHead>
-                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Net</TableHead>
-                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">TMO Principal</TableHead>
+                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">AFAS Net (Commitment Remaining)</TableHead>
+                  <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">TMO Outstanding</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">TMO Commitment</TableHead>
                   <TableHead className="text-xs px-2 py-1 bg-muted/50 sticky top-0 text-right">Delta (Net vs. Outstanding)</TableHead>
                 </TableRow>
