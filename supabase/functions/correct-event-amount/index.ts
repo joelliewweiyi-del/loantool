@@ -23,10 +23,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    const { event_id, new_amount } = await req.json();
+    const { event_id, new_amount, update_metadata } = await req.json();
 
-    if (!event_id || new_amount === undefined) {
-      return new Response(JSON.stringify({ error: 'Missing event_id or new_amount' }), {
+    if (!event_id) {
+      return new Response(JSON.stringify({ error: 'Missing event_id' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -35,23 +35,34 @@ Deno.serve(async (req) => {
     // Use service role to bypass trigger
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Temporarily disable the trigger by using a direct SQL approach
-    // Since we can't disable triggers, we'll update with a workaround
-    const { data, error } = await supabase.rpc('admin_correct_event_amount', {
-      p_event_id: event_id,
-      p_new_amount: new_amount
-    });
+    let error = null;
+
+    // Update amount if provided
+    if (new_amount !== undefined) {
+      const { error: amountError } = await supabase.rpc('admin_correct_event_amount', {
+        p_event_id: event_id,
+        p_new_amount: new_amount
+      });
+      if (amountError) error = amountError;
+    }
+
+    // Update metadata if provided
+    if (update_metadata && !error) {
+      const { error: metaError } = await supabase.rpc('admin_correct_event_metadata', {
+        p_event_id: event_id,
+        p_new_metadata: update_metadata
+      });
+      if (metaError) error = metaError;
+    }
 
     if (error) {
-      // Fallback: direct update (service role bypasses RLS but not triggers)
-      // We need to use raw SQL via a database function
       return new Response(JSON.stringify({ error: error.message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    return new Response(JSON.stringify({ success: true, data }), {
+    return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (err) {
