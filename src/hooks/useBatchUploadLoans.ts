@@ -290,7 +290,8 @@ export function useBatchUploadLoans() {
               .insert(foundingEvents as any);
 
             if (eventsError) {
-              console.error('Failed to create founding events:', eventsError);
+              console.error('Failed to create founding events for loan:', loan.loan_id, eventsError);
+              throw new Error(`Founding events failed: ${eventsError.message}`);
             }
           }
 
