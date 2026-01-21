@@ -119,11 +119,12 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
                     <th className="text-left py-3 px-4 font-semibold text-muted-foreground">Period</th>
                     <th className="text-center py-3 px-4 font-semibold text-muted-foreground">Status</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Days</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Principal</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Opening</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Rate</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Interest</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Commit. Fee</th>
-                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground bg-amber-50 dark:bg-amber-950/30">Interest Charge</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground bg-accent/30">Interest Charge</th>
+                    <th className="text-right py-3 px-4 font-semibold text-muted-foreground bg-primary/10">Closing</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -244,8 +245,11 @@ function PeriodTableRow({
         <td className="py-4 px-4 text-right font-mono text-sm text-muted-foreground">
           {period.commitmentFeeAccrued > 0 ? formatCurrency(period.commitmentFeeAccrued) : '—'}
         </td>
-        <td className="py-4 px-4 text-right font-mono text-sm font-bold bg-amber-50/50 dark:bg-amber-950/20">
+        <td className="py-4 px-4 text-right font-mono text-sm font-bold bg-accent/30">
           {formatCurrency(period.interestAccrued + period.commitmentFeeAccrued)}
+        </td>
+        <td className="py-4 px-4 text-right font-mono text-sm font-bold bg-primary/10">
+          {formatCurrency(period.closingPrincipal)}
         </td>
       </tr>
       

@@ -49,12 +49,14 @@ export function useAccruals(loanId: string | undefined): UseAccrualsResult {
 
     const commitmentFeeRate = loan.commitment_fee_rate || 0;
     const initialCommitment = loan.total_commitment || 0;
+    const loanInterestType = (loan.interest_type as 'cash_pay' | 'pik') || 'cash_pay';
 
     const periodAccruals = calculateAllPeriodAccruals(
       periods,
       events,
       commitmentFeeRate,
-      initialCommitment
+      initialCommitment,
+      loanInterestType
     );
 
     const summary = calculateAccrualsSummary(periodAccruals);

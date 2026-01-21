@@ -119,7 +119,8 @@ export function sortEventsByDate(events: LoanEvent[]): LoanEvent[] {
 export function getLoanStateAtDate(
   events: LoanEvent[],
   targetDate: string,
-  initialCommitment: number = 0
+  initialCommitment: number = 0,
+  defaultInterestType: InterestType = 'cash_pay'
 ): LoanState {
   const sortedEvents = sortEventsByDate(events);
   const targetTime = new Date(targetDate).getTime();
@@ -128,7 +129,7 @@ export function getLoanStateAtDate(
     date: targetDate,
     outstandingPrincipal: 0,
     currentRate: 0,
-    interestType: 'cash_pay',
+    interestType: defaultInterestType,
     totalCommitment: initialCommitment,
     undrawnCommitment: initialCommitment,
   };
@@ -450,7 +451,8 @@ export function calculatePeriodAccruals(
   period: Period,
   events: LoanEvent[],
   commitmentFeeRate: number = 0,
-  initialCommitment: number = 0
+  initialCommitment: number = 0,
+  loanInterestType: InterestType = 'cash_pay'
 ): PeriodAccrual {
   const sortedEvents = sortEventsByDate(events);
   const periodStart = period.period_start;
@@ -460,10 +462,10 @@ export function calculatePeriodAccruals(
   // Get opening state (day before period start)
   const dayBefore = new Date(periodStart);
   dayBefore.setDate(dayBefore.getDate() - 1);
-  const openingState = getLoanStateAtDate(sortedEvents, dayBefore.toISOString().split('T')[0], initialCommitment);
+  const openingState = getLoanStateAtDate(sortedEvents, dayBefore.toISOString().split('T')[0], initialCommitment, loanInterestType);
   
   // Get closing state (end of period)
-  const closingState = getLoanStateAtDate(sortedEvents, periodEnd, initialCommitment);
+  const closingState = getLoanStateAtDate(sortedEvents, periodEnd, initialCommitment, loanInterestType);
   
   // Calculate movements during period
   const periodEvents = sortedEvents.filter(e => {
@@ -524,6 +526,22 @@ export function calculatePeriodAccruals(
   
   const totalDue = cashPayInterest + commitmentFeeAccrued + feesInvoiced;
   
+  // For PIK loans, the closing principal should include the interest charge
+  // that will be capitalized at period end
+  const interestCharge = interestAccrued + commitmentFeeAccrued;
+  const isPikLoan = openingState.interestType === 'pik';
+  
+  // Calculate projected closing principal:
+  // If PIK has already been posted (pikCapitalized > 0), use the actual closing state
+  // Otherwise, project what it will be after capitalization
+  const projectedClosingPrincipal = isPikLoan
+    ? (pikCapitalized > 0 
+        // PIK already posted - use actual closing balance
+        ? closingState.outstandingPrincipal
+        // PIK not yet posted - project the closing balance
+        : openingState.outstandingPrincipal + principalDrawn - principalRepaid + feesInvoiced + interestCharge)
+    : closingState.outstandingPrincipal;
+  
   return {
     periodId: period.id,
     periodStart,
@@ -537,7 +555,7 @@ export function calculatePeriodAccruals(
     principalDrawn,
     principalRepaid,
     pikCapitalized,
-    closingPrincipal: closingState.outstandingPrincipal,
+    closingPrincipal: projectedClosingPrincipal,
     closingRate: closingState.currentRate,
     closingCommitment: closingState.totalCommitment,
     closingUndrawn: closingState.undrawnCommitment,
@@ -560,11 +578,12 @@ export function calculateAllPeriodAccruals(
   periods: Period[],
   events: LoanEvent[],
   commitmentFeeRate: number = 0,
-  initialCommitment: number = 0
+  initialCommitment: number = 0,
+  loanInterestType: InterestType = 'cash_pay'
 ): PeriodAccrual[] {
   return periods
     .sort((a, b) => new Date(a.period_start).getTime() - new Date(b.period_start).getTime())
-    .map(period => calculatePeriodAccruals(period, events, commitmentFeeRate, initialCommitment));
+    .map(period => calculatePeriodAccruals(period, events, commitmentFeeRate, initialCommitment, loanInterestType));
 }
 
 /**
