@@ -173,7 +173,9 @@ export function BatchUploadDialog() {
               <p className="font-medium">Required columns:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
                 <li><code className="bg-muted px-1 rounded">borrower_name</code> - Required for all loans</li>
-                <li><code className="bg-muted px-1 rounded">facility</code> - Required for TLF vehicle</li>
+                <li><code className="bg-muted px-1 rounded">loan_start_date</code> - Start date (e.g. 2024-01-15)</li>
+                <li><code className="bg-muted px-1 rounded">maturity_date</code> - Maturity date</li>
+                <li><code className="bg-muted px-1 rounded">facility</code> - Required for TLF vehicle only</li>
               </ul>
               <p className="font-medium mt-3">Optional columns:</p>
               <ul className="list-disc list-inside space-y-1 ml-2">
