@@ -129,6 +129,20 @@ export function validateAndParseLoans(rows: CSVLoanRow[]): {
       return;
     }
     
+    // Start date is required
+    const startDate = parseDate(row.loan_start_date);
+    if (!startDate) {
+      errors.push({ row: rowNum, field: 'loan_start_date', message: 'Start date is required' });
+      return;
+    }
+    
+    // Maturity date is required
+    const maturityDate = parseDate(row.maturity_date);
+    if (!maturityDate) {
+      errors.push({ row: rowNum, field: 'maturity_date', message: 'Maturity date is required' });
+      return;
+    }
+    
     // Vehicle validation
     const vehicle = row.vehicle?.trim() || 'RED IV';
     if (!['RED IV', 'TLF'].includes(vehicle)) {
@@ -163,8 +177,8 @@ export function validateAndParseLoans(rows: CSVLoanRow[]): {
       facility: row.facility?.trim() || null,
       city: row.city?.trim() || null,
       category: row.category?.trim() || null,
-      loan_start_date: parseDate(row.loan_start_date),
-      maturity_date: parseDate(row.maturity_date),
+      loan_start_date: startDate,
+      maturity_date: maturityDate,
       interest_rate: parseRate(row.interest_rate),
       interest_type: interestType,
       loan_type: loanType,
