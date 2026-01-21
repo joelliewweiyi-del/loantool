@@ -289,23 +289,29 @@ function PeriodTableRow({
               </div>
 
               {/* Principal Movements */}
-              {(period.principalDrawn > 0 || period.principalRepaid > 0 || period.pikCapitalized > 0) && (
+              {(period.principalDrawn > 0 || period.feesInvoiced > 0 || period.principalRepaid > 0 || period.pikCapitalized > 0) && (
                 <div className="flex gap-6 text-xs pt-2 border-t">
                   {period.principalDrawn > 0 && (
                     <div>
                       <span className="text-muted-foreground">Drawn: </span>
-                      <span className="font-mono text-green-600">+{formatCurrency(period.principalDrawn)}</span>
+                      <span className="font-mono text-emerald-600">+{formatCurrency(period.principalDrawn)}</span>
+                    </div>
+                  )}
+                  {period.feesInvoiced > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">Fees: </span>
+                      <span className="font-mono text-emerald-600">+{formatCurrency(period.feesInvoiced)}</span>
                     </div>
                   )}
                   {period.principalRepaid > 0 && (
                     <div>
                       <span className="text-muted-foreground">Repaid: </span>
-                      <span className="font-mono text-red-600">-{formatCurrency(period.principalRepaid)}</span>
+                      <span className="font-mono text-destructive">-{formatCurrency(period.principalRepaid)}</span>
                     </div>
                   )}
                   {period.pikCapitalized > 0 && (
                     <div>
-                      <span className="text-muted-foreground">PIK: </span>
+                      <span className="text-muted-foreground">Interest Charge: </span>
                       <span className="font-mono text-amber-600">+{formatCurrency(period.pikCapitalized)}</span>
                     </div>
                   )}
