@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Plus } from 'lucide-react';
 import { useCreateLoan } from '@/hooks/useLoans';
-import { InterestType, LoanType, CommitmentFeeBasis } from '@/types/loan';
+import { InterestType, CommitmentFeeBasis } from '@/types/loan';
 
 interface LoanFormData {
   // Identity
@@ -23,7 +23,6 @@ interface LoanFormData {
   interest_rate: string;
   interest_type: InterestType;
   // Structure
-  loan_type: LoanType;
   outstanding: string;
   total_commitment: string;
   commitment_fee_rate: string;
@@ -44,7 +43,6 @@ const initialFormData: LoanFormData = {
   category: '',
   interest_rate: '',
   interest_type: 'cash_pay',
-  loan_type: 'term_loan',
   outstanding: '',
   total_commitment: '',
   commitment_fee_rate: '',
@@ -70,14 +68,11 @@ export function CreateLoanDialog() {
       maturity_date: formData.maturity_date || null,
       interest_rate: formData.interest_rate ? parseFloat(formData.interest_rate) / 100 : null,
       interest_type: formData.interest_type,
-      loan_type: formData.loan_type,
+      loan_type: 'term_loan' as const, // Simplified - always term_loan
       outstanding: formData.outstanding ? parseFloat(formData.outstanding) : null,
-      total_commitment: formData.loan_type === 'committed_facility' && formData.total_commitment 
-        ? parseFloat(formData.total_commitment) : null,
-      commitment_fee_rate: formData.loan_type === 'committed_facility' && formData.commitment_fee_rate 
-        ? parseFloat(formData.commitment_fee_rate) / 100 : null,
-      commitment_fee_basis: formData.loan_type === 'committed_facility' 
-        ? formData.commitment_fee_basis : null,
+      total_commitment: formData.total_commitment ? parseFloat(formData.total_commitment) : null,
+      commitment_fee_rate: formData.commitment_fee_rate ? parseFloat(formData.commitment_fee_rate) / 100 : null,
+      commitment_fee_basis: formData.commitment_fee_basis,
       notice_frequency: formData.notice_frequency,
       payment_due_rule: formData.payment_due_rule || null,
       vehicle: formData.vehicle,
@@ -91,7 +86,6 @@ export function CreateLoanDialog() {
     setFormData(initialFormData);
   };
 
-  const isCommittedFacility = formData.loan_type === 'committed_facility';
   const isTLF = formData.vehicle === 'TLF';
   const canSubmit = formData.loan_number && formData.loan_start_date && (formData.vehicle !== 'TLF' || formData.facility);
 
@@ -250,21 +244,6 @@ export function CreateLoanDialog() {
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Loan Type</Label>
-                <Select 
-                  value={formData.loan_type} 
-                  onValueChange={(v) => handleChange('loan_type', v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="term_loan">Fully Drawn Term Loan</SelectItem>
-                    <SelectItem value="committed_facility">Committed Facility with Draws</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
                 <Label htmlFor="outstanding">Outstanding (EUR)</Label>
                 <Input
                   id="outstanding"
@@ -275,48 +254,43 @@ export function CreateLoanDialog() {
                   placeholder="0.00"
                 />
               </div>
-              
-              {isCommittedFacility && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="total_commitment">Total Commitment (EUR)</Label>
-                    <Input
-                      id="total_commitment"
-                      type="number"
-                      step="0.01"
-                      value={formData.total_commitment}
-                      onChange={(e) => handleChange('total_commitment', e.target.value)}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="commitment_fee_rate">Commitment Fee Rate (%)</Label>
-                    <Input
-                      id="commitment_fee_rate"
-                      type="number"
-                      step="0.0001"
-                      value={formData.commitment_fee_rate}
-                      onChange={(e) => handleChange('commitment_fee_rate', e.target.value)}
-                      placeholder="e.g., 0.5000"
-                    />
-                  </div>
-                  <div className="space-y-2 col-span-2">
-                    <Label>Commitment Fee Basis</Label>
-                    <Select 
-                      value={formData.commitment_fee_basis} 
-                      onValueChange={(v) => handleChange('commitment_fee_basis', v)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="undrawn_only">Undrawn Only</SelectItem>
-                        <SelectItem value="total_commitment">Total Commitment</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="total_commitment">Total Commitment (EUR)</Label>
+                <Input
+                  id="total_commitment"
+                  type="number"
+                  step="0.01"
+                  value={formData.total_commitment}
+                  onChange={(e) => handleChange('total_commitment', e.target.value)}
+                  placeholder="Optional"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="commitment_fee_rate">Commitment Fee Rate (%)</Label>
+                <Input
+                  id="commitment_fee_rate"
+                  type="number"
+                  step="0.0001"
+                  value={formData.commitment_fee_rate}
+                  onChange={(e) => handleChange('commitment_fee_rate', e.target.value)}
+                  placeholder="e.g., 1.0000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Commitment Fee Basis</Label>
+                <Select 
+                  value={formData.commitment_fee_basis} 
+                  onValueChange={(v) => handleChange('commitment_fee_basis', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="undrawn_only">Undrawn Only</SelectItem>
+                    <SelectItem value="total_commitment">Total Commitment</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 

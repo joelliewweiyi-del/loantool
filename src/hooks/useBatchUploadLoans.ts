@@ -162,12 +162,8 @@ export function validateAndParseLoans(rows: CSVLoanRow[]): {
       return;
     }
     
-    // Loan type validation
-    const loanType = row.loan_type?.trim()?.toLowerCase()?.replace(/\s+/g, '_') || 'term_loan';
-    if (!['term_loan', 'committed_facility'].includes(loanType)) {
-      errors.push({ row: rowNum, field: 'loan_type', message: 'Loan type must be "term_loan" or "committed_facility"' });
-      return;
-    }
+    // Loan type - simplified to always be term_loan
+    const loanType = 'term_loan';
     
     const parsedLoan: ParsedLoan = {
       loan_id: loanId,
