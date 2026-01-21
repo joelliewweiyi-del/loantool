@@ -238,11 +238,14 @@ function PeriodTableRow({
           {formatCurrency(period.openingPrincipal)}
         </td>
         <td className="py-4 px-4 text-right font-mono text-sm">
-          {period.principalDrawn > 0 ? (
-            <span className="text-green-600">+{formatCurrency(period.principalDrawn)}</span>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
+          {(() => {
+            const totalDraws = period.principalDrawn + period.feesInvoiced;
+            return totalDraws > 0 ? (
+              <span className="text-emerald-600">+{formatCurrency(totalDraws)}</span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            );
+          })()}
         </td>
         <td className="py-4 px-4 text-right font-mono text-sm text-muted-foreground">
           {formatPercent(period.openingRate, 2)}
