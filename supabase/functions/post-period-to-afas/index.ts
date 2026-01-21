@@ -58,7 +58,7 @@ serve(async (req) => {
           id,
           loan_name,
           borrower_name,
-          loan_number,
+          loan_id,
           interest_type,
           commitment_fee_rate,
           total_commitment
@@ -138,7 +138,7 @@ serve(async (req) => {
     }
 
     // Generate invoice number
-    const invoiceNumber = `INT-${loan.loan_number}-${period.period_end}`;
+    const invoiceNumber = `INT-${loan.loan_id}-${period.period_end}`;
     
     // Build description
     const description = `Interest ${period.period_start} - ${period.period_end} | ${loan.loan_name}`;
@@ -155,8 +155,8 @@ serve(async (req) => {
               .toISOString().split('T')[0], // Due date = 30 days later
             InNu: invoiceNumber,
             Ds: description,
-            // Link to debtor via loan_number
-            DbId: loan.loan_number,
+            // Link to debtor via loan_id
+            DbId: loan.loan_id,
           },
           Objects: {
             FiEntriesLines: {

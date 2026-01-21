@@ -26,7 +26,7 @@ export type CommitmentFeeBasis = 'undrawn_only' | 'total_commitment';
 
 export interface Loan {
   id: string;
-  loan_number: string;
+  loan_id: string;
   borrower_name: string;
   loan_name: string | null;
   status: LoanStatus;
