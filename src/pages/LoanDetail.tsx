@@ -390,8 +390,7 @@ export default function LoanDetail() {
                       // Filter out system events and correction pairs
                       const filtered = [...events || []]
                         .filter(event => {
-                          // Hide PIK capitalizations (interest is shown via accruals tab)
-                          if (event.event_type === 'pik_capitalization_posted') return false;
+                          // Show PIK capitalizations (interest charges) for approval
                           // Hide cash received (accounting entries, not economic events)
                           if (event.event_type === 'cash_received') return false;
                           // Hide correction/reversal entries
@@ -399,6 +398,10 @@ export default function LoanDetail() {
                           if (meta?.correction === true) return false;
                           // Hide entries that have been reversed by another event
                           if (reversedEventIds.has(event.id)) return false;
+                          // Hide auto-generated system events that are already approved
+                          if (event.event_type === 'pik_capitalization_posted' && 
+                              event.status === 'approved' && 
+                              meta?.auto_generated === true) return false;
                           return true;
                         })
                         .sort((a, b) => 
@@ -460,7 +463,9 @@ export default function LoanDetail() {
           <AccrualsTab 
             periodAccruals={periodAccruals} 
             summary={accrualsSummary} 
-            isLoading={accrualsLoading} 
+            isLoading={accrualsLoading}
+            loanId={id}
+            events={events}
           />
         </TabsContent>
 

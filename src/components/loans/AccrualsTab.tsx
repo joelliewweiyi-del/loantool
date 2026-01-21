@@ -3,25 +3,59 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency, formatDate, formatPercent } from '@/lib/format';
-import { PeriodStatus } from '@/types/loan';
+import { LoanEvent, PeriodStatus } from '@/types/loan';
 import { PeriodAccrual, AccrualsSummary, InterestSegment, DailyAccrual } from '@/lib/loanCalculations';
 import { StatusBadge } from './LoanStatusBadge';
+import { useCreateInterestChargeEvent } from '@/hooks/useLoans';
+import { useAuth } from '@/hooks/useAuth';
 import { 
   ChevronDown, 
   ChevronRight, 
   Calendar,
-  Wallet
+  Wallet,
+  ArrowUpRight
 } from 'lucide-react';
 
 interface AccrualsTabProps {
   periodAccruals: PeriodAccrual[];
   summary: AccrualsSummary;
   isLoading: boolean;
+  loanId?: string;
+  events?: LoanEvent[];
 }
 
-export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabProps) {
+export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events }: AccrualsTabProps) {
   const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(new Set());
   const [showDailyBreakdown, setShowDailyBreakdown] = useState<string | null>(null);
+  const createInterestCharge = useCreateInterestChargeEvent();
+  const { isController, isPM } = useAuth();
+
+  const canCreateInterestCharge = isPM || isController;
+
+  // Check if a period has an existing interest charge event (draft or approved)
+  const getInterestChargeStatus = (periodId: string): 'none' | 'draft' | 'approved' => {
+    if (!events) return 'none';
+    const chargeEvent = events.find(e => 
+      e.event_type === 'pik_capitalization_posted' &&
+      (e.metadata as Record<string, unknown>)?.period_id === periodId
+    );
+    if (!chargeEvent) return 'none';
+    return chargeEvent.status as 'draft' | 'approved';
+  };
+
+  const handleCreateInterestCharge = async (period: PeriodAccrual) => {
+    if (!loanId) return;
+    await createInterestCharge.mutateAsync({
+      loan_id: loanId,
+      period_id: period.periodId,
+      period_start: period.periodStart,
+      period_end: period.periodEnd,
+      interest_accrued: period.interestAccrued,
+      commitment_fee_accrued: period.commitmentFeeAccrued,
+      opening_principal: period.openingPrincipal,
+      closing_principal: period.closingPrincipal,
+    });
+  };
 
   const togglePeriod = (periodId: string) => {
     const newExpanded = new Set(expandedPeriods);
@@ -126,26 +160,34 @@ export function AccrualsTab({ periodAccruals, summary, isLoading }: AccrualsTabP
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Commit. Fee</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground bg-accent/30">Interest Charge</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground bg-primary/10">Closing</th>
+                    <th className="text-center py-3 px-4 font-semibold text-muted-foreground w-32">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {[...periodAccruals].sort((a, b) => 
                     new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
-                  ).map((period, index) => (
-                    <PeriodTableRow
-                      key={period.periodId}
-                      period={period}
-                      index={index}
-                      isExpanded={expandedPeriods.has(period.periodId)}
-                      onToggle={() => togglePeriod(period.periodId)}
-                      showDailyBreakdown={showDailyBreakdown === period.periodId}
-                      onToggleDailyBreakdown={() => 
-                        setShowDailyBreakdown(
-                          showDailyBreakdown === period.periodId ? null : period.periodId
-                        )
-                      }
-                    />
-                  ))}
+                  ).map((period, index) => {
+                    const chargeStatus = getInterestChargeStatus(period.periodId);
+                    return (
+                      <PeriodTableRow
+                        key={period.periodId}
+                        period={period}
+                        index={index}
+                        isExpanded={expandedPeriods.has(period.periodId)}
+                        onToggle={() => togglePeriod(period.periodId)}
+                        showDailyBreakdown={showDailyBreakdown === period.periodId}
+                        onToggleDailyBreakdown={() => 
+                          setShowDailyBreakdown(
+                            showDailyBreakdown === period.periodId ? null : period.periodId
+                          )
+                        }
+                        chargeStatus={chargeStatus}
+                        canCreateInterestCharge={canCreateInterestCharge}
+                        onCreateInterestCharge={() => handleCreateInterestCharge(period)}
+                        isCreatingCharge={createInterestCharge.isPending}
+                      />
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -185,6 +227,10 @@ interface PeriodTableRowProps {
   onToggle: () => void;
   showDailyBreakdown: boolean;
   onToggleDailyBreakdown: () => void;
+  chargeStatus: 'none' | 'draft' | 'approved';
+  canCreateInterestCharge: boolean;
+  onCreateInterestCharge: () => void;
+  isCreatingCharge: boolean;
 }
 
 function PeriodTableRow({ 
@@ -194,6 +240,10 @@ function PeriodTableRow({
   onToggle,
   showDailyBreakdown,
   onToggleDailyBreakdown,
+  chargeStatus,
+  canCreateInterestCharge,
+  onCreateInterestCharge,
+  isCreatingCharge,
 }: PeriodTableRowProps) {
   const getStatusBorderColor = (status: string) => {
     switch (status) {
@@ -204,6 +254,8 @@ function PeriodTableRow({
       default: return 'border-l-muted';
     }
   };
+
+  const totalCharge = period.interestAccrued + period.commitmentFeeAccrued;
 
   return (
     <>
@@ -257,16 +309,47 @@ function PeriodTableRow({
           {period.commitmentFeeAccrued > 0 ? formatCurrency(period.commitmentFeeAccrued) : '—'}
         </td>
         <td className="py-4 px-4 text-right font-mono text-sm font-bold bg-accent/30">
-          {formatCurrency(period.interestAccrued + period.commitmentFeeAccrued)}
+          <div className="flex items-center justify-end gap-2">
+            {formatCurrency(totalCharge)}
+            {chargeStatus === 'draft' && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">DRAFT</span>
+            )}
+            {chargeStatus === 'approved' && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">✓</span>
+            )}
+          </div>
         </td>
         <td className="py-4 px-4 text-right font-mono text-sm font-bold bg-primary/10">
           {formatCurrency(period.closingPrincipal)}
+        </td>
+        <td className="py-4 px-4 text-center">
+          {chargeStatus === 'none' && canCreateInterestCharge && totalCharge > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCreateInterestCharge();
+              }}
+              disabled={isCreatingCharge}
+              className="h-7 text-xs"
+            >
+              <ArrowUpRight className="h-3 w-3 mr-1" />
+              Roll Up
+            </Button>
+          )}
+          {chargeStatus === 'draft' && (
+            <span className="text-xs text-muted-foreground">Pending</span>
+          )}
+          {chargeStatus === 'approved' && (
+            <span className="text-xs text-muted-foreground">Rolled</span>
+          )}
         </td>
       </tr>
       
       {isExpanded && (
         <tr>
-          <td colSpan={11} className="p-0">
+          <td colSpan={12} className="p-0">
             <div className="bg-muted/30 border-b px-6 py-4 space-y-4">
               {/* Compact Summary Grid */}
               <div className="grid grid-cols-4 gap-4 text-xs">

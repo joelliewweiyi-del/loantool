@@ -146,7 +146,7 @@ export function useCreateLoan() {
           rate: null,
           status: 'approved',
           created_by: userId,
-          metadata: { auto_generated: true, description: 'Initial commitment' },
+          metadata: { auto_generated: true, description: 'Initial commitment' } as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
         });
       }
 
@@ -160,7 +160,7 @@ export function useCreateLoan() {
           rate: data.interest_rate,
           status: 'approved',
           created_by: userId,
-          metadata: { auto_generated: true, description: 'Initial rate' },
+          metadata: { auto_generated: true, description: 'Initial rate' } as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
         });
       }
 
@@ -174,7 +174,7 @@ export function useCreateLoan() {
           rate: null,
           status: 'approved',
           created_by: userId,
-          metadata: { auto_generated: true, description: 'Opening principal draw' },
+          metadata: { auto_generated: true, description: 'Opening principal draw' } as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
         });
       }
 
@@ -182,7 +182,8 @@ export function useCreateLoan() {
       if (foundingEvents.length > 0) {
         const { error: eventsError } = await supabase
           .from('loan_events')
-          .insert(foundingEvents);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .insert(foundingEvents as any);
         
         if (eventsError) {
           console.error('Failed to create founding events:', eventsError);
@@ -285,6 +286,81 @@ export function useApproveEvent() {
     onError: (error) => {
       toast({ 
         title: 'Failed to approve event', 
+        description: error.message,
+        variant: 'destructive' 
+      });
+    },
+  });
+}
+
+export function useCreateInterestChargeEvent() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (data: {
+      loan_id: string;
+      period_id: string;
+      period_start: string;
+      period_end: string;
+      interest_accrued: number;
+      commitment_fee_accrued: number;
+      opening_principal: number;
+      closing_principal: number;
+    }) => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error('Not authenticated');
+
+      const totalCharge = data.interest_accrued + data.commitment_fee_accrued;
+      
+      // Check if an interest charge event already exists for this period
+      const { data: existing } = await supabase
+        .from('loan_events')
+        .select('id')
+        .eq('loan_id', data.loan_id)
+        .eq('event_type', 'pik_capitalization_posted')
+        .contains('metadata', { period_id: data.period_id })
+        .maybeSingle();
+
+      if (existing) {
+        throw new Error('Interest charge event already exists for this period');
+      }
+
+      const { data: event, error } = await supabase
+        .from('loan_events')
+        .insert([{
+          loan_id: data.loan_id,
+          event_type: 'pik_capitalization_posted' as DbEventType,
+          effective_date: data.period_end,
+          amount: totalCharge,
+          rate: null,
+          status: 'draft' as DbEventStatus,
+          created_by: user.user.id,
+          requires_approval: true,
+          metadata: {
+            period_id: data.period_id,
+            period_start: data.period_start,
+            period_end: data.period_end,
+            interest_accrued: data.interest_accrued,
+            commitment_fee_accrued: data.commitment_fee_accrued,
+            opening_principal: data.opening_principal,
+            closing_principal: data.closing_principal,
+            day_count_convention: '30/360',
+          } as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
+        }])
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return event as LoanEvent;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['loan-events', variables.loan_id] });
+      toast({ title: 'Interest charge created for approval' });
+    },
+    onError: (error) => {
+      toast({ 
+        title: 'Failed to create interest charge', 
         description: error.message,
         variant: 'destructive' 
       });
