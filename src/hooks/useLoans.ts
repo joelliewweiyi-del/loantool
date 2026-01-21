@@ -267,6 +267,7 @@ export function useApproveEvent() {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error('Not authenticated');
 
+      // Approve the event
       const { error } = await supabase
         .from('loan_events')
         .update({ 
@@ -277,10 +278,56 @@ export function useApproveEvent() {
         .eq('id', eventId);
       
       if (error) throw error;
+
+      // Recalculate and update the loan's outstanding balance
+      // Fetch all approved events for this loan (including the newly approved one)
+      const { data: events, error: eventsError } = await supabase
+        .from('loan_events')
+        .select('*')
+        .eq('loan_id', loanId)
+        .eq('status', 'approved')
+        .order('effective_date', { ascending: true });
+
+      if (eventsError) throw eventsError;
+
+      // Calculate new outstanding balance by replaying events
+      let outstanding = 0;
+      for (const event of events || []) {
+        switch (event.event_type) {
+          case 'principal_draw':
+            outstanding += event.amount || 0;
+            break;
+          case 'principal_repayment':
+            outstanding -= event.amount || 0;
+            outstanding = Math.max(0, outstanding);
+            break;
+          case 'pik_capitalization_posted':
+            outstanding += event.amount || 0;
+            break;
+          case 'fee_invoice':
+            // PIK fees are capitalized
+            const meta = event.metadata as Record<string, unknown>;
+            if (meta?.payment_type === 'pik') {
+              outstanding += event.amount || 0;
+            }
+            break;
+        }
+      }
+
+      // Update the loan's outstanding balance
+      const { error: updateError } = await supabase
+        .from('loans')
+        .update({ outstanding, updated_at: new Date().toISOString() })
+        .eq('id', loanId);
+
+      if (updateError) throw updateError;
+
       return { eventId, loanId };
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['loan-events', variables.loanId] });
+      queryClient.invalidateQueries({ queryKey: ['loans', variables.loanId] });
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
       toast({ title: 'Event approved successfully' });
     },
     onError: (error) => {
