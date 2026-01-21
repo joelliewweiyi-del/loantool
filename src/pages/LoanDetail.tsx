@@ -415,12 +415,20 @@ export default function LoanDetail() {
                         const meta = event.metadata as Record<string, unknown> | null;
                         const description = meta?.description as string | undefined;
                         
+                        // Special description for fee invoices that were withheld from principal
+                        const getEventDescription = () => {
+                          if (event.event_type === 'fee_invoice' && meta?.adjustment_type === 'fee_split') {
+                            return 'Arrangement fee (withheld from borrower)';
+                          }
+                          return description || '—';
+                        };
+                        
                         return (
                           <tr key={event.id}>
                             <td className="font-mono">{formatDate(event.effective_date)}</td>
                             <td>{formatEventType(event.event_type)}</td>
                             <td className="text-muted-foreground text-sm max-w-[200px] truncate">
-                              {description || '—'}
+                              {getEventDescription()}
                             </td>
                             <td className="numeric">{formatCurrency(event.amount)}</td>
                             <td className="numeric">{formatPercent(event.rate)}</td>
