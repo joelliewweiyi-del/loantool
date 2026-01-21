@@ -149,7 +149,7 @@ export function CreateLoanDialog() {
                 </div>
               )}
               <div className="space-y-2">
-                <Label htmlFor="loan_number">Loan ID *</Label>
+                <Label htmlFor="loan_number">Loan_ID *</Label>
                 <Input
                   id="loan_number"
                   value={formData.loan_number}
