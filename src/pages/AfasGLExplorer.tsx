@@ -339,10 +339,14 @@ function LoanReconciliationPanel({
       ? rawData 
       : ((rawData as AfasRows)?.rows || []);
     
-    // Group AFAS transactions by DimAx1 (loan ID)
+    // Group AFAS transactions by DimAx1 (loan ID), filtered to AccountNo 1751 only
     const afasGrouped = new Map<string, { credits: number; debits: number; net: number; count: number }>();
     
     for (const tx of records) {
+      // Filter to only include AccountNo 1751 (loan receivables)
+      const accountNo = String(tx.AccountNo || tx.AccNo || '');
+      if (accountNo !== '1751') continue;
+      
       const loanId = tx.DimAx1 as string | undefined;
       if (!loanId || loanId === '' || loanId === '0') continue;
       
