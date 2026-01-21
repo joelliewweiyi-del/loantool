@@ -1,5 +1,5 @@
 import { LoanEvent, Period, InterestType } from '@/types/loan';
-import { daysBetween } from './format';
+import { daysBetween30360 } from './format';
 
 /**
  * Represents the state of a loan at a specific point in time.
@@ -324,7 +324,7 @@ export function calculateInterestSegments(
     segmentEnd.setDate(segmentEnd.getDate() - 1);
     
     if (new Date(segmentStart) <= segmentEnd) {
-      const days = daysBetween(segmentStart, segmentEnd.toISOString().split('T')[0]) + 1;
+      const days = daysBetween30360(segmentStart, segmentEnd.toISOString().split('T')[0]);
       const interest = currentState.outstandingPrincipal * currentState.currentRate * (days / 360);
       
       segments.push({
@@ -344,7 +344,7 @@ export function calculateInterestSegments(
   }
   
   // Close final segment
-  const days = daysBetween(segmentStart, endDate) + 1;
+  const days = daysBetween30360(segmentStart, endDate);
   if (days > 0) {
     const interest = currentState.outstandingPrincipal * currentState.currentRate * (days / 360);
     
@@ -407,7 +407,7 @@ export function calculateCommitmentFeeSegments(
     segmentEnd.setDate(segmentEnd.getDate() - 1);
     
     if (new Date(segmentStart) <= segmentEnd) {
-      const days = daysBetween(segmentStart, segmentEnd.toISOString().split('T')[0]) + 1;
+      const days = daysBetween30360(segmentStart, segmentEnd.toISOString().split('T')[0]);
       const fee = currentState.undrawnCommitment * feeRate * (days / 360);
       
       segments.push({
@@ -427,7 +427,7 @@ export function calculateCommitmentFeeSegments(
   }
   
   // Close final segment
-  const days = daysBetween(segmentStart, endDate) + 1;
+  const days = daysBetween30360(segmentStart, endDate);
   if (days > 0) {
     const fee = currentState.undrawnCommitment * feeRate * (days / 360);
     
@@ -458,7 +458,7 @@ export function calculatePeriodAccruals(
   const sortedEvents = sortEventsByDate(events);
   const periodStart = period.period_start;
   const periodEnd = period.period_end;
-  const days = daysBetween(periodStart, periodEnd) + 1;
+  const days = daysBetween30360(periodStart, periodEnd);
   
   // Get opening state (day before period start)
   const dayBefore = new Date(periodStart);
