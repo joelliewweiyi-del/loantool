@@ -123,12 +123,6 @@ export function validateAndParseLoans(rows: CSVLoanRow[]): {
   rows.forEach((row, index) => {
     const rowNum = index + 2; // +2 for header row and 0-indexing
     
-    // Required field validation
-    if (!row.borrower_name?.trim()) {
-      errors.push({ row: rowNum, field: 'borrower_name', message: 'Borrower name is required' });
-      return;
-    }
-    
     // Start date is required
     const startDate = parseDate(row.loan_start_date);
     if (!startDate) {
@@ -171,7 +165,7 @@ export function validateAndParseLoans(rows: CSVLoanRow[]): {
     }
     
     const parsedLoan: ParsedLoan = {
-      borrower_name: row.borrower_name.trim(),
+      borrower_name: row.borrower_name?.trim() || '',
       loan_name: row.loan_name?.trim() || null,
       vehicle,
       facility: row.facility?.trim() || null,
