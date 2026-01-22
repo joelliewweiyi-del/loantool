@@ -204,6 +204,7 @@ export function useCreateLoan() {
 
       // Insert all founding events
       if (foundingEvents.length > 0) {
+        console.log('Creating founding events:', foundingEvents);
         const { error: eventsError } = await supabase
           .from('loan_events')
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -211,7 +212,7 @@ export function useCreateLoan() {
         
         if (eventsError) {
           console.error('Failed to create founding events:', eventsError);
-          // Don't throw - loan was created, just events failed
+          throw new Error(`Loan created but founding events failed: ${eventsError.message}`);
         }
       }
 
