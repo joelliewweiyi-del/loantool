@@ -262,25 +262,25 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
             <div className="text-center flex-1 space-y-1">
               {totalDraws > 0 && (
                 <div className="flex items-center justify-center gap-1">
-                  <span className="font-mono text-sm text-emerald-600">+{formatCurrency(totalDraws)}</span>
+                  <span className="font-mono text-sm">+{formatCurrency(totalDraws)}</span>
                   <span className="text-xs text-muted-foreground">Drawdowns</span>
                 </div>
               )}
               {totalRepayments > 0 && (
                 <div className="flex items-center justify-center gap-1">
-                  <span className="font-mono text-sm text-destructive">-{formatCurrency(totalRepayments)}</span>
+                  <span className="font-mono text-sm">-{formatCurrency(totalRepayments)}</span>
                   <span className="text-xs text-muted-foreground">Repayments</span>
                 </div>
               )}
               {totalFees > 0 && isPik && (
                 <div className="flex items-center justify-center gap-1">
-                  <span className="font-mono text-sm text-emerald-600">+{formatCurrency(totalFees)}</span>
+                  <span className="font-mono text-sm">+{formatCurrency(totalFees)}</span>
                   <span className="text-xs text-muted-foreground">Fees Capitalised</span>
                 </div>
               )}
               {isPik && interestCharge > 0 && (
                 <div className="flex items-center justify-center gap-1">
-                  <span className="font-mono text-sm text-amber-600">+{formatCurrency(interestCharge)}</span>
+                  <span className="font-mono text-sm">+{formatCurrency(interestCharge)}</span>
                   <span className="text-xs text-muted-foreground">Interest Capitalised</span>
                 </div>
               )}
@@ -366,13 +366,7 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
                       </td>
                       <td className="text-right font-mono py-2">
                         {event.amount ? (
-                          <span className={
-                            event.event_type === 'principal_repayment' 
-                              ? 'text-destructive' 
-                              : event.event_type === 'principal_draw' || event.event_type === 'pik_capitalization_posted'
-                                ? 'text-emerald-600'
-                                : ''
-                          }>
+                          <span>
                             {event.event_type === 'principal_repayment' ? '-' : ''}
                             {formatCurrency(event.amount)}
                           </span>
