@@ -684,6 +684,7 @@ export type Database = {
         Args: { p_event_id: string; p_new_metadata: Json }
         Returns: undefined
       }
+      admin_delete_loan: { Args: { p_loan_id: string }; Returns: undefined }
       calculate_principal_balance: {
         Args: { p_as_of_date?: string; p_loan_id: string }
         Returns: number
