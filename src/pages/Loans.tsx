@@ -93,30 +93,12 @@ export default function Loans() {
 
       {/* Portfolio Metrics Bar */}
       <div className="grid grid-cols-6 gap-6 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Principal</div>
-          <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(totalPrincipal)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Commitment</div>
-          <div className="text-lg font-semibold font-mono">{formatCurrency(totalCommitment)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Undrawn</div>
-          <div className="text-lg font-semibold font-mono text-green-600">{formatCurrency(totalUndrawn)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Avg Rate (Wtd)</div>
-          <div className="text-lg font-semibold font-mono">{formatPercent(avgRate, 2)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Active Loans</div>
-          <div className="text-lg font-semibold font-mono">{activeLoans.length}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">PIK Loans</div>
-          <div className="text-lg font-semibold font-mono text-amber-600">{pikLoansCount}</div>
-        </div>
+        <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(totalPrincipal)}</div>
+        <div className="text-lg font-semibold font-mono">{formatCurrency(totalCommitment)}</div>
+        <div className="text-lg font-semibold font-mono text-green-600">{formatCurrency(totalUndrawn)}</div>
+        <div className="text-lg font-semibold font-mono">{formatPercent(avgRate, 2)}</div>
+        <div className="text-lg font-semibold font-mono">{activeLoans.length}</div>
+        <div className="text-lg font-semibold font-mono text-amber-600">{pikLoansCount}</div>
       </div>
 
       <Card>
