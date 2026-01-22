@@ -7,21 +7,26 @@ import { startOfMonth, endOfMonth, addMonths, format, parseISO, isBefore, isAfte
 
 type DbEventType = Database['public']['Enums']['event_type'];
 
-// Generate monthly periods from start date to end date (or today if no maturity)
+// Generate monthly periods from start date up to current month (never beyond today)
 function generateMonthlyPeriods(
   loanId: string,
   startDate: string,
-  endDate?: string | null
+  maturityDate?: string | null
 ): Database['public']['Tables']['periods']['Insert'][] {
   const periods: Database['public']['Tables']['periods']['Insert'][] = [];
   
   const start = parseISO(startDate);
-  const end = endDate ? parseISO(endDate) : new Date(); // Default to today if no maturity
+  const today = new Date();
+  const maturity = maturityDate ? parseISO(maturityDate) : null;
+  
+  // Cap at end of current month - never generate future periods
+  const endOfCurrentMonth = endOfMonth(today);
+  const effectiveEnd = maturity && isBefore(maturity, endOfCurrentMonth) ? maturity : endOfCurrentMonth;
   
   // Start from the first day of the start month
   let currentMonthStart = startOfMonth(start);
   
-  while (isBefore(currentMonthStart, end) || format(currentMonthStart, 'yyyy-MM') === format(end, 'yyyy-MM')) {
+  while (isBefore(currentMonthStart, effectiveEnd) || format(currentMonthStart, 'yyyy-MM') === format(effectiveEnd, 'yyyy-MM')) {
     const monthEnd = endOfMonth(currentMonthStart);
     
     // Period start: use actual loan start date for first period, otherwise 1st of month
@@ -30,8 +35,8 @@ function generateMonthlyPeriods(
       : format(currentMonthStart, 'yyyy-MM-dd');
     
     // Period end: use maturity date if it falls within this month, otherwise end of month
-    const periodEnd = endDate && isBefore(parseISO(endDate), monthEnd)
-      ? endDate
+    const periodEnd = maturityDate && isBefore(parseISO(maturityDate), monthEnd)
+      ? maturityDate
       : format(monthEnd, 'yyyy-MM-dd');
     
     periods.push({
