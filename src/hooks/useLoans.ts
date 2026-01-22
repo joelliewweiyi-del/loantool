@@ -414,3 +414,58 @@ export function useCreateInterestChargeEvent() {
     },
   });
 }
+
+export function useDeleteLoan() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (loanId: string) => {
+      // Delete in order: accrual_entries, notice_snapshots, periods, loan_events, loans
+      // Due to foreign key constraints
+      
+      const { error: accrualsError } = await supabase
+        .from('accrual_entries')
+        .delete()
+        .eq('loan_id', loanId);
+      if (accrualsError) throw new Error(`Failed to delete accruals: ${accrualsError.message}`);
+
+      const { error: snapshotsError } = await supabase
+        .from('notice_snapshots')
+        .delete()
+        .eq('loan_id', loanId);
+      if (snapshotsError) throw new Error(`Failed to delete snapshots: ${snapshotsError.message}`);
+
+      const { error: periodsError } = await supabase
+        .from('periods')
+        .delete()
+        .eq('loan_id', loanId);
+      if (periodsError) throw new Error(`Failed to delete periods: ${periodsError.message}`);
+
+      const { error: eventsError } = await supabase
+        .from('loan_events')
+        .delete()
+        .eq('loan_id', loanId);
+      if (eventsError) throw new Error(`Failed to delete events: ${eventsError.message}`);
+
+      const { error: loanError } = await supabase
+        .from('loans')
+        .delete()
+        .eq('id', loanId);
+      if (loanError) throw new Error(`Failed to delete loan: ${loanError.message}`);
+
+      return loanId;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      toast({ title: 'Loan deleted successfully' });
+    },
+    onError: (error) => {
+      toast({ 
+        title: 'Failed to delete loan', 
+        description: error.message,
+        variant: 'destructive' 
+      });
+    },
+  });
+}
