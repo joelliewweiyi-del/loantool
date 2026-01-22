@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useLoan, useLoanEvents, useLoanPeriods, useLoanFacilities, useCreateLoanEvent, useApproveEvent } from '@/hooks/useLoans';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useLoan, useLoanEvents, useLoanPeriods, useLoanFacilities, useCreateLoanEvent, useApproveEvent, useDeleteLoan } from '@/hooks/useLoans';
 import { useAccruals } from '@/hooks/useAccruals';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/loans/LoanStatusBadge';
 import { AccrualsTab } from '@/components/loans/AccrualsTab';
@@ -24,7 +25,8 @@ import {
   Clock,
   Landmark,
   TrendingUp,
-  Mail
+  Mail,
+  Trash2
 } from 'lucide-react';
 
 const eventTypes: EventType[] = [
@@ -42,14 +44,16 @@ const eventTypes: EventType[] = [
 
 export default function LoanDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { data: loan, isLoading: loanLoading } = useLoan(id);
   const { data: events, isLoading: eventsLoading } = useLoanEvents(id);
   const { data: periods } = useLoanPeriods(id);
   const { data: facilities } = useLoanFacilities(id);
   const { periodAccruals, summary: accrualsSummary, isLoading: accrualsLoading } = useAccruals(id);
-  const { user, isController, isPM } = useAuth();
+  const { user, isController, isPM, isAdmin } = useAuth();
   const createEvent = useCreateLoanEvent();
   const approveEvent = useApproveEvent();
+  const deleteLoan = useDeleteLoan();
 
   const [isEventOpen, setIsEventOpen] = useState(false);
   const [eventType, setEventType] = useState<EventType>('principal_draw');
@@ -107,6 +111,12 @@ export default function LoanDetail() {
     await approveEvent.mutateAsync({ eventId, loanId: id });
   };
 
+  const handleDeleteLoan = async () => {
+    if (!id) return;
+    await deleteLoan.mutateAsync(id);
+    navigate('/loans');
+  };
+
   if (loanLoading) {
     return (
       <div className="p-6 space-y-6">
@@ -157,6 +167,40 @@ export default function LoanDetail() {
             </p>
           </div>
         </div>
+        {isAdmin && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm">
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Loan
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Loan Permanently?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete <strong>{loan.borrower_name}</strong> ({(loan as any).loan_id}) and all associated data including:
+                  <ul className="list-disc list-inside mt-2 space-y-1">
+                    <li>All loan events ({events?.length || 0} events)</li>
+                    <li>All periods and accruals</li>
+                    <li>All notice snapshots</li>
+                  </ul>
+                  <p className="mt-3 font-semibold text-destructive">This action cannot be undone.</p>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={handleDeleteLoan}
+                  disabled={deleteLoan.isPending}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deleteLoan.isPending ? 'Deleting...' : 'Delete Permanently'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       {/* Key Loan Metrics Bar */}
