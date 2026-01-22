@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/loans/LoanStatusBadge';
+import { EditLoanDialog } from '@/components/loans/EditLoanDialog';
 import { AccrualsTab } from '@/components/loans/AccrualsTab';
 import { NoticePreviewTab } from '@/components/loans/NoticePreviewTab';
 import { formatCurrency, formatDate, formatDateTime, formatPercent, formatEventType } from '@/lib/format';
@@ -167,40 +168,43 @@ export default function LoanDetail() {
             </p>
           </div>
         </div>
-        {isAdmin && (
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive" size="sm">
-                <Trash2 className="h-4 w-4 mr-2" />
-                Delete Loan
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete Loan Permanently?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This will permanently delete <strong>{loan.borrower_name}</strong> ({(loan as any).loan_id}) and all associated data including:
-                  <ul className="list-disc list-inside mt-2 space-y-1">
-                    <li>All loan events ({events?.length || 0} events)</li>
-                    <li>All periods and accruals</li>
-                    <li>All notice snapshots</li>
-                  </ul>
-                  <p className="mt-3 font-semibold text-destructive">This action cannot be undone.</p>
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction 
-                  onClick={handleDeleteLoan}
-                  disabled={deleteLoan.isPending}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  {deleteLoan.isPending ? 'Deleting...' : 'Delete Permanently'}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        )}
+        <div className="flex items-center gap-2">
+          <EditLoanDialog loan={loan} />
+          {isAdmin && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Loan
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Loan Permanently?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will permanently delete <strong>{loan.borrower_name}</strong> ({(loan as any).loan_id}) and all associated data including:
+                    <ul className="list-disc list-inside mt-2 space-y-1">
+                      <li>All loan events ({events?.length || 0} events)</li>
+                      <li>All periods and accruals</li>
+                      <li>All notice snapshots</li>
+                    </ul>
+                    <p className="mt-3 font-semibold text-destructive">This action cannot be undone.</p>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleDeleteLoan}
+                    disabled={deleteLoan.isPending}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {deleteLoan.isPending ? 'Deleting...' : 'Delete Permanently'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+        </div>
       </div>
 
       {/* Key Loan Metrics Bar */}

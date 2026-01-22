@@ -536,3 +536,56 @@ export function useDeleteLoan() {
     },
   });
 }
+
+export function useUpdateLoan() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (data: {
+      id: string;
+      borrower_name?: string;
+      loan_start_date?: string | null;
+      maturity_date?: string | null;
+      interest_rate?: number | null;
+      interest_type?: string;
+      total_commitment?: number | null;
+      commitment_fee_rate?: number | null;
+      commitment_fee_basis?: string;
+      notice_frequency?: string;
+      payment_due_rule?: string | null;
+      vehicle?: string;
+      facility?: string | null;
+      city?: string | null;
+      category?: string | null;
+      remarks?: string | null;
+    }) => {
+      const { id, ...updates } = data;
+      
+      const { data: updatedLoan, error } = await supabase
+        .from('loans')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return updatedLoan as Loan;
+    },
+    onSuccess: (loan) => {
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      queryClient.invalidateQueries({ queryKey: ['loans', loan.id] });
+      toast({ title: 'Loan updated successfully' });
+    },
+    onError: (error) => {
+      toast({ 
+        title: 'Failed to update loan', 
+        description: error.message,
+        variant: 'destructive' 
+      });
+    },
+  });
+}
