@@ -8,6 +8,7 @@ import { LoanEvent, PeriodStatus, InterestType } from '@/types/loan';
 import { PeriodAccrual, AccrualsSummary, InterestSegment, DailyAccrual } from '@/lib/loanCalculations';
 import { StatusBadge } from './LoanStatusBadge';
 import { useCreateInterestChargeEvent } from '@/hooks/useLoans';
+import { useTriggerDailyAccruals } from '@/hooks/useMonthlyApproval';
 import { useAuth } from '@/hooks/useAuth';
 import { 
   ChevronDown, 
@@ -17,7 +18,8 @@ import {
   Info,
   Clock,
   CheckCircle2,
-  CircleDashed
+  CircleDashed,
+  RefreshCw
 } from 'lucide-react';
 import {
   Tooltip,
@@ -39,6 +41,7 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events
   const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(new Set());
   const [showDailyBreakdown, setShowDailyBreakdown] = useState<string | null>(null);
   const createInterestCharge = useCreateInterestChargeEvent();
+  const triggerAccruals = useTriggerDailyAccruals();
   const { isController, isPM } = useAuth();
 
   const isPik = interestType === 'pik';
@@ -162,9 +165,20 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, events
                 <span>· Click row to expand</span>
               </CardDescription>
             </div>
-            <Badge variant={isPik ? 'default' : 'secondary'} className="text-xs">
-              {isPik ? 'PIK Loan' : 'Cash Pay'}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => triggerAccruals.mutate(undefined)}
+                disabled={triggerAccruals.isPending}
+              >
+                <RefreshCw className={`h-4 w-4 mr-1.5 ${triggerAccruals.isPending ? 'animate-spin' : ''}`} />
+                {triggerAccruals.isPending ? 'Generating...' : 'Generate Accruals'}
+              </Button>
+              <Badge variant={isPik ? 'default' : 'secondary'} className="text-xs">
+                {isPik ? 'PIK Loan' : 'Cash Pay'}
+              </Badge>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
