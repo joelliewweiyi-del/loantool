@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useLoans } from '@/hooks/useLoans';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,7 @@ export default function Loans() {
   const {
     roles
   } = useAuth();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const canCreate = roles.includes('pm') || roles.includes('controller');
   const handleVehicleChange = (vehicle: string) => {
@@ -149,7 +150,7 @@ export default function Loans() {
                 </tr>
               </thead>
               <tbody>
-                {filteredLoans.map(loan => <tr key={loan.id}>
+                {filteredLoans.map(loan => <tr key={loan.id} onDoubleClick={() => navigate(`/loans/${loan.id}`)} className="cursor-pointer">
                     <td className="font-mono font-medium">{(loan as any).loan_id || '—'}</td>
                     {activeVehicle === 'TLF' && <td>
                         <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
