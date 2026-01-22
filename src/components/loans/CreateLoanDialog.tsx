@@ -27,6 +27,8 @@ interface LoanFormData {
   total_commitment: string;
   commitment_fee_rate: string;
   commitment_fee_basis: CommitmentFeeBasis;
+  // Fees
+  arrangement_fee: string;
   // Payments & Notices
   notice_frequency: string;
   payment_due_rule: string;
@@ -47,6 +49,7 @@ const initialFormData: LoanFormData = {
   total_commitment: '',
   commitment_fee_rate: '',
   commitment_fee_basis: 'undrawn_only',
+  arrangement_fee: '',
   notice_frequency: 'monthly',
   payment_due_rule: '',
 };
@@ -79,6 +82,7 @@ export function CreateLoanDialog() {
       facility: formData.vehicle === 'TLF' ? formData.facility || null : null,
       city: formData.city || null,
       category: formData.category || null,
+      arrangement_fee: formData.arrangement_fee ? parseFloat(formData.arrangement_fee) : null,
     };
 
     await createLoan.mutateAsync(payload);
@@ -290,6 +294,33 @@ export function CreateLoanDialog() {
                     <SelectItem value="total_commitment">Total Commitment</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Fees Section */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Fees
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="arrangement_fee">Arrangement Fee (EUR)</Label>
+                <Input
+                  id="arrangement_fee"
+                  type="number"
+                  step="0.01"
+                  value={formData.arrangement_fee}
+                  onChange={(e) => handleChange('arrangement_fee', e.target.value)}
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {formData.interest_type === 'pik' 
+                    ? 'Will be capitalised into principal' 
+                    : 'Will be withheld from borrower'}
+                </p>
               </div>
             </div>
           </div>
