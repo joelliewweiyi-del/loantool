@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Plus } from 'lucide-react';
 import { useCreateLoan } from '@/hooks/useLoans';
-import { InterestType, CommitmentFeeBasis } from '@/types/loan';
+import { InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
 
 interface LoanFormData {
   // Identity
@@ -19,9 +19,11 @@ interface LoanFormData {
   facility: string;
   city: string;
   category: string;
-  // Interest
+  // Payment Types
   interest_rate: string;
-  interest_type: InterestType;
+  interest_type: InterestType; // Legacy field - keep for backward compatibility
+  fee_payment_type: PaymentType;
+  interest_payment_type: PaymentType;
   // Structure
   outstanding: string;
   total_commitment: string;
@@ -45,6 +47,8 @@ const initialFormData: LoanFormData = {
   category: '',
   interest_rate: '',
   interest_type: 'cash_pay',
+  fee_payment_type: 'pik',
+  interest_payment_type: 'cash',
   outstanding: '',
   total_commitment: '',
   commitment_fee_rate: '',
@@ -70,7 +74,9 @@ export function CreateLoanDialog() {
       loan_start_date: formData.loan_start_date || null,
       maturity_date: formData.maturity_date || null,
       interest_rate: formData.interest_rate ? parseFloat(formData.interest_rate) / 100 : null,
-      interest_type: formData.interest_type,
+      interest_type: formData.interest_payment_type === 'pik' ? 'pik' : 'cash_pay', // Derive legacy field
+      fee_payment_type: formData.fee_payment_type,
+      interest_payment_type: formData.interest_payment_type,
       outstanding: formData.outstanding ? parseFloat(formData.outstanding) : null,
       total_commitment: formData.total_commitment ? parseFloat(formData.total_commitment) : null,
       commitment_fee_rate: formData.commitment_fee_rate ? parseFloat(formData.commitment_fee_rate) / 100 : null,
@@ -203,12 +209,12 @@ export function CreateLoanDialog() {
 
           <Separator />
 
-          {/* Interest Section */}
+          {/* Payment Types Section */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Interest
+              Payment Types
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="interest_rate">Interest Rate (%)</Label>
                 <Input
@@ -221,19 +227,44 @@ export function CreateLoanDialog() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Interest Type</Label>
+                <Label>Interest Payments</Label>
                 <Select 
-                  value={formData.interest_type} 
-                  onValueChange={(v) => handleChange('interest_type', v)}
+                  value={formData.interest_payment_type} 
+                  onValueChange={(v) => handleChange('interest_payment_type', v)}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cash_pay">Cash Pay</SelectItem>
+                    <SelectItem value="cash">Cash (Invoiced)</SelectItem>
                     <SelectItem value="pik">PIK (Capitalized)</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  {formData.interest_payment_type === 'pik' 
+                    ? 'Monthly interest rolled into principal' 
+                    : 'Monthly interest invoiced for payment'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Arrangement Fees</Label>
+                <Select 
+                  value={formData.fee_payment_type} 
+                  onValueChange={(v) => handleChange('fee_payment_type', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pik">PIK (Capitalized)</SelectItem>
+                    <SelectItem value="cash">Cash (Withheld)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {formData.fee_payment_type === 'pik' 
+                    ? 'Fees added to principal balance' 
+                    : 'Fees withheld from initial funding'}
+                </p>
               </div>
             </div>
           </div>
@@ -321,7 +352,7 @@ export function CreateLoanDialog() {
                   placeholder="0.00"
                 />
                 <p className="text-xs text-muted-foreground">
-                  {formData.interest_type === 'pik' 
+                  {formData.fee_payment_type === 'pik' 
                     ? 'Will be capitalised into principal' 
                     : 'Will be withheld from borrower'}
                 </p>

@@ -349,7 +349,9 @@ export type Database = {
           commitment_fee_rate: number | null
           created_at: string
           facility: string | null
+          fee_payment_type: string
           id: string
+          interest_payment_type: string
           interest_rate: number | null
           interest_type: string
           loan_id: string
@@ -376,7 +378,9 @@ export type Database = {
           commitment_fee_rate?: number | null
           created_at?: string
           facility?: string | null
+          fee_payment_type?: string
           id?: string
+          interest_payment_type?: string
           interest_rate?: number | null
           interest_type?: string
           loan_id: string
@@ -403,7 +407,9 @@ export type Database = {
           commitment_fee_rate?: number | null
           created_at?: string
           facility?: string | null
+          fee_payment_type?: string
           id?: string
+          interest_payment_type?: string
           interest_rate?: number | null
           interest_type?: string
           loan_id?: string

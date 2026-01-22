@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Pencil } from 'lucide-react';
 import { useUpdateLoan } from '@/hooks/useLoans';
-import { Loan, InterestType, CommitmentFeeBasis } from '@/types/loan';
+import { Loan, InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
 
 interface EditLoanDialogProps {
   loan: Loan;
@@ -23,6 +23,8 @@ interface LoanFormData {
   category: string;
   interest_rate: string;
   interest_type: InterestType;
+  fee_payment_type: PaymentType;
+  interest_payment_type: PaymentType;
   total_commitment: string;
   commitment_fee_rate: string;
   commitment_fee_basis: CommitmentFeeBasis;
@@ -45,6 +47,8 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
     category: '',
     interest_rate: '',
     interest_type: 'cash_pay',
+    fee_payment_type: 'pik',
+    interest_payment_type: 'cash',
     total_commitment: '',
     commitment_fee_rate: '',
     commitment_fee_basis: 'undrawn_only',
@@ -66,6 +70,8 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
         category: loan.category || '',
         interest_rate: loan.interest_rate != null ? (loan.interest_rate * 100).toString() : '',
         interest_type: (loan.interest_type as InterestType) || 'cash_pay',
+        fee_payment_type: ((loan as any).fee_payment_type as PaymentType) || 'pik',
+        interest_payment_type: ((loan as any).interest_payment_type as PaymentType) || 'cash',
         total_commitment: loan.total_commitment != null ? loan.total_commitment.toString() : '',
         commitment_fee_rate: loan.commitment_fee_rate != null ? (loan.commitment_fee_rate * 100).toString() : '',
         commitment_fee_basis: (loan.commitment_fee_basis as CommitmentFeeBasis) || 'undrawn_only',
@@ -87,7 +93,9 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
       loan_start_date: formData.loan_start_date || null,
       maturity_date: formData.maturity_date || null,
       interest_rate: formData.interest_rate ? parseFloat(formData.interest_rate) / 100 : null,
-      interest_type: formData.interest_type,
+      interest_type: formData.interest_payment_type === 'pik' ? 'pik' : 'cash_pay',
+      fee_payment_type: formData.fee_payment_type,
+      interest_payment_type: formData.interest_payment_type,
       total_commitment: formData.total_commitment ? parseFloat(formData.total_commitment) : null,
       commitment_fee_rate: formData.commitment_fee_rate ? parseFloat(formData.commitment_fee_rate) / 100 : null,
       commitment_fee_basis: formData.commitment_fee_basis,
@@ -205,12 +213,12 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
 
           <Separator />
 
-          {/* Interest Section */}
+          {/* Payment Types Section */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Interest
+              Payment Types
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="interest_rate">Interest Rate (%)</Label>
                 <Input
@@ -223,19 +231,44 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Interest Type</Label>
+                <Label>Interest Payments</Label>
                 <Select 
-                  value={formData.interest_type} 
-                  onValueChange={(v) => handleChange('interest_type', v)}
+                  value={formData.interest_payment_type} 
+                  onValueChange={(v) => handleChange('interest_payment_type', v)}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cash_pay">Cash Pay</SelectItem>
+                    <SelectItem value="cash">Cash (Invoiced)</SelectItem>
                     <SelectItem value="pik">PIK (Capitalized)</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  {formData.interest_payment_type === 'pik' 
+                    ? 'Monthly interest rolled into principal' 
+                    : 'Monthly interest invoiced for payment'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Arrangement Fees</Label>
+                <Select 
+                  value={formData.fee_payment_type} 
+                  onValueChange={(v) => handleChange('fee_payment_type', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pik">PIK (Capitalized)</SelectItem>
+                    <SelectItem value="cash">Cash (Withheld)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {formData.fee_payment_type === 'pik' 
+                    ? 'Fees added to principal balance' 
+                    : 'Fees withheld from initial funding'}
+                </p>
               </div>
             </div>
           </div>

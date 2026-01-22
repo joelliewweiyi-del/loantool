@@ -158,6 +158,8 @@ export function useCreateLoan() {
       maturity_date?: string | null;
       interest_rate?: number | null;
       interest_type?: string;
+      fee_payment_type?: string;
+      interest_payment_type?: string;
       outstanding?: number | null;
       total_commitment?: number | null;
       commitment_fee_rate?: number | null;
@@ -188,6 +190,7 @@ export function useCreateLoan() {
       // Auto-generate founding events based on loan creation data
       const effectiveDate = loanData.loan_start_date || new Date().toISOString().split('T')[0];
       const isPikLoan = loanData.interest_type === 'pik';
+      const isFeeCapitalized = loanData.fee_payment_type === 'pik';
 
       // Use the create_founding_event RPC function to bypass RLS for approved founding events
       const createFoundingEvent = async (
@@ -247,8 +250,8 @@ export function useCreateLoan() {
           { 
             auto_generated: true, 
             fee_type: 'arrangement',
-            payment_type: isPikLoan ? 'pik' : 'cash',
-            description: isPikLoan ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)'
+            payment_type: isFeeCapitalized ? 'pik' : 'cash',
+            description: isFeeCapitalized ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)'
           }
         );
       }
@@ -540,6 +543,8 @@ export function useUpdateLoan() {
       maturity_date?: string | null;
       interest_rate?: number | null;
       interest_type?: string;
+      fee_payment_type?: string;
+      interest_payment_type?: string;
       total_commitment?: number | null;
       commitment_fee_rate?: number | null;
       commitment_fee_basis?: string;
