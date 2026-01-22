@@ -40,6 +40,15 @@ export interface Loan {
   total_commitment: number | null;
   commitment_fee_rate: number | null;
   commitment_fee_basis: CommitmentFeeBasis | null;
+  vehicle: string | null;
+  facility: string | null;
+  city: string | null;
+  category: string | null;
+  remarks: string | null;
+  valuation: number | null;
+  valuation_date: string | null;
+  ltv: number | null;
+  rental_income: number | null;
   created_at: string;
   updated_at: string;
 }
