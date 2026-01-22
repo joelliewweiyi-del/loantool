@@ -214,7 +214,7 @@ export function CreateLoanDialog() {
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Payment Types
             </h3>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="interest_rate">Interest Rate (%)</Label>
                 <Input
@@ -244,26 +244,6 @@ export function CreateLoanDialog() {
                   {formData.interest_payment_type === 'pik' 
                     ? 'Monthly interest rolled into principal' 
                     : 'Monthly interest invoiced for payment'}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label>Arrangement Fees</Label>
-                <Select 
-                  value={formData.fee_payment_type} 
-                  onValueChange={(v) => handleChange('fee_payment_type', v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pik">PIK (Capitalized)</SelectItem>
-                    <SelectItem value="cash">Cash (Withheld)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {formData.fee_payment_type === 'pik' 
-                    ? 'Fees added to principal balance' 
-                    : 'Fees withheld from initial funding'}
                 </p>
               </div>
             </div>
@@ -351,6 +331,18 @@ export function CreateLoanDialog() {
                   onChange={(e) => handleChange('arrangement_fee', e.target.value)}
                   placeholder="0.00"
                 />
+                <Select 
+                  value={formData.fee_payment_type} 
+                  onValueChange={(v) => handleChange('fee_payment_type', v)}
+                >
+                  <SelectTrigger className="mt-2">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pik">PIK (Capitalized)</SelectItem>
+                    <SelectItem value="cash">Cash (Withheld)</SelectItem>
+                  </SelectContent>
+                </Select>
                 <p className="text-xs text-muted-foreground">
                   {formData.fee_payment_type === 'pik' 
                     ? 'Will be capitalised into principal' 
