@@ -158,7 +158,6 @@ export function useCreateLoan() {
       maturity_date?: string | null;
       interest_rate?: number | null;
       interest_type?: string;
-      loan_type?: string;
       outstanding?: number | null;
       total_commitment?: number | null;
       commitment_fee_rate?: number | null;
