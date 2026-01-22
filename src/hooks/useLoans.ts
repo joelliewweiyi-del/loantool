@@ -115,16 +115,20 @@ export function useCreateLoan() {
       notice_frequency?: string;
       vehicle?: string;
       facility?: string | null;
+      arrangement_fee?: number | null;
     }) => {
       // Get current user for created_by
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error('Not authenticated');
       const userId = user.user.id;
 
+      // Extract arrangement_fee before creating loan (it's not a loans table field)
+      const { arrangement_fee, ...loanData } = data;
+
       // Create the loan
       const { data: loan, error } = await supabase
         .from('loans')
-        .insert([data])
+        .insert([loanData])
         .select()
         .single();
       
@@ -134,15 +138,16 @@ export function useCreateLoan() {
       // Auto-generate founding events based on loan creation data
       const foundingEvents: Database['public']['Tables']['loan_events']['Insert'][] = [];
 
-      const effectiveDate = data.loan_start_date || new Date().toISOString().split('T')[0];
+      const effectiveDate = loanData.loan_start_date || new Date().toISOString().split('T')[0];
+      const isPikLoan = loanData.interest_type === 'pik';
 
       // 1. Commitment Set (if total_commitment provided)
-      if (data.total_commitment && data.total_commitment > 0) {
+      if (loanData.total_commitment && loanData.total_commitment > 0) {
         foundingEvents.push({
           loan_id: createdLoan.id,
           event_type: 'commitment_set',
           effective_date: effectiveDate,
-          amount: data.total_commitment,
+          amount: loanData.total_commitment,
           rate: null,
           status: 'approved',
           created_by: userId,
@@ -151,13 +156,13 @@ export function useCreateLoan() {
       }
 
       // 2. Interest Rate Set (if interest_rate provided)
-      if (data.interest_rate && data.interest_rate > 0) {
+      if (loanData.interest_rate && loanData.interest_rate > 0) {
         foundingEvents.push({
           loan_id: createdLoan.id,
           event_type: 'interest_rate_set',
           effective_date: effectiveDate,
           amount: null,
-          rate: data.interest_rate,
+          rate: loanData.interest_rate,
           status: 'approved',
           created_by: userId,
           metadata: { auto_generated: true, description: 'Initial rate' } as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
@@ -165,16 +170,35 @@ export function useCreateLoan() {
       }
 
       // 3. Principal Draw (if outstanding provided)
-      if (data.outstanding && data.outstanding > 0) {
+      if (loanData.outstanding && loanData.outstanding > 0) {
         foundingEvents.push({
           loan_id: createdLoan.id,
           event_type: 'principal_draw',
           effective_date: effectiveDate,
-          amount: data.outstanding,
+          amount: loanData.outstanding,
           rate: null,
           status: 'approved',
           created_by: userId,
           metadata: { auto_generated: true, description: 'Opening principal draw' } as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
+        });
+      }
+
+      // 4. Arrangement Fee (if provided)
+      if (arrangement_fee && arrangement_fee > 0) {
+        foundingEvents.push({
+          loan_id: createdLoan.id,
+          event_type: 'fee_invoice',
+          effective_date: effectiveDate,
+          amount: arrangement_fee,
+          rate: null,
+          status: 'approved',
+          created_by: userId,
+          metadata: { 
+            auto_generated: true, 
+            fee_type: 'arrangement',
+            payment_type: isPikLoan ? 'pik' : 'cash',
+            description: isPikLoan ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)'
+          } as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
         });
       }
 
