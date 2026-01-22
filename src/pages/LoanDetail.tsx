@@ -416,20 +416,28 @@ export default function LoanDetail() {
                         
                         // Special description for fee invoices
                         const getEventDescription = () => {
-                          // First check if there's an explicit description in metadata
-                          if (description) return description;
-                          
+                          // For arrangement fees, ALWAYS use standardized labels based on payment_type
+                          // This ensures consistency regardless of stored description
                           if (event.event_type === 'fee_invoice') {
                             const feeType = meta?.fee_type as string | undefined;
                             const paymentType = meta?.payment_type as string | undefined;
-                            // Arrangement fees: different labels for PIK vs cash
-                            if ((meta?.adjustment_type === 'fee_split') || feeType?.includes('arrangement')) {
+                            
+                            // Arrangement fees: standardized labels
+                            if (feeType?.includes('arrangement') || meta?.adjustment_type === 'fee_split') {
+                              // PIK: Fee is capitalised (added to principal, accrues interest)
+                              // Cash: Fee is withheld from borrower (deducted from draw, no principal impact)
                               return paymentType === 'pik' 
                                 ? 'Arrangement fee (capitalised)'
                                 : 'Arrangement fee (withheld from borrower)';
                             }
+                            
+                            // Other fee types: use stored description or generate from fee_type
+                            if (description) return description;
                             if (feeType) return `${feeType} fee`;
                           }
+                          
+                          // Non-fee events: use stored description if available
+                          if (description) return description;
                           return '—';
                         };
                         
