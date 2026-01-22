@@ -253,12 +253,13 @@ export function CreateLoanDialog() {
 
           {/* Structure Section */}
           <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                Opening Balances
+            <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-700 rounded-lg p-3">
+              <h3 className="text-sm font-semibold text-orange-900 dark:text-orange-100 flex items-center gap-2">
+                ⚠️ Opening Balances — As of Start Date Only
               </h3>
-              <p className="text-xs text-muted-foreground mt-1">
-                Only enter amounts effective on the loan start date. For later draws or changes, use "New Event" after creating the loan.
+              <p className="text-xs text-orange-800 dark:text-orange-200 mt-1">
+                <strong>Important:</strong> Only enter amounts effective on <strong>{formData.loan_start_date || 'the loan start date'}</strong>. 
+                Draws, fees, or changes occurring on later dates must be added as separate events after loan creation.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-4">
