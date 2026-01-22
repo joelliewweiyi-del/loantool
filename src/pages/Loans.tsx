@@ -136,7 +136,6 @@ export default function Loans() {
               <thead>
                 <tr>
                   <th>Loan_ID</th>
-                  <th>Borrower</th>
                   {activeVehicle === 'TLF' && <th>Facility</th>}
                   <th>City</th>
                   <th>Category</th>
@@ -152,9 +151,6 @@ export default function Loans() {
               <tbody>
                 {filteredLoans.map(loan => <tr key={loan.id}>
                     <td className="font-mono font-medium">{(loan as any).loan_id || '—'}</td>
-                    <td>
-                      <div className="font-medium">{loan.borrower_name}</div>
-                    </td>
                     {activeVehicle === 'TLF' && <td>
                         <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
                           {(loan as any).facility || '—'}
