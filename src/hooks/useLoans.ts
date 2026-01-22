@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Loan, LoanEvent, Period, LoanFacility, EventType, EventStatus } from '@/types/loan';
 import { useToast } from '@/hooks/use-toast';
-import type { Database } from '@/integrations/supabase/types';
+import type { Database, Json } from '@/integrations/supabase/types';
 import { startOfMonth, endOfMonth, addMonths, format, parseISO, isBefore, isAfter } from 'date-fns';
 
 type DbEventType = Database['public']['Enums']['event_type'];
@@ -182,84 +182,71 @@ export function useCreateLoan() {
       const createdLoan = loan as Loan;
 
       // Auto-generate founding events based on loan creation data
-      const foundingEvents: Database['public']['Tables']['loan_events']['Insert'][] = [];
-
       const effectiveDate = loanData.loan_start_date || new Date().toISOString().split('T')[0];
       const isPikLoan = loanData.interest_type === 'pik';
 
+      // Use the create_founding_event RPC function to bypass RLS for approved founding events
+      const createFoundingEvent = async (
+        eventType: DbEventType,
+        amount: number | null,
+        rate: number | null,
+        metadata: Record<string, unknown>
+      ) => {
+        const { error } = await supabase.rpc('create_founding_event', {
+          p_loan_id: createdLoan.id,
+          p_event_type: eventType,
+          p_effective_date: effectiveDate,
+          p_amount: amount,
+          p_rate: rate,
+          p_created_by: userId,
+          p_metadata: metadata as unknown as Json,
+        });
+        if (error) throw error;
+      };
+
       // 1. Commitment Set (if total_commitment provided)
       if (loanData.total_commitment && loanData.total_commitment > 0) {
-        foundingEvents.push({
-          loan_id: createdLoan.id,
-          event_type: 'commitment_set',
-          effective_date: effectiveDate,
-          amount: loanData.total_commitment,
-          rate: null,
-          status: 'approved',
-          created_by: userId,
-          metadata: { auto_generated: true, description: 'Initial commitment' } as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
-        });
+        await createFoundingEvent(
+          'commitment_set',
+          loanData.total_commitment,
+          null,
+          { auto_generated: true, description: 'Initial commitment' }
+        );
       }
 
       // 2. Interest Rate Set (if interest_rate provided)
       if (loanData.interest_rate && loanData.interest_rate > 0) {
-        foundingEvents.push({
-          loan_id: createdLoan.id,
-          event_type: 'interest_rate_set',
-          effective_date: effectiveDate,
-          amount: null,
-          rate: loanData.interest_rate,
-          status: 'approved',
-          created_by: userId,
-          metadata: { auto_generated: true, description: 'Initial rate' } as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
-        });
+        await createFoundingEvent(
+          'interest_rate_set',
+          null,
+          loanData.interest_rate,
+          { auto_generated: true, description: 'Initial rate' }
+        );
       }
 
       // 3. Principal Draw (if outstanding provided)
       if (loanData.outstanding && loanData.outstanding > 0) {
-        foundingEvents.push({
-          loan_id: createdLoan.id,
-          event_type: 'principal_draw',
-          effective_date: effectiveDate,
-          amount: loanData.outstanding,
-          rate: null,
-          status: 'approved',
-          created_by: userId,
-          metadata: { auto_generated: true, description: 'Opening principal draw' } as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
-        });
+        await createFoundingEvent(
+          'principal_draw',
+          loanData.outstanding,
+          null,
+          { auto_generated: true, description: 'Opening principal draw' }
+        );
       }
 
       // 4. Arrangement Fee (if provided)
       if (arrangement_fee && arrangement_fee > 0) {
-        foundingEvents.push({
-          loan_id: createdLoan.id,
-          event_type: 'fee_invoice',
-          effective_date: effectiveDate,
-          amount: arrangement_fee,
-          rate: null,
-          status: 'approved',
-          created_by: userId,
-          metadata: { 
+        await createFoundingEvent(
+          'fee_invoice',
+          arrangement_fee,
+          null,
+          { 
             auto_generated: true, 
             fee_type: 'arrangement',
             payment_type: isPikLoan ? 'pik' : 'cash',
             description: isPikLoan ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)'
-          } as unknown as Database['public']['Tables']['loan_events']['Insert']['metadata'],
-        });
-      }
-
-      // Insert all founding events
-      if (foundingEvents.length > 0) {
-        console.log('Creating founding events:', foundingEvents);
-        const { error: eventsError } = await supabase
-          .from('loan_events')
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .insert(foundingEvents as any);
-        
-        if (eventsError) {
-          console.error('Failed to create founding events:', eventsError);
-          throw new Error(`Loan created but founding events failed: ${eventsError.message}`);
-        }
+          }
+        );
       }
 
       // Auto-generate monthly periods from loan start to maturity (or today)

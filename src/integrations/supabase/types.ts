@@ -689,6 +689,18 @@ export type Database = {
         Args: { p_as_of_date?: string; p_loan_id: string }
         Returns: number
       }
+      create_founding_event: {
+        Args: {
+          p_amount: number
+          p_created_by: string
+          p_effective_date: string
+          p_event_type: Database["public"]["Enums"]["event_type"]
+          p_loan_id: string
+          p_metadata: Json
+          p_rate: number
+        }
+        Returns: string
+      }
       determine_period_processing_mode: {
         Args: { p_period_id: string }
         Returns: string
