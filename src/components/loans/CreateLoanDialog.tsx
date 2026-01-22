@@ -243,9 +243,14 @@ export function CreateLoanDialog() {
 
           {/* Structure Section */}
           <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Structure
-            </h3>
+            <div>
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                Opening Balances
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Only enter amounts effective on the loan start date. For later draws or changes, use "New Event" after creating the loan.
+              </p>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="outstanding">Outstanding (EUR)</Label>
