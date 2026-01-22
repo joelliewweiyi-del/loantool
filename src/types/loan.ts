@@ -21,7 +21,6 @@ export type EventType =
   | 'pik_capitalization_posted';
 
 export type InterestType = 'cash_pay' | 'pik';
-export type LoanType = 'term_loan' | 'committed_facility';
 export type CommitmentFeeBasis = 'undrawn_only' | 'total_commitment';
 
 export interface Loan {
@@ -35,7 +34,6 @@ export interface Loan {
   maturity_date: string | null;
   interest_rate: number | null;
   interest_type: InterestType;
-  loan_type: LoanType;
   outstanding: number | null;
   total_commitment: number | null;
   commitment_fee_rate: number | null;

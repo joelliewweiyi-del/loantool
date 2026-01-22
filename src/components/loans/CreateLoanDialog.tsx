@@ -71,7 +71,6 @@ export function CreateLoanDialog() {
       maturity_date: formData.maturity_date || null,
       interest_rate: formData.interest_rate ? parseFloat(formData.interest_rate) / 100 : null,
       interest_type: formData.interest_type,
-      loan_type: 'term_loan' as const, // Simplified - always term_loan
       outstanding: formData.outstanding ? parseFloat(formData.outstanding) : null,
       total_commitment: formData.total_commitment ? parseFloat(formData.total_commitment) : null,
       commitment_fee_rate: formData.commitment_fee_rate ? parseFloat(formData.commitment_fee_rate) / 100 : null,
