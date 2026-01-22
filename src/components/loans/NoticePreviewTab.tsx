@@ -313,7 +313,14 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
             </thead>
             <tbody>
               {events
-                .filter(e => e.event_type !== 'cash_received')
+                .filter(e => {
+                  // Hide cash_received (accounting only)
+                  if (e.event_type === 'cash_received') return false;
+                  // Hide fee split adjustment repayments (internal accounting, not client-facing)
+                  const meta = e.metadata as Record<string, unknown>;
+                  if (e.event_type === 'principal_repayment' && meta?.adjustment_type === 'fee_split') return false;
+                  return true;
+                })
                 .sort((a, b) => new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime())
                 .map((event) => {
                   const meta = event.metadata as Record<string, unknown>;

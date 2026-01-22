@@ -495,12 +495,18 @@ export function calculatePeriodAccruals(
   let feesInvoiced = 0;
   
   for (const event of periodEvents) {
+    const meta = event.metadata as Record<string, unknown> | null;
+    
     switch (event.event_type) {
       case 'principal_draw':
         principalDrawn += event.amount || 0;
         break;
       case 'principal_repayment':
-        principalRepaid += event.amount || 0;
+        // Exclude adjustment repayments (fee split reversals) from visible repayments
+        // These are accounting entries, not real economic repayments
+        if (meta?.adjustment_type !== 'fee_split') {
+          principalRepaid += event.amount || 0;
+        }
         break;
       case 'pik_capitalization_posted':
         pikCapitalized += event.amount || 0;
