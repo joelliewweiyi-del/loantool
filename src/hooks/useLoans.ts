@@ -3,8 +3,54 @@ import { supabase } from '@/integrations/supabase/client';
 import { Loan, LoanEvent, Period, LoanFacility, EventType, EventStatus } from '@/types/loan';
 import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
+import { startOfMonth, endOfMonth, addMonths, format, parseISO, isBefore, isAfter } from 'date-fns';
 
 type DbEventType = Database['public']['Enums']['event_type'];
+
+// Generate monthly periods from start date to end date (or today if no maturity)
+function generateMonthlyPeriods(
+  loanId: string,
+  startDate: string,
+  endDate?: string | null
+): Database['public']['Tables']['periods']['Insert'][] {
+  const periods: Database['public']['Tables']['periods']['Insert'][] = [];
+  
+  const start = parseISO(startDate);
+  const end = endDate ? parseISO(endDate) : new Date(); // Default to today if no maturity
+  
+  // Start from the first day of the start month
+  let currentMonthStart = startOfMonth(start);
+  
+  while (isBefore(currentMonthStart, end) || format(currentMonthStart, 'yyyy-MM') === format(end, 'yyyy-MM')) {
+    const monthEnd = endOfMonth(currentMonthStart);
+    
+    // Period start: use actual loan start date for first period, otherwise 1st of month
+    const periodStart = periods.length === 0 && isAfter(start, currentMonthStart)
+      ? format(start, 'yyyy-MM-dd')
+      : format(currentMonthStart, 'yyyy-MM-dd');
+    
+    // Period end: use maturity date if it falls within this month, otherwise end of month
+    const periodEnd = endDate && isBefore(parseISO(endDate), monthEnd)
+      ? endDate
+      : format(monthEnd, 'yyyy-MM-dd');
+    
+    periods.push({
+      loan_id: loanId,
+      period_start: periodStart,
+      period_end: periodEnd,
+      status: 'open',
+      processing_mode: 'auto',
+    });
+    
+    // Move to next month
+    currentMonthStart = addMonths(currentMonthStart, 1);
+    
+    // Safety: don't generate more than 120 months (10 years)
+    if (periods.length >= 120) break;
+  }
+  
+  return periods;
+}
 type DbEventStatus = Database['public']['Enums']['event_status'];
 
 export function useLoans() {
@@ -216,11 +262,34 @@ export function useCreateLoan() {
         }
       }
 
+      // Auto-generate monthly periods from loan start to maturity (or today)
+      if (loanData.loan_start_date) {
+        const monthlyPeriods = generateMonthlyPeriods(
+          createdLoan.id,
+          loanData.loan_start_date,
+          loanData.maturity_date
+        );
+
+        if (monthlyPeriods.length > 0) {
+          console.log(`Creating ${monthlyPeriods.length} monthly periods for loan`);
+          const { error: periodsError } = await supabase
+            .from('periods')
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .insert(monthlyPeriods as any);
+          
+          if (periodsError) {
+            console.error('Failed to create periods:', periodsError);
+            // Don't throw - loan and events were created, periods are less critical
+          }
+        }
+      }
+
       return createdLoan;
     },
-    onSuccess: () => {
+    onSuccess: (loan) => {
       queryClient.invalidateQueries({ queryKey: ['loans'] });
-      toast({ title: 'Loan created with founding events' });
+      queryClient.invalidateQueries({ queryKey: ['loan-periods', loan.id] });
+      toast({ title: 'Loan created with founding events and periods' });
     },
     onError: (error) => {
       toast({ 
