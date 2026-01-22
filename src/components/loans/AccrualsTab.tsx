@@ -418,7 +418,9 @@ function PeriodTableRow({
                   )}
                   {period.feesInvoiced > 0 && (
                     <div>
-                      <span className="text-muted-foreground">Fees: </span>
+                      <span className="text-muted-foreground">
+                        {isPik ? 'Fee (capitalised): ' : 'Fee (withheld): '}
+                      </span>
                       <span className="font-mono text-emerald-600">+{formatCurrency(period.feesInvoiced)}</span>
                     </div>
                   )}

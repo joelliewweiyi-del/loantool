@@ -72,8 +72,8 @@ function applyEventToState(state: LoanState, event: LoanEvent): LoanState {
       newState.outstandingPrincipal += event.amount || 0;
       break;
     case 'fee_invoice':
-      // PIK fees add to principal
-      if (event.metadata?.fee_type === 'pik') {
+      // PIK fees add to principal (check payment_type, not fee_type)
+      if (event.metadata?.payment_type === 'pik') {
         newState.outstandingPrincipal += event.amount || 0;
       }
       break;
