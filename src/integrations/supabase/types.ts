@@ -707,13 +707,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
       period_has_economic_events: {
         Args: { p_period_id: string }
         Returns: boolean
       }
     }
     Enums: {
-      app_role: "pm" | "controller"
+      app_role: "pm" | "controller" | "admin"
       event_status: "draft" | "approved"
       event_type:
         | "principal_draw"
@@ -857,7 +858,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["pm", "controller"],
+      app_role: ["pm", "controller", "admin"],
       event_status: ["draft", "approved"],
       event_type: [
         "principal_draw",
