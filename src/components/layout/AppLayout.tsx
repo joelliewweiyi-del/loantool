@@ -35,7 +35,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       <aside className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
         <div className="p-4 border-b border-sidebar-border">
           <Link to="/" className="flex items-center gap-2">
-            <img src={raxLogo} alt="Rax Finance" className="h-8 w-auto" />
+            <img src={raxLogo} alt="RAX LMS" className="h-8 w-auto" />
           </Link>
         </div>
 

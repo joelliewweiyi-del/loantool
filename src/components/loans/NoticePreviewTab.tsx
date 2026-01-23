@@ -197,7 +197,7 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
     <div className="max-w-3xl mx-auto space-y-8 font-barlow">
       {/* Letterhead */}
       <div className="text-center border-b pb-6">
-        <img src={raxLogo} alt="Rax Finance" className="h-10 mx-auto mb-4" />
+        <img src={raxLogo} alt="RAX LMS" className="h-10 mx-auto mb-4" />
         <h1 className="text-2xl font-bold tracking-tight">INTEREST PAYMENT NOTICE</h1>
       </div>
 
@@ -530,7 +530,7 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
             <p>Please wire the amount due to the following account:</p>
             <div className="bg-muted/30 rounded p-4 font-mono text-xs space-y-1">
               <p>Bank: [Bank Name]</p>
-              <p>Account Name: Rax Finance</p>
+              <p>Account Name: RAX Loan Management System</p>
               <p>IBAN: [IBAN Number]</p>
               <p>BIC/SWIFT: [BIC Code]</p>
               <p>Reference: {period.periodId.slice(0, 8).toUpperCase()}</p>

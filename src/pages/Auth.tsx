@@ -99,11 +99,11 @@ export default function Auth() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
-            <img src={raxLogo} alt="Rax Finance" className="h-10 w-auto" />
+            <img src={raxLogo} alt="RAX LMS" className="h-10 w-auto" />
           </div>
-          <CardTitle className="text-2xl">Loan Management System</CardTitle>
+          <CardTitle className="text-2xl">RAX LMS</CardTitle>
           <CardDescription>
-            Rax Finance
+            Audit-grade loan portfolio management
           </CardDescription>
         </CardHeader>
         <CardContent>
