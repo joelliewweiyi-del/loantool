@@ -145,8 +145,8 @@ export default function Loans() {
                   <th>City</th>
                   <th>Category</th>
                   <th>PIK</th>
-                  <th>Status</th>
                   <th className="text-right">Outstanding</th>
+                  <th className="text-right">Commitment</th>
                   <th className="text-right">Rate</th>
                   <th className="text-right">Start</th>
                   <th className="text-right">Maturity</th>
@@ -170,8 +170,8 @@ export default function Loans() {
                     <td>
                       {loan.interest_type === 'pik' ? <span className="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">PIK</span> : <span className="text-xs text-muted-foreground">—</span>}
                     </td>
-                    <td><StatusBadge status={loan.status} /></td>
                     <td className="numeric">{formatCurrency(loan.outstanding)}</td>
+                    <td className="numeric">{formatCurrency(loan.total_commitment || loan.outstanding)}</td>
                     <td className="numeric">{formatPercent(loan.interest_rate, 2)}</td>
                     <td className="text-right text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
                     <td className="text-right text-muted-foreground">{formatDate(loan.maturity_date)}</td>
