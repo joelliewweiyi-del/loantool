@@ -39,8 +39,14 @@ export default function Loans() {
   // Calculate portfolio summary metrics for current vehicle
   const activeLoans = vehicleLoans.filter(l => l.status === 'active');
   const totalPrincipal = activeLoans.reduce((sum, l) => sum + (l.outstanding || 0), 0);
-  const totalCommitment = activeLoans.reduce((sum, l) => sum + (l.total_commitment || 0), 0);
-  const totalUndrawn = totalCommitment - totalPrincipal;
+  // For bullet loans with no separate commitment, treat commitment as equal to outstanding (fully drawn)
+  const totalCommitment = activeLoans.reduce((sum, l) => {
+    const commitment = l.total_commitment || 0;
+    const outstanding = l.outstanding || 0;
+    // If commitment is 0/null but there's outstanding, use outstanding as effective commitment
+    return sum + (commitment > 0 ? commitment : outstanding);
+  }, 0);
+  const totalUndrawn = Math.max(0, totalCommitment - totalPrincipal);
   const weightedRateSum = activeLoans.reduce((sum, l) => {
     const principal = l.outstanding || 0;
     const rate = l.interest_rate || 0;
