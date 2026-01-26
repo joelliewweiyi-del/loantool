@@ -93,12 +93,30 @@ export default function Loans() {
 
       {/* Portfolio Metrics Bar */}
       <div className="grid grid-cols-6 gap-6 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
-        <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(totalPrincipal)}</div>
-        <div className="text-lg font-semibold font-mono">{formatCurrency(totalCommitment)}</div>
-        <div className="text-lg font-semibold font-mono text-green-600">{formatCurrency(totalUndrawn)}</div>
-        <div className="text-lg font-semibold font-mono">{formatPercent(avgRate, 2)}</div>
-        <div className="text-lg font-semibold font-mono">{activeLoans.length}</div>
-        <div className="text-lg font-semibold font-mono text-amber-600">{pikLoansCount}</div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Outstanding</div>
+          <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(totalPrincipal)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Commitment</div>
+          <div className="text-lg font-semibold font-mono">{formatCurrency(totalCommitment)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Undrawn</div>
+          <div className="text-lg font-semibold font-mono text-green-600">{formatCurrency(totalUndrawn)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Avg Rate</div>
+          <div className="text-lg font-semibold font-mono">{formatPercent(avgRate, 2)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Active</div>
+          <div className="text-lg font-semibold font-mono">{activeLoans.length}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">PIK</div>
+          <div className="text-lg font-semibold font-mono text-amber-600">{pikLoansCount}</div>
+        </div>
       </div>
 
       <Card>
