@@ -4,6 +4,7 @@ import { Loan, LoanEvent, Period, LoanFacility, EventType, EventStatus } from '@
 import { useToast } from '@/hooks/use-toast';
 import type { Database, Json } from '@/integrations/supabase/types';
 import { startOfMonth, endOfMonth, addMonths, format, parseISO, isBefore, isAfter } from 'date-fns';
+import { calculateInterestSegments, calculateCommitmentFeeSegments } from '@/lib/loanCalculations';
 
 type DbEventType = Database['public']['Enums']['event_type'];
 type DbEventStatus = Database['public']['Enums']['event_status'];
@@ -47,41 +48,93 @@ export function useLoans() {
 }
 
 /**
- * Returns the current open period's summed interest due per loan from stored accrual_entries.
- * Requires accruals to have been generated via "Generate Accruals" to show values.
+ * Returns the current open period's interest and commitment fee per loan,
+ * computed from events using the same 30E/360 segment logic as the Accruals tab.
+ * This guarantees values match exactly what is shown in the Accruals tab.
  */
 export function useLatestChargesPerLoan() {
   return useQuery({
     queryKey: ['latest-charges-per-loan'],
     queryFn: async () => {
+      // 1. Get the latest open period per loan
       const { data: openPeriods, error: periodsError } = await supabase
         .from('periods')
-        .select('id, loan_id')
+        .select('id, loan_id, period_start, period_end')
         .eq('status', 'open')
         .order('period_start', { ascending: false });
       if (periodsError) throw periodsError;
 
-      const latestOpenPeriod: Record<string, string> = {};
+      const latestPeriodByLoan: Record<string, { id: string; period_start: string; period_end: string }> = {};
       for (const p of openPeriods || []) {
-        if (!(p.loan_id in latestOpenPeriod)) latestOpenPeriod[p.loan_id] = p.id;
+        if (!(p.loan_id in latestPeriodByLoan)) {
+          latestPeriodByLoan[p.loan_id] = { id: p.id, period_start: p.period_start, period_end: p.period_end };
+        }
       }
 
-      const periodIds = Object.values(latestOpenPeriod);
-      if (periodIds.length === 0) return {} as Record<string, { interest: number; commitmentFee: number }>;
+      const loanIds = Object.keys(latestPeriodByLoan);
+      if (loanIds.length === 0) return {} as Record<string, { interest: number; commitmentFee: number }>;
 
-      const { data: entries, error: entriesError } = await supabase
-        .from('accrual_entries')
-        .select('loan_id, period_id, daily_interest, daily_commitment_fee')
-        .in('period_id', periodIds);
-      if (entriesError) throw entriesError;
+      // 2. Fetch all approved events + loan metadata in parallel
+      const [{ data: eventsData, error: eventsError }, { data: loansData, error: loansError }] = await Promise.all([
+        supabase
+          .from('loan_events')
+          .select('id, loan_id, event_type, effective_date, amount, rate, metadata, status')
+          .in('loan_id', loanIds)
+          .eq('status', 'approved')
+          .order('effective_date', { ascending: true }),
+        supabase
+          .from('loans')
+          .select('id, total_commitment, commitment_fee_rate, interest_type')
+          .in('id', loanIds),
+      ]);
+      if (eventsError) throw eventsError;
+      if (loansError) throw loansError;
 
+      // Group events by loan
+      const eventsByLoan: Record<string, LoanEvent[]> = {};
+      for (const e of eventsData || []) {
+        if (!eventsByLoan[e.loan_id]) eventsByLoan[e.loan_id] = [];
+        eventsByLoan[e.loan_id].push(e as LoanEvent);
+      }
+
+      const loanMeta: Record<string, { totalCommitment: number; feeRate: number; interestType: string }> = {};
+      for (const l of loansData || []) {
+        loanMeta[l.id] = {
+          totalCommitment: l.total_commitment || 0,
+          feeRate: l.commitment_fee_rate || 0,
+          interestType: l.interest_type || 'cash_pay',
+        };
+      }
+
+      // 3. For each loan compute using the same 30E/360 segment logic as the Accruals tab
       const result: Record<string, { interest: number; commitmentFee: number }> = {};
-      for (const row of entries || []) {
-        if (latestOpenPeriod[row.loan_id] !== row.period_id) continue;
-        if (!result[row.loan_id]) result[row.loan_id] = { interest: 0, commitmentFee: 0 };
-        result[row.loan_id].interest += row.daily_interest || 0;
-        result[row.loan_id].commitmentFee += row.daily_commitment_fee ?? 0;
+
+      for (const loanId of loanIds) {
+        const period = latestPeriodByLoan[loanId];
+        const events = eventsByLoan[loanId] || [];
+        const meta = loanMeta[loanId] || { totalCommitment: 0, feeRate: 0, interestType: 'cash_pay' };
+
+        const interestSegments = calculateInterestSegments(
+          events,
+          period.period_start,
+          period.period_end,
+          meta.totalCommitment,
+          meta.interestType as 'cash_pay' | 'pik'
+        );
+        const interestAccrued = interestSegments.reduce((sum, s) => sum + s.interest, 0);
+
+        const cfSegments = calculateCommitmentFeeSegments(
+          events,
+          period.period_start,
+          period.period_end,
+          meta.feeRate,
+          meta.totalCommitment
+        );
+        const commitmentFeeAccrued = cfSegments.reduce((sum, s) => sum + s.fee, 0);
+
+        result[loanId] = { interest: interestAccrued, commitmentFee: commitmentFeeAccrued };
       }
+
       return result;
     },
   });
