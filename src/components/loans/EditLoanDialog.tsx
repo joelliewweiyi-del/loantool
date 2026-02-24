@@ -108,7 +108,7 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
       remarks: formData.remarks || null,
     };
 
-    await updateLoan.mutateAsync(payload);
+    await updateLoan.mutateAsync({ id: loan.id, updates: payload as unknown as Partial<Loan> });
     setIsOpen(false);
   };
 
