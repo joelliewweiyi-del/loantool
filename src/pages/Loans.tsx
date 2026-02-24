@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useLoans, useLatestChargesPerLoan } from '@/hooks/useLoans';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,8 +10,10 @@ import { BatchUploadDialog } from '@/components/loans/BatchUploadDialog';
 import { formatDate, formatCurrency, formatPercent } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChevronRight, Search, Building2, Briefcase } from 'lucide-react';
+import { ChevronRight, Search, Building2, Briefcase, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 type Vehicle = 'RED IV' | 'TLF';
+type SortField = 'loan_id' | 'city' | 'category' | 'outstanding' | 'total_commitment' | 'interest_rate' | 'loan_start_date' | 'maturity_date' | 'last_interest' | 'last_cf';
+type SortDir = 'asc' | 'desc';
 export default function Loans() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeVehicle = searchParams.get('vehicle') as Vehicle || 'RED IV';
@@ -25,7 +27,35 @@ export default function Loans() {
   } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortField, setSortField] = useState<SortField | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const canCreate = roles.includes('pm') || roles.includes('controller');
+
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDir('asc');
+    }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+    return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
+
+  const SortTh = ({ field, children, className }: { field: SortField; children: React.ReactNode; className?: string }) => (
+    <th
+      className={`cursor-pointer select-none hover:text-foreground group ${className || ''}`}
+      onClick={() => handleSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        <SortIcon field={field} />
+      </span>
+    </th>
+  );
   const handleVehicleChange = (vehicle: string) => {
     setSearchParams({
       vehicle
@@ -35,7 +65,31 @@ export default function Loans() {
 
   // Filter by vehicle first
   const vehicleLoans = loans?.filter(loan => (loan as any).vehicle === activeVehicle) || [];
-  const filteredLoans = vehicleLoans.filter(loan => loan.borrower_name.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).loan_id?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).city?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).category?.toLowerCase().includes(searchQuery.toLowerCase()));
+  const searchFiltered = vehicleLoans.filter(loan => loan.borrower_name.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).loan_id?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).city?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).category?.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const filteredLoans = useMemo(() => {
+    if (!sortField) return searchFiltered;
+    return [...searchFiltered].sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
+      if (sortField === 'last_interest') {
+        aVal = latestCharges[a.id]?.interest ?? -Infinity;
+        bVal = latestCharges[b.id]?.interest ?? -Infinity;
+      } else if (sortField === 'last_cf') {
+        aVal = latestCharges[a.id]?.commitmentFee ?? -Infinity;
+        bVal = latestCharges[b.id]?.commitmentFee ?? -Infinity;
+      } else {
+        aVal = (a as any)[sortField] ?? '';
+        bVal = (b as any)[sortField] ?? '';
+      }
+      if (typeof aVal === 'number' && typeof bVal === 'number') {
+        return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+      }
+      return sortDir === 'asc'
+        ? String(aVal).localeCompare(String(bVal))
+        : String(bVal).localeCompare(String(aVal));
+    });
+  }, [searchFiltered, sortField, sortDir, latestCharges]);
 
   // Calculate portfolio summary metrics for current vehicle
   const activeLoans = vehicleLoans.filter(l => l.status === 'active');
@@ -141,17 +195,17 @@ export default function Loans() {
             </div> : <table className="data-table">
               <thead>
                 <tr>
-                  <th>Loan_ID</th>
+                  <SortTh field="loan_id">Loan_ID</SortTh>
                   {activeVehicle === 'TLF' && <th>Facility</th>}
-                  <th>City</th>
-                  <th>Category</th>
-                  <th className="text-right">Outstanding</th>
-                  <th className="text-right">Commitment</th>
-                  <th className="text-right">Rate</th>
-                  <th className="text-right">Last Int.</th>
-                  <th className="text-right">Last CF</th>
-                  <th className="text-right">Start</th>
-                  <th className="text-right">Maturity</th>
+                  <SortTh field="city">City</SortTh>
+                  <SortTh field="category">Category</SortTh>
+                  <SortTh field="outstanding" className="text-right">Outstanding</SortTh>
+                  <SortTh field="total_commitment" className="text-right">Commitment</SortTh>
+                  <SortTh field="interest_rate" className="text-right">Rate</SortTh>
+                  <SortTh field="last_interest" className="text-right">Last Int.</SortTh>
+                  <SortTh field="last_cf" className="text-right">Last CF</SortTh>
+                  <SortTh field="loan_start_date" className="text-right">Start</SortTh>
+                  <SortTh field="maturity_date" className="text-right">Maturity</SortTh>
                   <th></th>
                 </tr>
               </thead>
