@@ -73,30 +73,36 @@ export function useLoans() {
   });
 }
 
-/** Returns the latest approved pik_capitalization_posted event per loan (for the interest charge columns) */
+/** Returns the latest pik_capitalization_posted event per loan (draft or approved) for the interest due columns */
 export function useLatestChargesPerLoan() {
   return useQuery({
     queryKey: ['latest-charges-per-loan'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('loan_events')
-        .select('loan_id, amount, metadata, effective_date')
+        .select('loan_id, amount, metadata, effective_date, status')
         .eq('event_type', 'pik_capitalization_posted')
-        .eq('status', 'approved')
+        .in('status', ['draft', 'approved'])
         .order('effective_date', { ascending: false });
 
       if (error) throw error;
 
-      // Keep only the latest event per loan
-      const latestByLoan: Record<string, { interest: number; commitmentFee: number; date: string }> = {};
+      // Keep only the latest event per loan (draft takes priority over approved for same date)
+      const latestByLoan: Record<string, { interest: number; commitmentFee: number; date: string; status: string }> = {};
       for (const event of data || []) {
-        if (!latestByLoan[event.loan_id]) {
-          const meta = (event.metadata || {}) as Record<string, unknown>;
-          latestByLoan[event.loan_id] = {
-            interest: typeof meta.interest_accrued === 'number' ? meta.interest_accrued : (event.amount || 0),
-            commitmentFee: typeof meta.commitment_fee_accrued === 'number' ? meta.commitment_fee_accrued : 0,
-            date: event.effective_date,
-          };
+        const existing = latestByLoan[event.loan_id];
+        const meta = (event.metadata || {}) as Record<string, unknown>;
+        const entry = {
+          interest: typeof meta.interest_accrued === 'number' ? meta.interest_accrued : (event.amount || 0),
+          commitmentFee: typeof meta.commitment_fee_accrued === 'number' ? meta.commitment_fee_accrued : 0,
+          date: event.effective_date,
+          status: event.status,
+        };
+        if (!existing) {
+          latestByLoan[event.loan_id] = entry;
+        } else if (event.effective_date === existing.date && event.status === 'draft') {
+          // Prefer draft over approved for the same period
+          latestByLoan[event.loan_id] = entry;
         }
       }
       return latestByLoan;
