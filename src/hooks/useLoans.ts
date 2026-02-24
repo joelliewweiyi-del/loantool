@@ -73,64 +73,37 @@ export function useLoans() {
   });
 }
 
-/** Returns the latest interest due per loan.
- *  - PIK loans: from pik_capitalization_posted events (draft or approved)
- *  - Cash loans: from notice_snapshots totals (latest period snapshot)
- */
+/** Returns the latest period's summed interest due per loan from stored accrual_entries. */
 export function useLatestChargesPerLoan() {
   return useQuery({
     queryKey: ['latest-charges-per-loan'],
     queryFn: async () => {
-      const [eventsRes, snapshotsRes] = await Promise.all([
-        supabase
-          .from('loan_events')
-          .select('loan_id, amount, metadata, effective_date, status')
-          .eq('event_type', 'pik_capitalization_posted')
-          .in('status', ['draft', 'approved'])
-          .order('effective_date', { ascending: false }),
-        supabase
-          .from('notice_snapshots')
-          .select('loan_id, totals, period_end')
-          .order('period_end', { ascending: false }),
-      ]);
+      // Get the latest accrual_date per loan to identify the latest period
+      const { data, error } = await supabase
+        .from('accrual_entries')
+        .select('loan_id, period_id, accrual_date, daily_interest, daily_commitment_fee')
+        .order('accrual_date', { ascending: false });
 
-      if (eventsRes.error) throw eventsRes.error;
-      if (snapshotsRes.error) throw snapshotsRes.error;
+      if (error) throw error;
 
-      type ChargeEntry = { interest: number; commitmentFee: number; date: string; status: string };
-      const result: Record<string, ChargeEntry> = {};
-
-      // PIK: pik_capitalization_posted events (draft preferred over approved for same date)
-      for (const event of eventsRes.data || []) {
-        const existing = result[event.loan_id];
-        const meta = (event.metadata || {}) as Record<string, unknown>;
-        const entry: ChargeEntry = {
-          interest: typeof meta.interest_accrued === 'number' ? meta.interest_accrued : (event.amount || 0),
-          commitmentFee: typeof meta.commitment_fee_accrued === 'number' ? meta.commitment_fee_accrued : 0,
-          date: event.effective_date,
-          status: event.status,
-        };
-        if (!existing) {
-          result[event.loan_id] = entry;
-        } else if (event.effective_date === existing.date && event.status === 'draft') {
-          result[event.loan_id] = entry;
+      // Find the latest period_id per loan
+      const latestPeriodByLoan: Record<string, string | null> = {};
+      for (const row of data || []) {
+        if (!(row.loan_id in latestPeriodByLoan)) {
+          latestPeriodByLoan[row.loan_id] = row.period_id;
         }
       }
 
-      // Cash: notice_snapshots totals (only fill in if no PIK event found for this loan)
-      for (const snap of snapshotsRes.data || []) {
-        if (result[snap.loan_id]) continue; // PIK data already present
-        const totals = (snap.totals || {}) as Record<string, unknown>;
-        const interest = typeof totals.interest_accrued === 'number' ? totals.interest_accrued : 0;
-        const commitmentFee = typeof totals.commitment_fee === 'number' ? totals.commitment_fee : 0;
-        if (interest > 0 || commitmentFee > 0) {
-          result[snap.loan_id] = {
-            interest,
-            commitmentFee,
-            date: snap.period_end,
-            status: 'snapshot',
-          };
-        }
+      // Sum daily_interest and daily_commitment_fee for the latest period per loan
+      type ChargeEntry = { interest: number; commitmentFee: number };
+      const result: Record<string, ChargeEntry> = {};
+
+      for (const row of data || []) {
+        const latestPeriod = latestPeriodByLoan[row.loan_id];
+        if (row.period_id !== latestPeriod) continue;
+        if (!result[row.loan_id]) result[row.loan_id] = { interest: 0, commitmentFee: 0 };
+        result[row.loan_id].interest += row.daily_interest || 0;
+        result[row.loan_id].commitmentFee += row.daily_commitment_fee || 0;
       }
 
       return result;
