@@ -73,6 +73,37 @@ export function useLoans() {
   });
 }
 
+/** Returns the latest approved pik_capitalization_posted event per loan (for the interest charge columns) */
+export function useLatestChargesPerLoan() {
+  return useQuery({
+    queryKey: ['latest-charges-per-loan'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('loan_events')
+        .select('loan_id, amount, metadata, effective_date')
+        .eq('event_type', 'pik_capitalization_posted')
+        .eq('status', 'approved')
+        .order('effective_date', { ascending: false });
+
+      if (error) throw error;
+
+      // Keep only the latest event per loan
+      const latestByLoan: Record<string, { interest: number; commitmentFee: number; date: string }> = {};
+      for (const event of data || []) {
+        if (!latestByLoan[event.loan_id]) {
+          const meta = (event.metadata || {}) as Record<string, unknown>;
+          latestByLoan[event.loan_id] = {
+            interest: typeof meta.interest_accrued === 'number' ? meta.interest_accrued : (event.amount || 0),
+            commitmentFee: typeof meta.commitment_fee_accrued === 'number' ? meta.commitment_fee_accrued : 0,
+            date: event.effective_date,
+          };
+        }
+      }
+      return latestByLoan;
+    },
+  });
+}
+
 export function useLoan(id: string | undefined) {
   return useQuery({
     queryKey: ['loans', id],
