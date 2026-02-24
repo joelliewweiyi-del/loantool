@@ -33,6 +33,18 @@ export default function Loans() {
     setSearchQuery('');
   };
 
+  // Calculate current-period interest due for a loan using 30/360 convention
+  const calcInterestDue = (loan: typeof loans extends (infer T)[] | undefined ? T : never) => {
+    const principal = (loan as any).outstanding || 0;
+    const rate = (loan as any).interest_rate || 0;
+    const commitment = (loan as any).total_commitment || principal;
+    const cfRate = (loan as any).commitment_fee_rate || 0;
+    const undrawn = Math.max(0, commitment - principal);
+    const interest = principal * rate * (30 / 360);
+    const commitmentFee = undrawn * cfRate * (30 / 360);
+    return { interest, commitmentFee };
+  };
+
   // Filter by vehicle first
   const vehicleLoans = loans?.filter(loan => (loan as any).vehicle === activeVehicle) || [];
   const filteredLoans = vehicleLoans.filter(loan => loan.borrower_name.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).loan_id?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).city?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).category?.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -173,10 +185,13 @@ export default function Loans() {
                     <td className="numeric">{formatCurrency(loan.total_commitment || loan.outstanding)}</td>
                     <td className="numeric">{formatPercent(loan.interest_rate, 2)}</td>
                     <td className="numeric text-muted-foreground">
-                      {latestCharges[loan.id] ? formatCurrency(latestCharges[loan.id].interest) : '—'}
+                      {formatCurrency((latestCharges[loan.id]?.interest) ?? calcInterestDue(loan).interest)}
                     </td>
                     <td className="numeric text-muted-foreground">
-                      {latestCharges[loan.id]?.commitmentFee ? formatCurrency(latestCharges[loan.id].commitmentFee) : '—'}
+                      {(() => {
+                        const cf = latestCharges[loan.id]?.commitmentFee ?? calcInterestDue(loan).commitmentFee;
+                        return cf > 0 ? formatCurrency(cf) : '—';
+                      })()}
                     </td>
                     <td className="text-right text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
                     <td className="text-right text-muted-foreground">{formatDate(loan.maturity_date)}</td>
