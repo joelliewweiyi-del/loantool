@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { useLoans } from '@/hooks/useLoans';
+import { useLoans, useLatestChargesPerLoan } from '@/hooks/useLoans';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -19,6 +19,7 @@ export default function Loans() {
     data: loans,
     isLoading
   } = useLoans();
+  const { data: latestCharges = {} } = useLatestChargesPerLoan();
   const {
     roles
   } = useAuth();
@@ -147,6 +148,8 @@ export default function Loans() {
                   <th className="text-right">Outstanding</th>
                   <th className="text-right">Commitment</th>
                   <th className="text-right">Rate</th>
+                  <th className="text-right">Last Int.</th>
+                  <th className="text-right">Last CF</th>
                   <th className="text-right">Start</th>
                   <th className="text-right">Maturity</th>
                   <th></th>
@@ -169,6 +172,12 @@ export default function Loans() {
                     <td className="numeric">{formatCurrency(loan.outstanding)}</td>
                     <td className="numeric">{formatCurrency(loan.total_commitment || loan.outstanding)}</td>
                     <td className="numeric">{formatPercent(loan.interest_rate, 2)}</td>
+                    <td className="numeric text-muted-foreground">
+                      {latestCharges[loan.id] ? formatCurrency(latestCharges[loan.id].interest) : '—'}
+                    </td>
+                    <td className="numeric text-muted-foreground">
+                      {latestCharges[loan.id]?.commitmentFee ? formatCurrency(latestCharges[loan.id].commitmentFee) : '—'}
+                    </td>
                     <td className="text-right text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
                     <td className="text-right text-muted-foreground">{formatDate(loan.maturity_date)}</td>
                     <td className="text-right">
