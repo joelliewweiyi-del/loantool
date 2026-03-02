@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle, Download } from 'lucide-react';
 import { useBatchCreateLoans, BatchLoanInput, BatchCreateResult } from '@/hooks/useBatchCreateLoans';
 import Papa from 'papaparse';
+import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility } from '@/lib/constants';
 
 interface ParsedRow {
   loan_id: string;
@@ -25,6 +26,13 @@ interface ParsedRow {
   category?: string;
   arrangement_fee?: string;
   payment_due_rule?: string;
+  property_status?: string;
+  earmarked?: string;
+  initial_facility?: string;
+  red_iv_start_date?: string;
+  borrower_email?: string;
+  borrower_address?: string;
+  property_address?: string;
 }
 
 interface ValidationError {
@@ -51,11 +59,18 @@ const EXPECTED_COLUMNS = [
   'category',
   'arrangement_fee',
   'payment_due_rule',
+  'property_status',
+  'earmarked',
+  'initial_facility',
+  'red_iv_start_date',
+  'borrower_email',
+  'borrower_address',
+  'property_address',
 ];
 
-const TEMPLATE_CSV = `loan_id,borrower_name,loan_start_date,maturity_date,interest_rate,interest_type,outstanding,total_commitment,commitment_fee_rate,commitment_fee_basis,notice_frequency,vehicle,facility,city,category,arrangement_fee,payment_due_rule
-501,Example Borrower BV,2025-01-15,2027-01-15,8.5,cash_pay,1000000,1500000,1,undrawn_only,monthly,RED IV,,,Amsterdam,Office,25000,5 business days after period end
-502,Another Borrower,2025-02-01,,10,pik,500000,,,,,TLF,TLF_DEC_A,,Rotterdam,Residential,,`;
+const TEMPLATE_CSV = `loan_id,borrower_name,loan_start_date,maturity_date,interest_rate,interest_type,outstanding,total_commitment,commitment_fee_rate,commitment_fee_basis,notice_frequency,vehicle,facility,city,category,arrangement_fee,payment_due_rule,property_status,earmarked,initial_facility,red_iv_start_date,borrower_email,borrower_address,property_address
+501,Example Borrower BV,2025-01-15,2027-01-15,8.5,cash_pay,1000000,1500000,1,undrawn_only,monthly,RED IV,,,Amsterdam,Office,25000,5 business days after period end,Leased,TRUE,TLFOKT25,2025-01-01,info@borrower.nl,"Keizersgracht 127, 1015CJ Amsterdam","Oudenoord 330-340, Utrecht"
+502,Another Borrower,2025-02-01,,10,pik,500000,,,,,TLF,TLF_DEC_A,,Rotterdam,Residential,,,Development,FALSE,,,,,`;
 
 export function BatchUploadDialog() {
   const [isOpen, setIsOpen] = useState(false);
@@ -89,8 +104,8 @@ export function BatchUploadDialog() {
       errors.push({ row: index + 1, field: 'loan_start_date', message: 'Invalid date format (use YYYY-MM-DD)' });
     }
 
-    if (row.vehicle === 'TLF' && !row.facility?.trim()) {
-      errors.push({ row: index + 1, field: 'facility', message: 'Facility name required for TLF vehicle' });
+    if (row.vehicle && vehicleRequiresFacility(row.vehicle) && !row.facility?.trim()) {
+      errors.push({ row: index + 1, field: 'facility', message: `Facility name required for ${row.vehicle} vehicle` });
     }
 
     if (row.interest_type && !['cash_pay', 'pik'].includes(row.interest_type.toLowerCase())) {
@@ -122,12 +137,19 @@ export function BatchUploadDialog() {
       commitment_fee_rate: commitmentFeeRate ? commitmentFeeRate / 100 : null, // Convert % to decimal
       commitment_fee_basis: row.commitment_fee_basis?.trim() || 'undrawn_only',
       notice_frequency: row.notice_frequency?.trim() || 'monthly',
-      vehicle: row.vehicle?.trim() || 'RED IV',
+      vehicle: row.vehicle?.trim() || DEFAULT_VEHICLE,
       facility: row.facility?.trim() || null,
       city: row.city?.trim() || null,
       category: row.category?.trim() || null,
       arrangement_fee: parseNumber(row.arrangement_fee),
       payment_due_rule: row.payment_due_rule?.trim() || null,
+      property_status: row.property_status?.trim() || null,
+      earmarked: row.earmarked?.trim().toLowerCase() === 'true',
+      initial_facility: row.initial_facility?.trim() || null,
+      red_iv_start_date: row.red_iv_start_date?.trim() || null,
+      borrower_email: row.borrower_email?.trim() || null,
+      borrower_address: row.borrower_address?.trim() || null,
+      property_address: row.property_address?.trim() || null,
     };
   };
 
@@ -248,10 +270,10 @@ export function BatchUploadDialog() {
               {EXPECTED_COLUMNS.join(', ')}
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              <strong>Required:</strong> loan_id, loan_start_date (YYYY-MM-DD format), facility (if vehicle=TLF)<br />
+              <strong>Required:</strong> loan_id, loan_start_date (YYYY-MM-DD format), facility (if vehicle requires it)<br />
               <strong>Rates:</strong> Enter as percentages (e.g., 8.5 for 8.5%)<br />
               <strong>interest_type:</strong> cash_pay or pik<br />
-              <strong>vehicle:</strong> RED IV or TLF
+              <strong>vehicle:</strong> {VEHICLES.map(v => v.value).join(' or ')}
             </p>
           </details>
 

@@ -8,6 +8,7 @@ import {
   PeriodAccrual,
   AccrualsSummary,
 } from '@/lib/loanCalculations';
+import { getCurrentDateString } from '@/lib/simulatedDate';
 
 export interface UseAccrualsResult {
   periodAccruals: PeriodAccrual[];
@@ -56,7 +57,7 @@ export function useAccruals(loanId: string | undefined): UseAccrualsResult {
 
     // If no periods exist, derive current state from events directly
     if (!periods || periods.length === 0) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getCurrentDateString();
       const currentState = getLoanStateAtDate(
         sortEventsByDate(events),
         today,

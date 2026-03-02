@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Database } from '@/integrations/supabase/types';
 import { startOfMonth, endOfMonth, addMonths, isBefore, parseISO, format } from 'date-fns';
+import { getCurrentDate, getCurrentDateString } from '@/lib/simulatedDate';
+import { DEFAULT_VEHICLE, vehicleRequiresFacility } from '@/lib/constants';
 
 type DbEventType = Database['public']['Enums']['event_type'];
 type Json = Database['public']['Tables']['loan_events']['Row']['metadata'];
@@ -25,6 +27,13 @@ export interface BatchLoanInput {
   category?: string | null;
   arrangement_fee?: number | null;
   payment_due_rule?: string | null;
+  property_status?: string | null;
+  earmarked?: boolean;
+  initial_facility?: string | null;
+  red_iv_start_date?: string | null;
+  borrower_email?: string | null;
+  borrower_address?: string | null;
+  property_address?: string | null;
 }
 
 export interface BatchCreateResult {
@@ -40,7 +49,7 @@ function generateMonthlyPeriods(
 ): Database['public']['Tables']['periods']['Insert'][] {
   const periods: Database['public']['Tables']['periods']['Insert'][] = [];
   const start = parseISO(startDate);
-  const today = new Date();
+  const today = getCurrentDate();
   const endDate = maturityDate ? parseISO(maturityDate) : today;
   const endOfCurrentMonth = endOfMonth(today);
   const effectiveEnd = isBefore(endDate, endOfCurrentMonth) ? endDate : endOfCurrentMonth;
@@ -98,11 +107,18 @@ export function useBatchCreateLoans() {
               commitment_fee_rate: loanData.commitment_fee_rate || null,
               commitment_fee_basis: loanData.commitment_fee_basis || 'undrawn_only',
               notice_frequency: loanData.notice_frequency || 'monthly',
-              vehicle: loanData.vehicle || 'RED IV',
-              facility: loanData.vehicle === 'TLF' ? loanData.facility || null : null,
+              vehicle: loanData.vehicle || DEFAULT_VEHICLE,
+              facility: vehicleRequiresFacility(loanData.vehicle || DEFAULT_VEHICLE) ? loanData.facility || null : null,
               city: loanData.city || null,
               category: loanData.category || null,
               payment_due_rule: loanData.payment_due_rule || null,
+              property_status: loanData.property_status || null,
+              earmarked: loanData.earmarked ?? false,
+              initial_facility: loanData.initial_facility || null,
+              red_iv_start_date: loanData.red_iv_start_date || null,
+              borrower_email: loanData.borrower_email || null,
+              borrower_address: loanData.borrower_address || null,
+              property_address: loanData.property_address || null,
             }])
             .select()
             .single();
@@ -113,7 +129,7 @@ export function useBatchCreateLoans() {
           }
 
           const createdLoan = loan;
-          const effectiveDate = loanData.loan_start_date || new Date().toISOString().split('T')[0];
+          const effectiveDate = loanData.loan_start_date || getCurrentDateString();
           const isPikLoan = loanData.interest_type === 'pik';
 
           const createFoundingEvent = async (
@@ -188,7 +204,8 @@ export function useBatchCreateLoans() {
             );
 
             if (monthlyPeriods.length > 0) {
-              await supabase.from('periods').insert(monthlyPeriods);
+              const { error: periodsError } = await supabase.from('periods').insert(monthlyPeriods);
+              if (periodsError) throw new Error(`Failed to create periods: ${periodsError.message}`);
             }
           }
 

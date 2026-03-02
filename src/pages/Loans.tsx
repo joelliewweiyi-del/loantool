@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { useLoans, useLatestChargesPerLoan } from '@/hooks/useLoans';
+import { useGeneratePeriods } from '@/hooks/useGeneratePeriods';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { StatusBadge } from '@/components/loans/LoanStatusBadge';
 import { CreateLoanDialog } from '@/components/loans/CreateLoanDialog';
@@ -10,18 +12,27 @@ import { BatchUploadDialog } from '@/components/loans/BatchUploadDialog';
 import { formatDate, formatCurrency, formatPercent } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChevronRight, Search, Building2, Briefcase, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
-type Vehicle = 'RED IV' | 'TLF';
+import { ChevronRight, Search, ArrowUpDown, ArrowUp, ArrowDown, CalendarPlus, Download } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { downloadLoanTapeXlsx } from '@/lib/exportLoanTape';
+import { getCurrentDateString } from '@/lib/simulatedDate';
+import { LoanEvent } from '@/types/loan';
+import { VEHICLES, DEFAULT_VEHICLE, type Vehicle, vehicleRequiresFacility } from '@/lib/constants';
 type SortField = 'loan_id' | 'city' | 'category' | 'outstanding' | 'total_commitment' | 'interest_rate' | 'loan_start_date' | 'maturity_date' | 'last_interest' | 'last_cf';
 type SortDir = 'asc' | 'desc';
 export default function Loans() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeVehicle = searchParams.get('vehicle') as Vehicle || 'RED IV';
+  const activeVehicle = searchParams.get('vehicle') as Vehicle || DEFAULT_VEHICLE;
   const {
     data: loans,
     isLoading
   } = useLoans();
   const { data: latestCharges = {} } = useLatestChargesPerLoan();
+  // Derive the period label from the first available charge entry
+  const chargesPeriodLabel = useMemo(() => {
+    const firstEntry = Object.values(latestCharges)[0];
+    return firstEntry?.periodLabel || '';
+  }, [latestCharges]);
   const {
     roles
   } = useAuth();
@@ -29,7 +40,33 @@ export default function Loans() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const canCreate = roles.includes('pm') || roles.includes('controller');
+  const generatePeriods = useGeneratePeriods();
+  const isController = roles.includes('controller');
+  const canCreate = roles.includes('pm') || isController;
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportLoanTape = async () => {
+    if (!vehicleLoans.length) return;
+    setIsExporting(true);
+    try {
+      const loanIds = vehicleLoans.map(l => l.id);
+      const { data: events } = await supabase
+        .from('loan_events')
+        .select('*')
+        .in('loan_id', loanIds)
+        .eq('status', 'approved');
+
+      const asOfDate = getCurrentDateString();
+      const loansWithEvents = vehicleLoans.map(loan => ({
+        loan,
+        events: ((events || []) as unknown as LoanEvent[]).filter(e => e.loan_id === loan.id),
+      }));
+
+      await downloadLoanTapeXlsx(loansWithEvents, asOfDate, activeVehicle);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -111,8 +148,10 @@ export default function Loans() {
   const pikLoansCount = activeLoans.filter(l => l.interest_type === 'pik').length;
 
   // Count loans per vehicle for tabs
-  const redIVCount = loans?.filter(l => (l as any).vehicle === 'RED IV').length || 0;
-  const tlfCount = loans?.filter(l => (l as any).vehicle === 'TLF').length || 0;
+  const vehicleCounts = VEHICLES.map(v => ({
+    ...v,
+    count: loans?.filter(l => (l as any).vehicle === v.value).length || 0,
+  }));
   if (isLoading) {
     return <div className="p-6 space-y-6">
         <Skeleton className="h-8 w-48" />
@@ -128,27 +167,43 @@ export default function Loans() {
           </p>
         </div>
         
-        {canCreate && (
-          <div className="flex items-center gap-2">
-            <BatchUploadDialog />
-            <CreateLoanDialog />
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleExportLoanTape}
+            disabled={isExporting || !vehicleLoans.length}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            {isExporting ? 'Exporting...' : 'Loan Tape'}
+          </Button>
+          {isController && (
+            <Button
+              variant="outline"
+              onClick={() => generatePeriods.mutate()}
+              disabled={generatePeriods.isPending}
+            >
+              <CalendarPlus className="h-4 w-4 mr-2" />
+              {generatePeriods.isPending ? 'Generating...' : 'Generate Periods'}
+            </Button>
+          )}
+          {canCreate && (
+            <>
+              <BatchUploadDialog />
+              <CreateLoanDialog />
+            </>
+          )}
+        </div>
       </div>
 
       {/* Vehicle Tabs */}
       <Tabs value={activeVehicle} onValueChange={handleVehicleChange} className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="RED IV" className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            RED IV
-            <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{redIVCount}</span>
-          </TabsTrigger>
-          <TabsTrigger value="TLF" className="flex items-center gap-2">
-            <Briefcase className="h-4 w-4" />
-            TLF
-            <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{tlfCount}</span>
-          </TabsTrigger>
+        <TabsList className={`grid w-full max-w-md grid-cols-${VEHICLES.length}`}>
+          {vehicleCounts.map(v => (
+            <TabsTrigger key={v.value} value={v.value} className="flex items-center gap-2">
+              {v.label}
+              <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{v.count}</span>
+            </TabsTrigger>
+          ))}
         </TabsList>
       </Tabs>
 
@@ -182,11 +237,9 @@ export default function Loans() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder={`Search ${activeVehicle} loans...`} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-9" />
-            </div>
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input placeholder={`Search ${activeVehicle} loans...`} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-9" />
           </div>
         </CardHeader>
         <CardContent>
@@ -196,14 +249,14 @@ export default function Loans() {
               <thead>
                 <tr>
                   <SortTh field="loan_id">Loan_ID</SortTh>
-                  {activeVehicle === 'TLF' && <th>Facility</th>}
+                  {vehicleRequiresFacility(activeVehicle) && <th>Facility</th>}
                   <SortTh field="city">City</SortTh>
                   <SortTh field="category">Category</SortTh>
                   <SortTh field="outstanding" className="text-right">Outstanding</SortTh>
                   <SortTh field="total_commitment" className="text-right">Commitment</SortTh>
                   <SortTh field="interest_rate" className="text-right">Rate</SortTh>
-                  <SortTh field="last_interest" className="text-right">Last Int.</SortTh>
-                  <SortTh field="last_cf" className="text-right">Last CF</SortTh>
+                  <SortTh field="last_interest" className="text-right">Int. {chargesPeriodLabel || 't-1'}</SortTh>
+                  <SortTh field="last_cf" className="text-right">CF {chargesPeriodLabel || 't-1'}</SortTh>
                   <SortTh field="loan_start_date" className="text-right">Start</SortTh>
                   <SortTh field="maturity_date" className="text-right">Maturity</SortTh>
                   <th></th>
@@ -212,7 +265,7 @@ export default function Loans() {
               <tbody>
                 {filteredLoans.map(loan => <tr key={loan.id} onDoubleClick={() => navigate(`/loans/${loan.id}`)} className="cursor-pointer">
                     <td className="font-mono font-medium">{(loan as any).loan_id || '—'}</td>
-                    {activeVehicle === 'TLF' && <td>
+                    {vehicleRequiresFacility(activeVehicle) && <td>
                         <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
                           {(loan as any).facility || '—'}
                         </span>

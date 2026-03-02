@@ -8,9 +8,11 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import Auth from "./pages/Auth";
 import Loans from "./pages/Loans";
 import LoanDetail from "./pages/LoanDetail";
-import MonthlyApproval from "./pages/MonthlyApproval";
 import AfasData from "./pages/AfasData";
 import AfasGLExplorer from "./pages/AfasGLExplorer";
+import AfasDashboard from "./pages/AfasDashboard";
+import MonthlyApproval from "./pages/MonthlyApproval";
+import Export from "./pages/Export";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -85,6 +87,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <AfasGLExplorer />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/afas-dashboard"
+        element={
+          <ProtectedRoute>
+            <AfasDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/export"
+        element={
+          <ProtectedRoute>
+            <Export />
           </ProtectedRoute>
         }
       />

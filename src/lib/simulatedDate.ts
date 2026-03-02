@@ -3,7 +3,7 @@
  * Change this to test different time periods.
  * Set to null to use the actual current date.
  */
-export const SIMULATED_DATE = new Date('2026-06-15');
+export const SIMULATED_DATE: Date | null = null;
 
 /**
  * Returns the simulated current date, or actual date if simulation is disabled.

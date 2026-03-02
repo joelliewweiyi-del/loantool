@@ -1,4 +1,4 @@
-project_id = "xgurpabsifgxeyqjlwxu"
+project_id = "waikgtdlwksjhxolwpyi"
 
 [functions.process-daily-accruals]
 verify_jwt = false
@@ -13,4 +13,16 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.test-afas-write]
+verify_jwt = false
+
+[functions.test-afas-draws]
+verify_jwt = false
+
+[functions.get-afas-debtors]
+verify_jwt = false
+
+[functions.post-period-to-afas]
+verify_jwt = false
+
+[functions.correct-event-amount]
 verify_jwt = false

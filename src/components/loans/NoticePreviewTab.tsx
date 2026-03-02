@@ -6,8 +6,9 @@ import { Separator } from '@/components/ui/separator';
 import { formatCurrency, formatDate, formatPercent, formatEventType } from '@/lib/format';
 import { PeriodAccrual, AccrualsSummary } from '@/lib/loanCalculations';
 import { Loan, LoanEvent } from '@/types/loan';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, AlertTriangle } from 'lucide-react';
 import raxLogo from '@/assets/rax-logo.png';
+import { useAppConfig } from '@/hooks/useAppConfig';
 
 interface NoticePreviewTabProps {
   loan: Loan;
@@ -21,6 +22,8 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodAccrual | null>(
     periodAccruals.length > 0 ? periodAccruals[periodAccruals.length - 1] : null
   );
+  const { data: bankConfig } = useAppConfig(['bank_name', 'bank_iban', 'bank_bic', 'bank_account_name']);
+  const bankIncomplete = !bankConfig?.bank_name || !bankConfig?.bank_iban || !bankConfig?.bank_bic;
 
   if (isLoading) {
     return <div className="animate-pulse h-96 bg-muted rounded-lg" />;
@@ -525,14 +528,20 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
       {!isPik && (
         <>
           <Separator />
+          {bankIncomplete && (
+            <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 rounded p-3 border border-amber-200">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              Bank details not configured. Update bank_name, bank_iban, and bank_bic in app_config before sending notices.
+            </div>
+          )}
           <div className="text-sm text-muted-foreground space-y-2">
             <h4 className="font-medium text-foreground">Payment Instructions</h4>
             <p>Please wire the amount due to the following account:</p>
             <div className="bg-muted/30 rounded p-4 font-mono text-xs space-y-1">
-              <p>Bank: [Bank Name]</p>
-              <p>Account Name: RAX Loan Management System</p>
-              <p>IBAN: [IBAN Number]</p>
-              <p>BIC/SWIFT: [BIC Code]</p>
+              <p>Bank: {bankConfig?.bank_name || '[Not configured]'}</p>
+              <p>Account Name: {bankConfig?.bank_account_name || 'RAX Loan Management System'}</p>
+              <p>IBAN: {bankConfig?.bank_iban || '[Not configured]'}</p>
+              <p>BIC/SWIFT: {bankConfig?.bank_bic || '[Not configured]'}</p>
               <p>Reference: {period.periodId.slice(0, 8).toUpperCase()}</p>
             </div>
           </div>

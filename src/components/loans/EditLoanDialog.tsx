@@ -4,10 +4,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Pencil } from 'lucide-react';
 import { useUpdateLoan } from '@/hooks/useLoans';
 import { Loan, InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
+import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility } from '@/lib/constants';
 
 interface EditLoanDialogProps {
   loan: Loan;
@@ -21,6 +23,13 @@ interface LoanFormData {
   facility: string;
   city: string;
   category: string;
+  property_status: string;
+  earmarked: boolean;
+  initial_facility: string;
+  red_iv_start_date: string;
+  borrower_email: string;
+  borrower_address: string;
+  property_address: string;
   interest_rate: string;
   interest_type: InterestType;
   fee_payment_type: PaymentType;
@@ -30,7 +39,12 @@ interface LoanFormData {
   commitment_fee_basis: CommitmentFeeBasis;
   notice_frequency: string;
   payment_due_rule: string;
+  cash_interest_percentage: string;
   remarks: string;
+  google_maps_url: string;
+  kadastrale_kaart_url: string;
+  photo_url: string;
+  additional_info: string;
 }
 
 export function EditLoanDialog({ loan }: EditLoanDialogProps) {
@@ -41,10 +55,17 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
     borrower_name: '',
     loan_start_date: '',
     maturity_date: '',
-    vehicle: 'RED IV',
+    vehicle: DEFAULT_VEHICLE,
     facility: '',
     city: '',
     category: '',
+    property_status: '',
+    earmarked: false,
+    initial_facility: '',
+    red_iv_start_date: '',
+    borrower_email: '',
+    borrower_address: '',
+    property_address: '',
     interest_rate: '',
     interest_type: 'cash_pay',
     fee_payment_type: 'pik',
@@ -54,7 +75,12 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
     commitment_fee_basis: 'undrawn_only',
     notice_frequency: 'monthly',
     payment_due_rule: '',
+    cash_interest_percentage: '',
     remarks: '',
+    google_maps_url: '',
+    kadastrale_kaart_url: '',
+    photo_url: '',
+    additional_info: '',
   });
 
   // Populate form when dialog opens
@@ -64,10 +90,17 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
         borrower_name: loan.borrower_name || '',
         loan_start_date: loan.loan_start_date || '',
         maturity_date: loan.maturity_date || '',
-        vehicle: loan.vehicle || 'RED IV',
+        vehicle: loan.vehicle || DEFAULT_VEHICLE,
         facility: loan.facility || '',
         city: loan.city || '',
         category: loan.category || '',
+        property_status: loan.property_status || '',
+        earmarked: loan.earmarked ?? false,
+        initial_facility: loan.initial_facility || '',
+        red_iv_start_date: loan.red_iv_start_date || '',
+        borrower_email: loan.borrower_email || '',
+        borrower_address: loan.borrower_address || '',
+        property_address: loan.property_address || '',
         interest_rate: loan.interest_rate != null ? (loan.interest_rate * 100).toString() : '',
         interest_type: (loan.interest_type as InterestType) || 'cash_pay',
         fee_payment_type: ((loan as any).fee_payment_type as PaymentType) || 'pik',
@@ -77,7 +110,12 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
         commitment_fee_basis: (loan.commitment_fee_basis as CommitmentFeeBasis) || 'undrawn_only',
         notice_frequency: loan.notice_frequency || 'monthly',
         payment_due_rule: loan.payment_due_rule || '',
+        cash_interest_percentage: loan.cash_interest_percentage != null ? loan.cash_interest_percentage.toString() : '',
         remarks: loan.remarks || '',
+        google_maps_url: (loan as any).google_maps_url || '',
+        kadastrale_kaart_url: (loan as any).kadastrale_kaart_url || '',
+        photo_url: (loan as any).photo_url || '',
+        additional_info: (loan as any).additional_info || '',
       });
     }
   }, [isOpen, loan]);
@@ -102,17 +140,29 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
       notice_frequency: formData.notice_frequency,
       payment_due_rule: formData.payment_due_rule || null,
       vehicle: formData.vehicle,
-      facility: formData.vehicle === 'TLF' ? formData.facility || null : null,
+      facility: vehicleRequiresFacility(formData.vehicle) ? formData.facility || null : null,
       city: formData.city || null,
       category: formData.category || null,
+      property_status: formData.property_status || null,
+      earmarked: formData.earmarked,
+      initial_facility: formData.initial_facility || null,
+      red_iv_start_date: formData.red_iv_start_date || null,
+      borrower_email: formData.borrower_email || null,
+      borrower_address: formData.borrower_address || null,
+      property_address: formData.property_address || null,
       remarks: formData.remarks || null,
+      cash_interest_percentage: formData.cash_interest_percentage ? parseFloat(formData.cash_interest_percentage) : null,
+      google_maps_url: formData.google_maps_url || null,
+      kadastrale_kaart_url: formData.kadastrale_kaart_url || null,
+      photo_url: formData.photo_url || null,
+      additional_info: formData.additional_info || null,
     };
 
     await updateLoan.mutateAsync({ id: loan.id, updates: payload as unknown as Partial<Loan> });
     setIsOpen(false);
   };
 
-  const isTLF = formData.vehicle === 'TLF';
+  const isTLF = vehicleRequiresFacility(formData.vehicle);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -147,8 +197,9 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="RED IV">RED IV</SelectItem>
-                    <SelectItem value="TLF">TLF</SelectItem>
+                    {VEHICLES.map(v => (
+                      <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -163,6 +214,15 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                   />
                 </div>
               )}
+              <div className="space-y-2">
+                <Label htmlFor="edit-initial_facility">Initial Facility</Label>
+                <Input
+                  id="edit-initial_facility"
+                  value={formData.initial_facility}
+                  onChange={(e) => handleChange('initial_facility', e.target.value)}
+                  placeholder="e.g., TLFOKT25"
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="borrower_name">Borrower Legal Name</Label>
                 <Input
@@ -179,6 +239,15 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                   type="date"
                   value={formData.loan_start_date}
                   onChange={(e) => handleChange('loan_start_date', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-red_iv_start_date">RED IV Start Date</Label>
+                <Input
+                  id="edit-red_iv_start_date"
+                  type="date"
+                  value={formData.red_iv_start_date}
+                  onChange={(e) => handleChange('red_iv_start_date', e.target.value)}
                 />
               </div>
               <div className="space-y-2">
@@ -207,6 +276,30 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                   onChange={(e) => handleChange('category', e.target.value)}
                   placeholder="e.g., Office, Residential"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label>Property Status</Label>
+                <Select
+                  value={formData.property_status}
+                  onValueChange={(v) => handleChange('property_status', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Leased">Leased</SelectItem>
+                    <SelectItem value="Redevelopment">Redevelopment</SelectItem>
+                    <SelectItem value="Development">Development</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center space-x-2 pt-6">
+                <Checkbox
+                  id="edit-earmarked"
+                  checked={formData.earmarked}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, earmarked: checked === true }))}
+                />
+                <Label htmlFor="edit-earmarked" className="cursor-pointer">Earmarked</Label>
               </div>
             </div>
           </div>
@@ -265,12 +358,32 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {formData.fee_payment_type === 'pik' 
-                    ? 'Fees added to principal balance' 
+                  {formData.fee_payment_type === 'pik'
+                    ? 'Fees added to principal balance'
                     : 'Fees withheld from initial funding'}
                 </p>
               </div>
             </div>
+            {formData.interest_payment_type === 'cash' && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cash_interest_percentage">Cash Interest %</Label>
+                  <Input
+                    id="cash_interest_percentage"
+                    type="number"
+                    step="1"
+                    min="0"
+                    max="100"
+                    value={formData.cash_interest_percentage}
+                    onChange={(e) => handleChange('cash_interest_percentage', e.target.value)}
+                    placeholder="100 (default)"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    % of interest paid in cash. Leave empty for 100%. Remainder from interest depot.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <Separator />
@@ -358,6 +471,44 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
 
           <Separator />
 
+          {/* Address Section */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Addresses & Contact
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-borrower_address">Borrower Address</Label>
+                <Input
+                  id="edit-borrower_address"
+                  value={formData.borrower_address}
+                  onChange={(e) => handleChange('borrower_address', e.target.value)}
+                  placeholder="e.g., Keizersgracht 127, 1015CJ Amsterdam"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-property_address">Property Address</Label>
+                <Input
+                  id="edit-property_address"
+                  value={formData.property_address}
+                  onChange={(e) => handleChange('property_address', e.target.value)}
+                  placeholder="e.g., Oudenoord 330-340, Utrecht"
+                />
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label htmlFor="edit-borrower_email">Borrower Email</Label>
+                <Input
+                  id="edit-borrower_email"
+                  value={formData.borrower_email}
+                  onChange={(e) => handleChange('borrower_email', e.target.value)}
+                  placeholder="e.g., contact@borrower.nl; cfo@borrower.nl"
+                />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
           {/* Remarks Section */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
@@ -370,6 +521,55 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 value={formData.remarks}
                 onChange={(e) => handleChange('remarks', e.target.value)}
                 placeholder="Any additional notes..."
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Property Detail Section */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Property Detail (Loan Tape)
+            </h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-google_maps_url">Google Maps URL</Label>
+                <Input
+                  id="edit-google_maps_url"
+                  value={formData.google_maps_url}
+                  onChange={(e) => handleChange('google_maps_url', e.target.value)}
+                  placeholder="https://maps.app.goo.gl/..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-kadastrale_kaart_url">Kadastrale Kaart URL</Label>
+                <Input
+                  id="edit-kadastrale_kaart_url"
+                  value={formData.kadastrale_kaart_url}
+                  onChange={(e) => handleChange('kadastrale_kaart_url', e.target.value)}
+                  placeholder="https://kadastralekaart.com/..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-photo_url">Photo URL</Label>
+                <Input
+                  id="edit-photo_url"
+                  value={formData.photo_url}
+                  onChange={(e) => handleChange('photo_url', e.target.value)}
+                  placeholder="https://i.imgur.com/..."
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-additional_info">Additional Information</Label>
+              <textarea
+                id="edit-additional_info"
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={formData.additional_info}
+                onChange={(e) => handleChange('additional_info', e.target.value)}
+                placeholder="Detailed description for loan tape..."
+                rows={4}
               />
             </div>
           </div>

@@ -2,14 +2,16 @@ import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
-import { 
-  FileText, 
+import {
+  FileText,
   LogOut,
   User,
   ChevronRight,
-  CalendarCheck,
+  ClipboardCheck,
   Database,
-  Landmark
+  Download,
+  Landmark,
+  LayoutDashboard
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import raxLogo from '@/assets/rax-logo.png';
@@ -20,7 +22,9 @@ interface AppLayoutProps {
 
 const navigation = [
   { name: 'Loans', href: '/loans', icon: FileText },
-  { name: 'Monthly Approval', href: '/monthly-approval', icon: CalendarCheck },
+  { name: 'Monthly Approval', href: '/monthly-approval', icon: ClipboardCheck },
+  { name: 'Export', href: '/export', icon: Download },
+  { name: 'AFAS Dashboard', href: '/afas-dashboard', icon: LayoutDashboard },
   { name: 'AFAS Data', href: '/afas-data', icon: Database },
   { name: 'AFAS GL Explorer', href: '/afas-gl-explorer', icon: Landmark },
 ];

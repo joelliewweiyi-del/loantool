@@ -75,6 +75,11 @@ export interface PeriodAccrual {
   
   // Commitment fee segments (when undrawn changes)
   commitmentFeeSegments: CommitmentFeeSegment[];
+
+  // Payment tracking (from periods table)
+  paymentDate: string | null;
+  paymentAmount: number | null;
+  paymentAfasRef: string | null;
 }
 
 /**
@@ -540,14 +545,14 @@ export function calculatePeriodAccruals(
   
   // Commitment fee accrued derives from segments (30/360), not daily accruals
   const commitmentFeeAccrued = commitmentFeeSegments.reduce((sum, seg) => sum + seg.fee, 0);
-  
+
   // Total due (cash pay interest + commitment fee + invoiced fees)
   const cashPayInterest = interestSegments
     .filter(seg => seg.interestType === 'cash_pay')
     .reduce((sum, seg) => sum + seg.interest, 0);
-  
+
   const totalDue = cashPayInterest + commitmentFeeAccrued + feesInvoiced;
-  
+
   // For PIK loans, the closing principal should include the interest charge
   // that will be capitalized at period end
   const interestCharge = interestAccrued + commitmentFeeAccrued;
@@ -590,6 +595,9 @@ export function calculatePeriodAccruals(
     dailyAccruals,
     interestSegments,
     commitmentFeeSegments,
+    paymentDate: period.payment_date ?? null,
+    paymentAmount: period.payment_amount ?? null,
+    paymentAfasRef: period.payment_afas_ref ?? null,
   };
 }
 

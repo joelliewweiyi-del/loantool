@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx supabase functions deploy test-afas-draws)",
+      "Bash(npx supabase projects list)",
+      "Bash(npx supabase projects api-keys --project-ref waikgtdlwksjhxolwpyi)",
+      "Bash(npx tsc --noEmit --pretty)",
+      "Bash(ANON_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhaWtndGRsd2tzamh4b2x3cHlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIxMDg3NDIsImV4cCI6MjA4NzY4NDc0Mn0.KRw4HBvK-0gjeVi99Cni-JszlPWCOnbcKkS9VP-FgDY\")",
+      "Bash(curl -s \"https://waikgtdlwksjhxolwpyi.supabase.co/functions/v1/test-afas-draws\" -H \"Authorization: Bearer $ANON_KEY\" -H \"Content-Type: application/json\" -d '{\"\"filterFieldIds\"\":\"\"JournalId,AccountNo\"\",\"\"filterValues\"\":\"\"50,10465\"\",\"\"operatorTypes\"\":\"\"1,1\"\",\"\"take\"\":50}')",
+      "Bash(node -e \":*)"
+    ]
+  }
+}

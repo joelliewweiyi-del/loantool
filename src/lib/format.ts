@@ -119,9 +119,19 @@ export function daysBetween30360(
   let y2 = end.getUTCFullYear();
   
   // Adjustment rules (30E/360 European method)
-  // Always cap day 31 to 30 for both dates
+  // Cap day 31 to 30 for both dates
   if (d1 === 31) d1 = 30;
   if (d2 === 31) d2 = 30;
+
+  // Last day of February → treat as day 30
+  // (Feb 28 in normal years, Feb 29 in leap years)
+  const isLastDayOfFeb = (d: number, m: number, y: number) => {
+    if (m !== 2) return false;
+    const lastDay = new Date(Date.UTC(y, 1 + 1, 0)).getUTCDate(); // 28 or 29
+    return d === lastDay;
+  };
+  if (isLastDayOfFeb(d1, m1, y1)) d1 = 30;
+  if (isLastDayOfFeb(d2, m2, y2)) d2 = 30;
   
   const days = (y2 - y1) * 360 + (m2 - m1) * 30 + (d2 - d1);
   

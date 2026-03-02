@@ -545,13 +545,15 @@ export default function LoanDetail() {
 
         {/* Accruals Tab */}
         <TabsContent value="accruals">
-          <AccrualsTab 
-            periodAccruals={periodAccruals} 
-            summary={accrualsSummary} 
+          <AccrualsTab
+            periodAccruals={periodAccruals}
+            summary={accrualsSummary}
             isLoading={accrualsLoading}
             loanId={id}
+            loanNumericId={(loan as any)?.loan_id}
             events={events}
             interestType={(loan?.interest_type as 'cash_pay' | 'pik') || 'cash_pay'}
+            cashInterestPct={(loan as any)?.cash_interest_percentage}
           />
         </TabsContent>
 

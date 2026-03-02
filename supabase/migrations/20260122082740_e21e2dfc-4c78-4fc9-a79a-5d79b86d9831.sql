@@ -14,9 +14,10 @@ AS $$
   )
 $$;
 
--- Grant admin role to joel@raxfinance.nl
+-- Grant admin role to joel@raxfinance.nl (conditional — user may not exist yet on fresh project)
 INSERT INTO public.user_roles (user_id, role)
-VALUES ('264f1ca2-2e17-4837-a917-a2bf0c8f82bb', 'admin')
+SELECT '264f1ca2-2e17-4837-a917-a2bf0c8f82bb', 'admin'
+WHERE EXISTS (SELECT 1 FROM auth.users WHERE id = '264f1ca2-2e17-4837-a917-a2bf0c8f82bb')
 ON CONFLICT (user_id, role) DO NOTHING;
 
 -- Update loans table to allow admin DELETE

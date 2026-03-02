@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getAfasToken, getAfasEnvId } from "../_shared/afas-config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,15 +12,22 @@ interface PostingRequest {
   dry_run?: boolean;
 }
 
+interface AppConfig {
+  afas_gl_interest_pik: string;
+  afas_gl_interest_cash: string;
+  afas_journal_code: string;
+  afas_admin_code: string;
+  afas_payment_terms_days: string;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const afasToken = Deno.env.get('AFAS_TOKEN');
-    const afasEnvId = Deno.env.get('AFAS_ENVIRONMENT_ID');
-    const adminCode = Deno.env.get('AFAS_ADMINISTRATIE_CODE') || '05';
+    const afasToken = await getAfasToken();
+    const afasEnvId = getAfasEnvId();
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -42,6 +50,41 @@ serve(async (req) => {
 
     // Initialize Supabase client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Load configuration from app_config table
+    const configKeys = [
+      'afas_gl_interest_pik', 'afas_gl_interest_cash',
+      'afas_journal_code', 'afas_admin_code', 'afas_payment_terms_days',
+    ];
+    const { data: configRows, error: configError } = await supabase
+      .from('app_config')
+      .select('key, value')
+      .in('key', configKeys);
+
+    if (configError) {
+      return new Response(
+        JSON.stringify({ success: false, error: `Failed to load config: ${configError.message}` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const config: Record<string, string> = {};
+    for (const row of configRows || []) {
+      config[row.key] = row.value;
+    }
+
+    // Validate required config
+    const missingKeys = configKeys.filter(k => !config[k]);
+    if (missingKeys.length > 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: `Missing app_config keys: ${missingKeys.join(', ')}. Run the seed migration or set them manually.` }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const adminCode = config.afas_admin_code;
+    const journalCode = config.afas_journal_code;
+    const paymentTermsDays = parseInt(config.afas_payment_terms_days, 10) || 30;
 
     // Fetch period with loan data
     const { data: period, error: periodError } = await supabase
@@ -76,8 +119,8 @@ serve(async (req) => {
     // Check if already posted (idempotency)
     if (period.afas_posted_at) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
+        JSON.stringify({
+          success: false,
           error: 'Period already posted to AFAS',
           afas_invoice_number: period.afas_invoice_number,
           afas_posted_at: period.afas_posted_at
@@ -89,9 +132,9 @@ serve(async (req) => {
     // Check period status
     if (period.status !== 'sent') {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: `Period must be in 'sent' status to post. Current status: ${period.status}` 
+        JSON.stringify({
+          success: false,
+          error: `Period must be in 'sent' status to post. Current status: ${period.status}`
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -128,19 +171,39 @@ serve(async (req) => {
 
     if (totalAmount <= 0) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'No amount to post - period has zero or negative total' 
+        JSON.stringify({
+          success: false,
+          error: 'No amount to post - period has zero or negative total'
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Generate invoice number
-    const invoiceNumber = `INT-${loan.loan_id}-${period.period_end}`;
-    
+    // Generate invoice number with version suffix to prevent collisions on re-post
+    const { count: priorPostCount } = await supabase
+      .from('periods')
+      .select('id', { count: 'exact', head: true })
+      .eq('loan_id', period.loan_id)
+      .eq('period_end', period.period_end)
+      .not('afas_invoice_number', 'is', null);
+
+    const version = (priorPostCount || 0) + 1;
+    const invoiceNumber = version === 1
+      ? `INT-${loan.loan_id}-${period.period_end}`
+      : `INT-${loan.loan_id}-${period.period_end}-v${version}`;
+
     // Build description
     const description = `Interest ${period.period_start} - ${period.period_end} | ${loan.borrower_name}`;
+
+    // Select GL account based on loan interest type
+    const glAccount = loan.interest_type === 'pik'
+      ? config.afas_gl_interest_pik
+      : config.afas_gl_interest_cash;
+
+    // Calculate due date from config
+    const dueDate = new Date(
+      new Date(period.period_end).getTime() + paymentTermsDays * 24 * 60 * 60 * 1000
+    ).toISOString().split('T')[0];
 
     // AFAS FiEntries payload - single line for total
     const afasPayload = {
@@ -148,10 +211,9 @@ serve(async (req) => {
         Element: {
           Fields: {
             AdCd: adminCode,
-            JoCd: "70", // Sales journal - adjust as needed
+            JoCd: journalCode,
             DaJo: period.period_end, // Journal date = period end
-            DaDu: new Date(new Date(period.period_end).getTime() + 30 * 24 * 60 * 60 * 1000)
-              .toISOString().split('T')[0], // Due date = 30 days later
+            DaDu: dueDate,
             InNu: invoiceNumber,
             Ds: description,
             // Link to debtor via loan_id
@@ -162,7 +224,7 @@ serve(async (req) => {
               Element: {
                 Fields: {
                   TyNt: 1,
-                  AcId: "9350", // Interest income GL account - TODO: make configurable
+                  AcId: glAccount,
                   AmVa: totalAmount,
                   Ds: `Interest: €${interestAmount.toFixed(2)} | Commitment Fee: €${commitmentFeeAmount.toFixed(2)}`,
                   DC: "C", // Credit (income)
@@ -177,11 +239,17 @@ serve(async (req) => {
     // Dry run mode - return payload without posting
     if (dry_run) {
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           dry_run: true,
           message: 'Dry run - payload that would be sent:',
           payload: afasPayload,
+          config: {
+            gl_account: glAccount,
+            journal_code: journalCode,
+            admin_code: adminCode,
+            payment_terms_days: paymentTermsDays,
+          },
           period: {
             id: period.id,
             period_start: period.period_start,
@@ -191,7 +259,8 @@ serve(async (req) => {
           loan: {
             id: loan.id,
             borrower_name: loan.borrower_name,
-            loan_id: loan.loan_id
+            loan_id: loan.loan_id,
+            interest_type: loan.interest_type,
           },
           amounts: {
             total: totalAmount,
@@ -240,8 +309,8 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           message: 'Successfully posted to AFAS',
           invoice_number: invoiceNumber,
           amount: totalAmount,
@@ -264,8 +333,8 @@ serve(async (req) => {
       }
 
       return new Response(
-        JSON.stringify({ 
-          success: false, 
+        JSON.stringify({
+          success: false,
           error: 'AFAS posting failed',
           afas_status: afasResponse.status,
           afas_error: responseText,

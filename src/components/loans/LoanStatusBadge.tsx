@@ -19,6 +19,7 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
     open: 'status-badge status-open',
     submitted: 'status-badge status-submitted',
     sent: 'status-badge status-sent',
+    paid: 'status-badge status-paid',
   };
 
   return (

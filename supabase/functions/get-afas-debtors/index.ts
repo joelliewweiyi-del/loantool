@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getAfasToken, getAfasEnvId } from "../_shared/afas-config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,8 +12,8 @@ serve(async (req) => {
   }
 
   try {
-    const afasToken = Deno.env.get('AFAS_TOKEN');
-    const afasEnvId = Deno.env.get('AFAS_ENVIRONMENT_ID');
+    const afasToken = await getAfasToken();
+    const afasEnvId = getAfasEnvId();
 
     if (!afasToken || !afasEnvId) {
       return new Response(

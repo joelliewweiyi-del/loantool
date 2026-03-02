@@ -4,7 +4,8 @@ import { Loan, LoanEvent, Period, LoanFacility, EventType, EventStatus } from '@
 import { useToast } from '@/hooks/use-toast';
 import type { Database, Json } from '@/integrations/supabase/types';
 import { startOfMonth, endOfMonth, addMonths, format, parseISO, isBefore, isAfter } from 'date-fns';
-import { calculateInterestSegments, calculateCommitmentFeeSegments } from '@/lib/loanCalculations';
+import { calculatePeriodAccruals } from '@/lib/loanCalculations';
+import { getCurrentDate, getCurrentDateString } from '@/lib/simulatedDate';
 
 type DbEventType = Database['public']['Enums']['event_type'];
 type DbEventStatus = Database['public']['Enums']['event_status'];
@@ -16,7 +17,7 @@ function generateMonthlyPeriods(
 ): Database['public']['Tables']['periods']['Insert'][] {
   const periods: Database['public']['Tables']['periods']['Insert'][] = [];
   const start = parseISO(startDate);
-  const today = new Date();
+  const today = getCurrentDate();
   const maturity = maturityDate ? parseISO(maturityDate) : null;
   const endOfCurrentMonth = endOfMonth(today);
   const effectiveEnd = maturity && isBefore(maturity, endOfCurrentMonth) ? maturity : endOfCurrentMonth;
@@ -31,7 +32,7 @@ function generateMonthlyPeriods(
       : format(monthEnd, 'yyyy-MM-dd');
     periods.push({ loan_id: loanId, period_start: periodStart, period_end: periodEnd, status: 'open', processing_mode: 'auto' });
     currentMonthStart = addMonths(currentMonthStart, 1);
-    if (periods.length >= 120) break;
+    if (periods.length >= 600) break;
   }
   return periods;
 }
@@ -52,35 +53,43 @@ export function useLoans() {
  * computed from events using the same 30E/360 segment logic as the Accruals tab.
  * This guarantees values match exactly what is shown in the Accruals tab.
  */
+export interface LatestCharges {
+  interest: number;
+  commitmentFee: number;
+  periodLabel: string; // e.g. "Feb 2026"
+}
+
 export function useLatestChargesPerLoan() {
   return useQuery({
     queryKey: ['latest-charges-per-loan'],
     queryFn: async () => {
-      // 1. Get the latest open period per loan
-      const { data: openPeriods, error: periodsError } = await supabase
+      // 1. Get the t-1 period (previous month) per loan
+      //    Find the latest period whose period_end is before the start of the current month
+      const currentMonthStart = format(startOfMonth(getCurrentDate()), 'yyyy-MM-dd');
+
+      const { data: periods, error: periodsError } = await supabase
         .from('periods')
-        .select('id, loan_id, period_start, period_end')
-        .eq('status', 'open')
+        .select('id, loan_id, period_start, period_end, status, processing_mode, payment_date, payment_amount, payment_afas_ref')
+        .lt('period_end', currentMonthStart)
         .order('period_start', { ascending: false });
       if (periodsError) throw periodsError;
 
-      const latestPeriodByLoan: Record<string, { id: string; period_start: string; period_end: string }> = {};
-      for (const p of openPeriods || []) {
+      const latestPeriodByLoan: Record<string, Period> = {};
+      for (const p of periods || []) {
         if (!(p.loan_id in latestPeriodByLoan)) {
-          latestPeriodByLoan[p.loan_id] = { id: p.id, period_start: p.period_start, period_end: p.period_end };
+          latestPeriodByLoan[p.loan_id] = p as Period;
         }
       }
 
       const loanIds = Object.keys(latestPeriodByLoan);
-      if (loanIds.length === 0) return {} as Record<string, { interest: number; commitmentFee: number }>;
+      if (loanIds.length === 0) return {} as Record<string, LatestCharges>;
 
-      // 2. Fetch all approved events + loan metadata in parallel
+      // 2. Fetch ALL events + loan metadata — matches Accruals tab behavior
       const [{ data: eventsData, error: eventsError }, { data: loansData, error: loansError }] = await Promise.all([
         supabase
           .from('loan_events')
-          .select('id, loan_id, event_type, effective_date, amount, rate, metadata, status')
+          .select('*')
           .in('loan_id', loanIds)
-          .eq('status', 'approved')
           .order('effective_date', { ascending: true }),
         supabase
           .from('loans')
@@ -106,33 +115,30 @@ export function useLatestChargesPerLoan() {
         };
       }
 
-      // 3. For each loan compute using the same 30E/360 segment logic as the Accruals tab
-      const result: Record<string, { interest: number; commitmentFee: number }> = {};
+      // 3. Use calculatePeriodAccruals — same function as the Accruals tab
+      const result: Record<string, LatestCharges> = {};
 
       for (const loanId of loanIds) {
         const period = latestPeriodByLoan[loanId];
         const events = eventsByLoan[loanId] || [];
         const meta = loanMeta[loanId] || { totalCommitment: 0, feeRate: 0, interestType: 'cash_pay' };
 
-        const interestSegments = calculateInterestSegments(
+        const accrual = calculatePeriodAccruals(
+          period,
           events,
-          period.period_start,
-          period.period_end,
+          meta.feeRate,
           meta.totalCommitment,
           meta.interestType as 'cash_pay' | 'pik'
         );
-        const interestAccrued = interestSegments.reduce((sum, s) => sum + s.interest, 0);
 
-        const cfSegments = calculateCommitmentFeeSegments(
-          events,
-          period.period_start,
-          period.period_end,
-          meta.feeRate,
-          meta.totalCommitment
-        );
-        const commitmentFeeAccrued = cfSegments.reduce((sum, s) => sum + s.fee, 0);
+        const periodDate = parseISO(period.period_start);
+        const periodLabel = format(periodDate, 'MMM yyyy');
 
-        result[loanId] = { interest: interestAccrued, commitmentFee: commitmentFeeAccrued };
+        result[loanId] = {
+          interest: accrual.interestAccrued,
+          commitmentFee: accrual.commitmentFeeAccrued,
+          periodLabel,
+        };
       }
 
       return result;
@@ -235,7 +241,7 @@ export function useCreateLoan() {
       const { data: loan, error } = await supabase.from('loans').insert([loanData]).select().single();
       if (error) throw error;
       const createdLoan = loan as Loan;
-      const effectiveDate = loanData.loan_start_date || new Date().toISOString().split('T')[0];
+      const effectiveDate = loanData.loan_start_date || getCurrentDateString();
       const isFeeCapitalized = loanData.fee_payment_type === 'pik';
 
       const createFoundingEvent = async (
@@ -274,7 +280,7 @@ export function useCreateLoan() {
         if (monthlyPeriods.length > 0) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { error: periodsError } = await supabase.from('periods').insert(monthlyPeriods as any);
-          if (periodsError) console.error('Failed to create periods:', periodsError);
+          if (periodsError) throw new Error(`Failed to create periods: ${periodsError.message}`);
         }
       }
       return createdLoan;
@@ -357,6 +363,8 @@ export function useApproveEvent() {
       if (eventsError) throw eventsError;
 
       let outstanding = 0;
+      let interestRate: number | null = null;
+      let totalCommitment: number | null = null;
       for (const event of events || []) {
         if (event.event_type === 'principal_draw') outstanding += event.amount || 0;
         else if (event.event_type === 'principal_repayment') outstanding = Math.max(0, outstanding - (event.amount || 0));
@@ -364,12 +372,22 @@ export function useApproveEvent() {
         else if (event.event_type === 'fee_invoice') {
           const meta = event.metadata as Record<string, unknown>;
           if (meta?.payment_type === 'pik') outstanding += event.amount || 0;
+        } else if (event.event_type === 'interest_rate_set' || event.event_type === 'interest_rate_change') {
+          interestRate = event.rate ?? interestRate;
+        } else if (event.event_type === 'commitment_set' || event.event_type === 'commitment_change') {
+          totalCommitment = event.amount ?? totalCommitment;
+        } else if (event.event_type === 'commitment_cancel') {
+          totalCommitment = 0;
         }
       }
 
+      const updates: Record<string, unknown> = { outstanding, updated_at: new Date().toISOString() };
+      if (interestRate !== null) updates.interest_rate = interestRate;
+      if (totalCommitment !== null) updates.total_commitment = totalCommitment;
+
       const { error: updateError } = await supabase
         .from('loans')
-        .update({ outstanding, updated_at: new Date().toISOString() })
+        .update(updates)
         .eq('id', loanId);
       if (updateError) throw updateError;
 

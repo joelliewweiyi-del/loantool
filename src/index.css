@@ -1,13 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 
+/*
  * RAX Loan Management System (RAX LMS) Design System
  * Audit-grade, event-sourced system of record for managing loan portfolios across RAX vehicles
  */
-
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 @layer base {
   :root {
@@ -165,6 +165,10 @@
 
   .status-sent {
     @apply bg-success/10 text-success;
+  }
+
+  .status-paid {
+    @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400;
   }
 
   .status-active {

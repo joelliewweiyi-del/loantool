@@ -29,32 +29,42 @@ export function useMonthlyApprovals() {
   });
 }
 
+export function useEnsureMonthlyApproval() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (yearMonth: string) => {
+      const { data, error } = await supabase
+        .from('monthly_approvals')
+        .upsert(
+          { year_month: yearMonth },
+          { onConflict: 'year_month' }
+        )
+        .select()
+        .single();
+      if (error) throw error;
+      return data as MonthlyApproval;
+    },
+    onSuccess: (_, yearMonth) => {
+      queryClient.invalidateQueries({ queryKey: ['monthly-approval', yearMonth] });
+    },
+  });
+}
+
 export function useMonthlyApprovalDetails(yearMonth: string | undefined) {
   return useQuery({
     queryKey: ['monthly-approval', yearMonth],
     queryFn: async () => {
       if (!yearMonth) return null;
 
-      // Get or create monthly approval record
-      let { data: approval, error: approvalError } = await supabase
+      // Read-only: fetch existing approval record
+      const { data: approval, error: approvalError } = await supabase
         .from('monthly_approvals')
         .select('*')
         .eq('year_month', yearMonth)
-        .single();
+        .maybeSingle();
 
-      if (approvalError && approvalError.code === 'PGRST116') {
-        // Create new approval record
-        const { data: newApproval, error: createError } = await supabase
-          .from('monthly_approvals')
-          .insert({ year_month: yearMonth })
-          .select()
-          .single();
-        
-        if (createError) throw createError;
-        approval = newApproval;
-      } else if (approvalError) {
-        throw approvalError;
-      }
+      if (approvalError) throw approvalError;
 
       // Get periods for this month
       const startOfMonth = `${yearMonth}-01`;
@@ -76,22 +86,11 @@ export function useMonthlyApprovalDetails(yearMonth: string | undefined) {
 
       if (periodsError) throw periodsError;
 
-      // Update approval counts
       const totalPeriods = periods?.length || 0;
       const periodsWithExceptions = periods?.filter(p => p.has_economic_events)?.length || 0;
 
-      if (approval && (approval.total_periods !== totalPeriods || approval.periods_with_exceptions !== periodsWithExceptions)) {
-        await supabase
-          .from('monthly_approvals')
-          .update({ 
-            total_periods: totalPeriods,
-            periods_with_exceptions: periodsWithExceptions 
-          })
-          .eq('id', approval.id);
-      }
-
       return {
-        ...approval,
+        ...(approval ?? { id: '', year_month: yearMonth, status: 'pending', approved_by: null, approved_at: null, notes: null, total_periods: 0, periods_with_exceptions: 0, created_at: '' }),
         total_periods: totalPeriods,
         periods_with_exceptions: periodsWithExceptions,
         periods: periods || [],
@@ -107,11 +106,11 @@ export function useApproveMonth() {
 
   return useMutation({
     mutationFn: async ({ yearMonth, notes }: { yearMonth: string; notes?: string }) => {
-      // Get the approval record
+      // Ensure approval record exists (upsert), then fetch its id
       const { data: approval, error: fetchError } = await supabase
         .from('monthly_approvals')
+        .upsert({ year_month: yearMonth }, { onConflict: 'year_month' })
         .select('id')
-        .eq('year_month', yearMonth)
         .single();
 
       if (fetchError) throw fetchError;

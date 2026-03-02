@@ -4,10 +4,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Plus } from 'lucide-react';
 import { useCreateLoan } from '@/hooks/useLoans';
 import { InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
+import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility } from '@/lib/constants';
 
 interface LoanFormData {
   // Identity
@@ -19,6 +21,13 @@ interface LoanFormData {
   facility: string;
   city: string;
   category: string;
+  property_status: string;
+  earmarked: boolean;
+  initial_facility: string;
+  red_iv_start_date: string;
+  borrower_email: string;
+  borrower_address: string;
+  property_address: string;
   // Payment Types
   interest_rate: string;
   interest_type: InterestType; // Legacy field - keep for backward compatibility
@@ -41,10 +50,17 @@ const initialFormData: LoanFormData = {
   borrower_name: '',
   loan_start_date: '',
   maturity_date: '',
-  vehicle: 'RED IV',
+  vehicle: DEFAULT_VEHICLE,
   facility: '',
   city: '',
   category: '',
+  property_status: '',
+  earmarked: false,
+  initial_facility: '',
+  red_iv_start_date: '',
+  borrower_email: '',
+  borrower_address: '',
+  property_address: '',
   interest_rate: '',
   interest_type: 'cash_pay',
   fee_payment_type: 'pik',
@@ -84,9 +100,16 @@ export function CreateLoanDialog() {
       notice_frequency: formData.notice_frequency,
       payment_due_rule: formData.payment_due_rule || null,
       vehicle: formData.vehicle,
-      facility: formData.vehicle === 'TLF' ? formData.facility || null : null,
+      facility: vehicleRequiresFacility(formData.vehicle) ? formData.facility || null : null,
       city: formData.city || null,
       category: formData.category || null,
+      property_status: formData.property_status || null,
+      earmarked: formData.earmarked,
+      initial_facility: formData.initial_facility || null,
+      red_iv_start_date: formData.red_iv_start_date || null,
+      borrower_email: formData.borrower_email || null,
+      borrower_address: formData.borrower_address || null,
+      property_address: formData.property_address || null,
       arrangement_fee: formData.arrangement_fee ? parseFloat(formData.arrangement_fee) : null,
     };
 
@@ -95,8 +118,8 @@ export function CreateLoanDialog() {
     setFormData(initialFormData);
   };
 
-  const isTLF = formData.vehicle === 'TLF';
-  const canSubmit = formData.loan_number && formData.loan_start_date && (formData.vehicle !== 'TLF' || formData.facility);
+  const isTLF = vehicleRequiresFacility(formData.vehicle);
+  const canSubmit = formData.loan_number && formData.loan_start_date && (!isTLF || formData.facility);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
@@ -131,8 +154,9 @@ export function CreateLoanDialog() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="RED IV">RED IV</SelectItem>
-                    <SelectItem value="TLF">TLF</SelectItem>
+                    {VEHICLES.map(v => (
+                      <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -148,6 +172,15 @@ export function CreateLoanDialog() {
                   />
                 </div>
               )}
+              <div className="space-y-2">
+                <Label htmlFor="initial_facility">Initial Facility</Label>
+                <Input
+                  id="initial_facility"
+                  value={formData.initial_facility}
+                  onChange={(e) => handleChange('initial_facility', e.target.value)}
+                  placeholder="e.g., TLFOKT25"
+                />
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="loan_number">Loan_ID *</Label>
                 <Input
@@ -178,6 +211,15 @@ export function CreateLoanDialog() {
                 />
               </div>
               <div className="space-y-2">
+                <Label htmlFor="red_iv_start_date">RED IV Start Date</Label>
+                <Input
+                  id="red_iv_start_date"
+                  type="date"
+                  value={formData.red_iv_start_date}
+                  onChange={(e) => handleChange('red_iv_start_date', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="maturity_date">Maturity Date</Label>
                 <Input
                   id="maturity_date"
@@ -202,6 +244,68 @@ export function CreateLoanDialog() {
                   value={formData.category}
                   onChange={(e) => handleChange('category', e.target.value)}
                   placeholder="e.g., Office, Residential"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Property Status</Label>
+                <Select
+                  value={formData.property_status}
+                  onValueChange={(v) => handleChange('property_status', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Leased">Leased</SelectItem>
+                    <SelectItem value="Redevelopment">Redevelopment</SelectItem>
+                    <SelectItem value="Development">Development</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center space-x-2 pt-6">
+                <Checkbox
+                  id="earmarked"
+                  checked={formData.earmarked}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, earmarked: checked === true }))}
+                />
+                <Label htmlFor="earmarked" className="cursor-pointer">Earmarked</Label>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Address Section */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Addresses & Contact
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="borrower_address">Borrower Address</Label>
+                <Input
+                  id="borrower_address"
+                  value={formData.borrower_address}
+                  onChange={(e) => handleChange('borrower_address', e.target.value)}
+                  placeholder="e.g., Keizersgracht 127, 1015CJ Amsterdam"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="property_address">Property Address</Label>
+                <Input
+                  id="property_address"
+                  value={formData.property_address}
+                  onChange={(e) => handleChange('property_address', e.target.value)}
+                  placeholder="e.g., Oudenoord 330-340, Utrecht"
+                />
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label htmlFor="borrower_email">Borrower Email</Label>
+                <Input
+                  id="borrower_email"
+                  value={formData.borrower_email}
+                  onChange={(e) => handleChange('borrower_email', e.target.value)}
+                  placeholder="e.g., contact@borrower.nl; cfo@borrower.nl"
                 />
               </div>
             </div>

@@ -200,6 +200,27 @@ export type Database = {
         }
         Relationships: []
       }
+      app_config: {
+        Row: {
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: string
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: string
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: string
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
@@ -342,15 +363,20 @@ export type Database = {
       }
       loans: {
         Row: {
+          afas_debtor_account: string | null
+          borrower_address: string | null
+          borrower_email: string | null
           borrower_name: string
           category: string | null
           city: string | null
           commitment_fee_basis: string | null
+          earmarked: boolean | null
           commitment_fee_rate: number | null
           created_at: string
           facility: string | null
           fee_payment_type: string
           id: string
+          initial_facility: string | null
           interest_payment_type: string
           interest_rate: number | null
           interest_type: string
@@ -362,6 +388,9 @@ export type Database = {
           outstanding: number | null
           payment_due_rule: string | null
           remarks: string | null
+          property_address: string | null
+          property_status: string | null
+          red_iv_start_date: string | null
           rental_income: number | null
           status: Database["public"]["Enums"]["loan_status"]
           total_commitment: number | null
@@ -371,15 +400,20 @@ export type Database = {
           vehicle: string | null
         }
         Insert: {
+          afas_debtor_account?: string | null
+          borrower_address?: string | null
+          borrower_email?: string | null
           borrower_name: string
           category?: string | null
           city?: string | null
           commitment_fee_basis?: string | null
           commitment_fee_rate?: number | null
           created_at?: string
+          earmarked?: boolean | null
           facility?: string | null
           fee_payment_type?: string
           id?: string
+          initial_facility?: string | null
           interest_payment_type?: string
           interest_rate?: number | null
           interest_type?: string
@@ -391,6 +425,9 @@ export type Database = {
           outstanding?: number | null
           payment_due_rule?: string | null
           remarks?: string | null
+          property_address?: string | null
+          property_status?: string | null
+          red_iv_start_date?: string | null
           rental_income?: number | null
           status?: Database["public"]["Enums"]["loan_status"]
           total_commitment?: number | null
@@ -400,15 +437,20 @@ export type Database = {
           vehicle?: string | null
         }
         Update: {
+          afas_debtor_account?: string | null
+          borrower_address?: string | null
+          borrower_email?: string | null
           borrower_name?: string
           category?: string | null
           city?: string | null
           commitment_fee_basis?: string | null
           commitment_fee_rate?: number | null
           created_at?: string
+          earmarked?: boolean | null
           facility?: string | null
           fee_payment_type?: string
           id?: string
+          initial_facility?: string | null
           interest_payment_type?: string
           interest_rate?: number | null
           interest_type?: string
@@ -420,6 +462,9 @@ export type Database = {
           outstanding?: number | null
           payment_due_rule?: string | null
           remarks?: string | null
+          property_address?: string | null
+          property_status?: string | null
+          red_iv_start_date?: string | null
           rental_income?: number | null
           status?: Database["public"]["Enums"]["loan_status"]
           total_commitment?: number | null
@@ -542,6 +587,10 @@ export type Database = {
           id: string
           loan_id: string
           monthly_approval_id: string | null
+          paid_at: string | null
+          payment_afas_ref: string | null
+          payment_amount: number | null
+          payment_date: string | null
           period_end: string
           period_start: string
           processing_mode: string | null
@@ -562,6 +611,10 @@ export type Database = {
           id?: string
           loan_id: string
           monthly_approval_id?: string | null
+          paid_at?: string | null
+          payment_afas_ref?: string | null
+          payment_amount?: number | null
+          payment_date?: string | null
           period_end: string
           period_start: string
           processing_mode?: string | null
@@ -582,6 +635,10 @@ export type Database = {
           id?: string
           loan_id?: string
           monthly_approval_id?: string | null
+          paid_at?: string | null
+          payment_afas_ref?: string | null
+          payment_amount?: number | null
+          payment_date?: string | null
           period_end?: string
           period_start?: string
           processing_mode?: string | null
@@ -746,7 +803,7 @@ export type Database = {
         | "pik_capitalization_posted"
       facility_type: "capex" | "interest_depot" | "other"
       loan_status: "active" | "repaid" | "defaulted"
-      period_status: "open" | "submitted" | "approved" | "sent"
+      period_status: "open" | "submitted" | "approved" | "sent" | "paid"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -891,7 +948,7 @@ export const Constants = {
       ],
       facility_type: ["capex", "interest_depot", "other"],
       loan_status: ["active", "repaid", "defaulted"],
-      period_status: ["open", "submitted", "approved", "sent"],
+      period_status: ["open", "submitted", "approved", "sent", "paid"],
     },
   },
 } as const

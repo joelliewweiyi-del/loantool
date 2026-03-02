@@ -1,7 +1,7 @@
 export type LoanStatus = 'active' | 'repaid' | 'defaulted';
 export type FacilityType = 'capex' | 'interest_depot' | 'other';
 export type EventStatus = 'draft' | 'approved';
-export type PeriodStatus = 'open' | 'submitted' | 'approved' | 'sent';
+export type PeriodStatus = 'open' | 'submitted' | 'approved' | 'sent' | 'paid';
 export type AppRole = 'pm' | 'controller' | 'admin';
 export type ProcessingMode = 'auto' | 'manual';
 export type MonthlyApprovalStatus = 'pending' | 'approved' | 'rejected';
@@ -41,6 +41,8 @@ export interface Loan {
   total_commitment: number | null;
   commitment_fee_rate: number | null;
   commitment_fee_basis: CommitmentFeeBasis | null;
+  afas_debtor_account: string | null;
+  cash_interest_percentage: number | null;
   vehicle: string | null;
   facility: string | null;
   city: string | null;
@@ -50,6 +52,17 @@ export interface Loan {
   valuation_date: string | null;
   ltv: number | null;
   rental_income: number | null;
+  property_status: string | null;
+  earmarked: boolean;
+  initial_facility: string | null;
+  red_iv_start_date: string | null;
+  borrower_email: string | null;
+  borrower_address: string | null;
+  property_address: string | null;
+  google_maps_url: string | null;
+  kadastrale_kaart_url: string | null;
+  photo_url: string | null;
+  additional_info: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -96,6 +109,10 @@ export interface Period {
   sent_at: string | null;
   snapshot_id: string | null;
   created_at: string;
+  payment_date: string | null;
+  payment_amount: number | null;
+  payment_afas_ref: string | null;
+  paid_at: string | null;
 }
 
 export interface MonthlyApproval {
@@ -186,4 +203,19 @@ export interface AuditLog {
   timestamp: string;
   before_state: Record<string, unknown> | null;
   after_state: Record<string, unknown> | null;
+}
+
+export interface AfasDrawTransaction {
+  loanId: string;
+  loanUuid: string | null;
+  borrowerName: string;
+  vehicle: string;
+  entryDate: string;
+  amount: number;
+  type: 'draw' | 'repayment';
+  description: string;
+  afasRef: string;
+  isConfirmed: boolean;
+  createdEventId: string | null;
+  eventStatus: 'draft' | 'approved' | null;
 }
