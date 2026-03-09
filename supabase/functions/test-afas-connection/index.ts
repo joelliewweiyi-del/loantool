@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getAfasToken, getAfasEnvId } from "../_shared/afas-config.ts";
+import { getAfasToken, getAfasBaseUrl, buildAfasAuthHeader } from "../_shared/afas-config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -14,28 +14,27 @@ serve(async (req) => {
 
   try {
     const afasToken = await getAfasToken();
-    const afasEnvId = getAfasEnvId();
+    const baseUrl = await getAfasBaseUrl();
 
     console.log('Testing AFAS connection...');
-    console.log('Environment ID:', afasEnvId ? `${afasEnvId.substring(0, 8)}...` : 'NOT SET');
+    console.log('Base URL:', baseUrl ?? 'NOT SET');
     console.log('Token present:', afasToken ? 'YES' : 'NO');
 
-    if (!afasToken || !afasEnvId) {
+    if (!afasToken || !baseUrl) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
+        JSON.stringify({
+          success: false,
           error: 'Missing AFAS credentials',
           details: {
             hasToken: !!afasToken,
-            hasEnvId: !!afasEnvId
+            hasBaseUrl: !!baseUrl
           }
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // AFAS REST API base URL
-    const baseUrl = `https://${afasEnvId}.rest.afas.online/profitrestservices`;
+    const authHeader = buildAfasAuthHeader(afasToken);
     
     // Test connection by fetching connector metadata
     // Using a simple GET request to check if authentication works
@@ -46,7 +45,7 @@ serve(async (req) => {
     const response = await fetch(testUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `AfasToken ${btoa(afasToken)}`,
+        'Authorization': authHeader,
         'Content-Type': 'application/json',
       },
     });
@@ -80,7 +79,7 @@ serve(async (req) => {
       const altResponse = await fetch(connectorsUrl, {
         method: 'GET',
         headers: {
-          'Authorization': `AfasToken ${btoa(afasToken)}`,
+          'Authorization': authHeader,
           'Content-Type': 'application/json',
         },
       });

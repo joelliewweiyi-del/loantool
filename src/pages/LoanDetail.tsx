@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useLoan, useLoanEvents, useLoanPeriods, useLoanFacilities, useCreateLoanEvent, useApproveEvent, useDeleteLoan } from '@/hooks/useLoans';
 import { useAccruals } from '@/hooks/useAccruals';
+import { useAfasDepotPayments } from '@/hooks/useAfasCashPayments';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,9 +14,15 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/loans/LoanStatusBadge';
 import { EditLoanDialog } from '@/components/loans/EditLoanDialog';
+import { ActivatePipelineLoanDialog } from '@/components/loans/ActivatePipelineLoanDialog';
+import { isPipelineVehicle } from '@/lib/constants';
+import { PipelineStageBadge } from '@/components/loans/PipelineStageBadge';
 import { AccrualsTab } from '@/components/loans/AccrualsTab';
 import { NoticePreviewTab } from '@/components/loans/NoticePreviewTab';
+import { ActivityTab } from '@/components/loans/ActivityTab';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { formatCurrency, formatDate, formatDateTime, formatPercent, formatEventType } from '@/lib/format';
+import { FinancialStrip } from '@/components/loans/FinancialStrip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EventType } from '@/types/loan';
 import { 
@@ -27,7 +34,8 @@ import {
   Landmark,
   TrendingUp,
   Mail,
-  Trash2
+  Trash2,
+  MessageSquare
 } from 'lucide-react';
 
 const eventTypes: EventType[] = [
@@ -51,6 +59,14 @@ export default function LoanDetail() {
   const { data: periods } = useLoanPeriods(id);
   const { data: facilities } = useLoanFacilities(id);
   const { periodAccruals, summary: accrualsSummary, isLoading: accrualsLoading } = useAccruals(id);
+  const depotEvent = events?.find(e =>
+    e.event_type === 'principal_draw' &&
+    ((e.metadata as Record<string, unknown> | null)?.description as string || '').toLowerCase().includes('depot')
+  );
+  const depotReserve = depotEvent?.amount ?? 0;
+  const { data: depotPayments } = useAfasDepotPayments(loan?.loan_id, depotReserve > 0);
+  const depotUsed = (depotPayments ?? []).filter(p => p.amount > 0).reduce((sum, p) => sum + p.amount, 0);
+  const depotRemaining = depotReserve - depotUsed;
   const { user, isController, isPM, isAdmin } = useAuth();
   const createEvent = useCreateLoanEvent();
   const approveEvent = useApproveEvent();
@@ -144,35 +160,41 @@ export default function LoanDetail() {
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <Link to="/loans">
-            <Button variant="ghost" size="icon">
+            <Button variant="ghost" size="icon" className="h-8 w-8">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">{loan.borrower_name}</h1>
-              <span className="font-mono text-sm text-muted-foreground">({(loan as any).loan_id})</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-base font-semibold text-primary">{(loan as any).loan_id}</span>
+              <span className="text-foreground-secondary">—</span>
+              <h1 className="text-lg font-semibold">{loan.borrower_name}</h1>
               <StatusBadge status={loan.status} />
-              <span className={`text-xs px-2 py-1 rounded font-medium ${
-                (loan as any).interest_payment_type === 'pik' 
-                  ? 'bg-amber-100 text-amber-700' 
+              {isPipelineVehicle(loan.vehicle || '') && (
+                <PipelineStageBadge stage={(loan as any).pipeline_stage} />
+              )}
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                (loan as any).interest_payment_type === 'pik'
+                  ? 'bg-accent-amber/10 text-accent-amber'
                   : 'bg-muted text-muted-foreground'
               }`}>
                 Int: {(loan as any).interest_payment_type === 'pik' ? 'PIK' : 'Cash'}
               </span>
-              <span className={`text-xs px-2 py-1 rounded font-medium ${
-                (loan as any).fee_payment_type === 'pik' 
-                  ? 'bg-amber-100 text-amber-700' 
+              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                (loan as any).fee_payment_type === 'pik'
+                  ? 'bg-accent-amber/10 text-accent-amber'
                   : 'bg-muted text-muted-foreground'
               }`}>
                 Fees: {(loan as any).fee_payment_type === 'pik' ? 'PIK' : 'Cash'}
               </span>
+              <span className="text-xs text-foreground-tertiary ml-1">
+                Created {formatDate(loan.created_at)} · {loan.notice_frequency} notices
+              </span>
             </div>
-            <p className="text-muted-foreground text-sm">
-              Created {formatDate(loan.created_at)} • {loan.notice_frequency} notices
-            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -214,49 +236,49 @@ export default function LoanDetail() {
         </div>
       </div>
 
-      {/* Key Loan Metrics Bar */}
-      <div className="grid grid-cols-7 gap-4 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Outstanding Amount</div>
-          <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(accrualsSummary.currentPrincipal)}</div>
+      {/* Pipeline Banner */}
+      {isPipelineVehicle((loan as any).vehicle || '') && (
+        <div className="flex items-center justify-between rounded-lg border border-accent-amber/40 bg-accent-amber/5 px-4 py-3">
+          <p className="text-sm text-foreground-secondary">
+            This is a <span className="font-semibold text-accent-amber">pipeline</span> loan. Activate it when the deal closes to start tracking interest.
+          </p>
+          {(isPM || isController) && <ActivatePipelineLoanDialog loan={loan} />}
         </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Total Commitment</div>
-          <div className="text-lg font-semibold font-mono">{formatCurrency(accrualsSummary.totalCommitment)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Current Rate</div>
-          <div className="text-lg font-semibold font-mono">{formatPercent(accrualsSummary.currentRate, 2)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">PIK Capitalized</div>
-          <div className="text-lg font-semibold font-mono text-amber-600">{formatCurrency(periodAccruals.reduce((sum, p) => sum + p.pikCapitalized, 0))}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Undrawn</div>
-          <div className="text-lg font-semibold font-mono text-green-600">{formatCurrency(accrualsSummary.currentUndrawn)}</div>
-          {accrualsSummary.commitmentFeeRate > 0 && (
-            <div className="text-xs text-muted-foreground">@ {formatPercent(accrualsSummary.commitmentFeeRate, 2)}</div>
-          )}
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Start Date</div>
-          <div className="text-lg font-semibold font-mono">{formatDate(loan.loan_start_date)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Maturity Date</div>
-          <div className="text-lg font-semibold font-mono">{formatDate(loan.maturity_date)}</div>
-        </div>
-      </div>
+      )}
+
+      {/* Key Loan Metrics Strip */}
+      <FinancialStrip items={[
+        { label: 'Outstanding', value: formatCurrency(accrualsSummary.currentPrincipal), accent: 'primary' },
+        { label: 'Commitment', value: formatCurrency(accrualsSummary.totalCommitment) },
+        { label: 'Rate', value: formatPercent(accrualsSummary.currentRate, 2) },
+        { label: 'PIK Capitalized', value: formatCurrency(periodAccruals.reduce((sum, p) => sum + p.pikCapitalized, 0)), accent: 'amber' },
+        { label: `Undrawn${accrualsSummary.commitmentFeeRate > 0 ? ` @ ${formatPercent(accrualsSummary.commitmentFeeRate, 2)}` : ''}`, value: formatCurrency(accrualsSummary.currentUndrawn), accent: 'sage' },
+        { label: 'Start', value: formatDate(loan.loan_start_date) || '—' },
+        { label: 'Maturity', value: formatDate(loan.maturity_date) || '—' },
+        ...(loan.walt != null ? [{ label: 'WALT', value: `${loan.walt}y` }] : []),
+      ]} />
+
+      {/* Depot Balance Strip — only for loans with a depot reserve event */}
+      {depotReserve > 0 && (
+        <FinancialStrip items={[
+          { label: 'Depot Reserve', value: formatCurrency(depotReserve) },
+          { label: 'Depot Used', value: formatCurrency(depotUsed), accent: 'amber' },
+          { label: 'Depot Remaining', value: formatCurrency(depotRemaining), accent: depotRemaining > 0 ? 'sage' : 'destructive' },
+        ]} />
+      )}
 
       {/* Tabs */}
       <Tabs defaultValue="accruals" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="accruals">Accruals</TabsTrigger>
-          <TabsTrigger value="events">Events</TabsTrigger>
+          <TabsTrigger value="accruals">Interest Periods</TabsTrigger>
           <TabsTrigger value="notices">
-            <Mail className="h-4 w-4 mr-2" />
-            Interest Notices
+            <Mail className="h-4 w-4 mr-1.5" />
+            Notices
+          </TabsTrigger>
+          <TabsTrigger value="events">Event Ledger</TabsTrigger>
+          <TabsTrigger value="activity">
+            <MessageSquare className="h-4 w-4 mr-1.5" />
+            Activity
           </TabsTrigger>
         </TabsList>
 
@@ -532,29 +554,41 @@ export default function LoanDetail() {
 
         {/* Notices Tab */}
         <TabsContent value="notices">
-          {loan && (
-            <NoticePreviewTab 
-              loan={loan}
-              periodAccruals={periodAccruals} 
-              summary={accrualsSummary} 
-              isLoading={accrualsLoading}
-              events={events}
-            />
-          )}
+          <ErrorBoundary fallbackTitle="Notices tab crashed">
+            {loan && (
+              <NoticePreviewTab
+                loan={loan}
+                periodAccruals={periodAccruals}
+                summary={accrualsSummary}
+                isLoading={accrualsLoading}
+                events={events}
+              />
+            )}
+          </ErrorBoundary>
         </TabsContent>
 
         {/* Accruals Tab */}
         <TabsContent value="accruals">
-          <AccrualsTab
-            periodAccruals={periodAccruals}
-            summary={accrualsSummary}
-            isLoading={accrualsLoading}
-            loanId={id}
-            loanNumericId={(loan as any)?.loan_id}
-            events={events}
-            interestType={(loan?.interest_type as 'cash_pay' | 'pik') || 'cash_pay'}
-            cashInterestPct={(loan as any)?.cash_interest_percentage}
-          />
+          <ErrorBoundary fallbackTitle="Accruals tab crashed">
+            <AccrualsTab
+              periodAccruals={periodAccruals}
+              summary={accrualsSummary}
+              isLoading={accrualsLoading}
+              loanId={id}
+              loanNumericId={(loan as any)?.loan_id}
+              events={events}
+              interestType={(loan?.interest_type as 'cash_pay' | 'pik') || 'cash_pay'}
+              cashInterestPct={(loan as any)?.cash_interest_percentage}
+              initialFacility={loan?.initial_facility}
+            />
+          </ErrorBoundary>
+        </TabsContent>
+
+        {/* Activity Tab */}
+        <TabsContent value="activity">
+          <ErrorBoundary fallbackTitle="Activity tab crashed">
+            <ActivityTab loanId={id!} />
+          </ErrorBoundary>
         </TabsContent>
 
       </Tabs>

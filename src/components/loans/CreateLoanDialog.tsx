@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,10 +6,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Plus } from 'lucide-react';
+import { Plus, FileUp, Loader2 } from 'lucide-react';
 import { useCreateLoan } from '@/hooks/useLoans';
 import { InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
-import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility } from '@/lib/constants';
+import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
+import { extractTextFromPdf } from '@/lib/pdfExtract';
+import { parseLoanDocument, cleanBorrowerName, type ParsedDocumentResult } from '@/lib/parseKredietbrief';
+import { cn } from '@/lib/utils';
+import { addMonths, format } from 'date-fns';
 
 interface LoanFormData {
   // Identity
@@ -40,9 +44,16 @@ interface LoanFormData {
   commitment_fee_basis: CommitmentFeeBasis;
   // Fees
   arrangement_fee: string;
+  // Valuation
+  valuation: string;
+  ltv: string;
+  rental_income: string;
+  // Pipeline
+  pipeline_stage: string;
   // Payments & Notices
   notice_frequency: string;
   payment_due_rule: string;
+  cash_interest_percentage: string;
 }
 
 const initialFormData: LoanFormData = {
@@ -70,14 +81,151 @@ const initialFormData: LoanFormData = {
   commitment_fee_rate: '',
   commitment_fee_basis: 'undrawn_only',
   arrangement_fee: '',
+  valuation: '',
+  ltv: '',
+  rental_income: '',
+  pipeline_stage: 'prospect',
   notice_frequency: 'monthly',
   payment_due_rule: '',
+  cash_interest_percentage: '',
 };
 
 export function CreateLoanDialog() {
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState<LoanFormData>(initialFormData);
   const createLoan = useCreateLoan();
+
+  // PDF upload state
+  const [pdfFilledFields, setPdfFilledFields] = useState<Set<keyof LoanFormData>>(new Set());
+  const [pdfStatus, setPdfStatus] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
+  const [pdfParsing, setPdfParsing] = useState(false);
+  const durationMonthsRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [parsedResult, setParsedResult] = useState<ParsedDocumentResult | null>(null);
+
+  // Auto-compute maturity_date when loan_start_date changes and duration was parsed from PDF
+  useEffect(() => {
+    if (durationMonthsRef.current && formData.loan_start_date) {
+      const start = new Date(formData.loan_start_date);
+      if (!isNaN(start.getTime())) {
+        const maturity = addMonths(start, durationMonthsRef.current);
+        setFormData(prev => ({ ...prev, maturity_date: format(maturity, 'yyyy-MM-dd') }));
+        setPdfFilledFields(prev => new Set([...prev, 'maturity_date']));
+      }
+    }
+  }, [formData.loan_start_date]);
+
+  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+
+    setPdfStatus(null);
+    setPdfFilledFields(new Set());
+    setParsedResult(null);
+    durationMonthsRef.current = null;
+    setPdfParsing(true);
+
+    try {
+      const text = await extractTextFromPdf(file);
+      const result = await parseLoanDocument(text);
+
+      if (result.documentType === 'unknown') {
+        const errorMsg = result.warnings.length > 0
+          ? result.warnings[0]
+          : 'Document not recognised as a kredietbrief or credit proposal.';
+        setPdfStatus({ type: 'error', message: errorMsg });
+        setPdfParsing(false);
+        return;
+      }
+
+      setParsedResult(result);
+
+      const filled = new Set<keyof LoanFormData>();
+      const newFormData = { ...formData };
+
+      for (const [key, value] of Object.entries(result.fields)) {
+        if (key === '_duration_months') {
+          durationMonthsRef.current = parseInt(value, 10);
+          continue;
+        }
+        // Don't override vehicle — always use the user's default (TLF)
+        if (key === 'vehicle') continue;
+        if (key === 'earmarked') {
+          newFormData.earmarked = value === 'true';
+          filled.add('earmarked');
+          continue;
+        }
+        if (value && key in initialFormData) {
+          (newFormData as any)[key] = value;
+          filled.add(key as keyof LoanFormData);
+        }
+      }
+
+      // If we have duration and a start date already, compute maturity
+      if (durationMonthsRef.current && newFormData.loan_start_date) {
+        const start = new Date(newFormData.loan_start_date);
+        if (!isNaN(start.getTime())) {
+          newFormData.maturity_date = format(addMonths(start, durationMonthsRef.current), 'yyyy-MM-dd');
+          filled.add('maturity_date');
+        }
+      }
+
+      setFormData(newFormData);
+      setPdfFilledFields(filled);
+
+      const docLabel = result.documentType === 'credit_proposal' ? 'credit proposal' : 'kredietbrief';
+      const fieldCount = filled.size;
+      const warnCount = result.warnings.length;
+      if (warnCount > 0) {
+        setPdfStatus({
+          type: 'warning',
+          message: `Filled ${fieldCount} fields from ${docLabel}. ${warnCount} could not be parsed.`,
+        });
+      } else {
+        setPdfStatus({
+          type: 'success',
+          message: `Filled ${fieldCount} fields from ${docLabel}.`,
+        });
+      }
+    } catch (err) {
+      console.error('PDF parsing failed:', err);
+      const detail = err instanceof Error ? err.message : String(err);
+      setPdfStatus({ type: 'error', message: `Failed to read PDF: ${detail}` });
+    } finally {
+      setPdfParsing(false);
+    }
+  };
+
+  const pdfFieldClass = (field: keyof LoanFormData) =>
+    pdfFilledFields.has(field) ? 'border-l-2 border-l-accent-sage pl-2.5' : '';
+
+  const PdfPill = ({ field }: { field: keyof LoanFormData }) =>
+    pdfFilledFields.has(field) ? (
+      <span className="text-[10px] bg-accent-sage/15 text-accent-sage px-1 rounded ml-1 font-normal">PDF</span>
+    ) : null;
+
+  const parsedFieldLabels: Record<string, string> = {
+    loan_number: 'Loan ID', vehicle: 'Vehicle', borrower_name: 'Borrower',
+    borrower_address: 'Borrower Address', total_commitment: 'Commitment',
+    interest_rate: 'Interest Rate', arrangement_fee: 'Arr. Fee',
+    commitment_fee_rate: 'Commit. Fee', city: 'City', category: 'Category',
+    property_status: 'Property Status', earmarked: 'Earmarked',
+    property_address: 'Property Address', notice_frequency: 'Frequency',
+    payment_due_rule: 'Due Rule', rental_income: 'Rental Income',
+    valuation: 'Valuation', ltv: 'LTV', additional_info: 'Description',
+  };
+
+  const formatParsedValue = (key: string, value: string): string => {
+    if (['total_commitment', 'arrangement_fee', 'rental_income', 'valuation'].includes(key)) {
+      const num = parseFloat(value);
+      if (!isNaN(num)) return `€${num.toLocaleString('nl-NL')}`;
+    }
+    if (['interest_rate', 'commitment_fee_rate', 'ltv'].includes(key)) return `${value}%`;
+    if (key === 'earmarked') return value === 'true' ? 'Yes' : 'No';
+    if (key === 'additional_info' && value.length > 80) return value.slice(0, 80) + '…';
+    return value;
+  };
 
   const handleChange = (field: keyof LoanFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -86,7 +234,7 @@ export function CreateLoanDialog() {
   const handleCreate = async () => {
     const payload = {
       loan_id: formData.loan_number,
-      borrower_name: formData.borrower_name,
+      borrower_name: formData.borrower_name ? cleanBorrowerName(formData.borrower_name) : '',
       loan_start_date: formData.loan_start_date || null,
       maturity_date: formData.maturity_date || null,
       interest_rate: formData.interest_rate ? parseFloat(formData.interest_rate) / 100 : null,
@@ -105,24 +253,42 @@ export function CreateLoanDialog() {
       category: formData.category || null,
       property_status: formData.property_status || null,
       earmarked: formData.earmarked,
-      initial_facility: formData.initial_facility || null,
+      initial_facility: isTLF ? (formData.facility || null) : (formData.initial_facility || null),
       red_iv_start_date: formData.red_iv_start_date || null,
       borrower_email: formData.borrower_email || null,
       borrower_address: formData.borrower_address || null,
       property_address: formData.property_address || null,
       arrangement_fee: formData.arrangement_fee ? parseFloat(formData.arrangement_fee) : null,
+      valuation: formData.valuation ? parseFloat(formData.valuation) : null,
+      ltv: formData.ltv ? parseFloat(formData.ltv) / 100 : null,
+      rental_income: formData.rental_income ? parseFloat(formData.rental_income) : null,
+      pipeline_stage: isPipeline ? formData.pipeline_stage : null,
+      cash_interest_percentage: formData.cash_interest_percentage ? parseFloat(formData.cash_interest_percentage) : null,
     };
 
     await createLoan.mutateAsync(payload);
     setIsOpen(false);
     setFormData(initialFormData);
+    setPdfFilledFields(new Set());
+    setPdfStatus(null);
+    setParsedResult(null);
+    durationMonthsRef.current = null;
   };
 
   const isTLF = vehicleRequiresFacility(formData.vehicle);
-  const canSubmit = formData.loan_number && formData.loan_start_date && (!isTLF || formData.facility);
+  const isPipeline = isPipelineVehicle(formData.vehicle);
+  const canSubmit = formData.loan_number && (isPipeline || formData.loan_start_date) && (!isTLF || formData.facility);
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      setIsOpen(open);
+      if (!open) {
+        setPdfFilledFields(new Set());
+        setPdfStatus(null);
+        setParsedResult(null);
+        durationMonthsRef.current = null;
+      }
+    }}>
       <DialogTrigger asChild>
         <Button>
           <Plus className="h-4 w-4 mr-2" />
@@ -135,6 +301,63 @@ export function CreateLoanDialog() {
           <DialogDescription>
             Enter the key loan details. All monetary values in EUR.
           </DialogDescription>
+          <div className="flex items-center gap-3 pt-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              onChange={handlePdfUpload}
+              className="hidden"
+              id="kredietbrief-upload"
+            />
+            <label
+              htmlFor="kredietbrief-upload"
+              className={cn(
+                'inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border cursor-pointer hover:bg-muted transition-colors',
+                pdfParsing && 'opacity-50 pointer-events-none'
+              )}
+            >
+              {pdfParsing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileUp className="h-4 w-4" />
+              )}
+              Upload Document
+            </label>
+            {pdfStatus && (
+              <span className={cn(
+                'text-xs',
+                pdfStatus.type === 'success' && 'text-accent-sage',
+                pdfStatus.type === 'warning' && 'text-accent-amber',
+                pdfStatus.type === 'error' && 'text-destructive',
+              )}>
+                {pdfStatus.message}
+              </span>
+            )}
+          </div>
+          {parsedResult && (
+            <details open className="mt-3 border border-accent-sage/40 rounded-lg overflow-hidden">
+              <summary className="px-4 py-2.5 bg-accent-sage/5 cursor-pointer text-sm font-medium select-none hover:bg-accent-sage/10 transition-colors">
+                Parsed from {parsedResult.documentType === 'credit_proposal' ? 'credit proposal' : 'kredietbrief'} — {Object.keys(parsedResult.fields).filter(k => !k.startsWith('_')).length} fields detected
+              </summary>
+              <div className="px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+                {Object.entries(parsedResult.fields)
+                  .filter(([key]) => !key.startsWith('_'))
+                  .map(([key, value]) => (
+                    <div key={key} className="flex justify-between gap-2">
+                      <span className="text-foreground-secondary truncate">{parsedFieldLabels[key] || key}</span>
+                      <span className="font-mono text-xs text-right shrink-0">{formatParsedValue(key, value)}</span>
+                    </div>
+                  ))}
+                {parsedResult.warnings.map((w, i) => (
+                  <div key={`warn-${i}`} className="flex justify-between gap-2 text-accent-amber">
+                    <span className="truncate">{w}</span>
+                    <span>—</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
         </DialogHeader>
 
         <div className="space-y-6 py-4">
@@ -145,12 +368,12 @@ export function CreateLoanDialog() {
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Vehicle *</Label>
-                <Select 
-                  value={formData.vehicle} 
+                <Label>Vehicle *<PdfPill field="vehicle" /></Label>
+                <Select
+                  value={formData.vehicle}
                   onValueChange={(v) => handleChange('vehicle', v)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={pdfFieldClass('vehicle')}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -159,6 +382,11 @@ export function CreateLoanDialog() {
                     ))}
                   </SelectContent>
                 </Select>
+                {isPipeline && (
+                  <p className="text-xs text-foreground-tertiary mt-1">
+                    Pipeline loans are prospective deals. Convert to RED IV or TLF when the deal closes.
+                  </p>
+                )}
               </div>
               {isTLF && (
                 <div className="space-y-2">
@@ -172,42 +400,68 @@ export function CreateLoanDialog() {
                   />
                 </div>
               )}
+              {isPipeline && (
+                <div className="space-y-2">
+                  <Label>Pipeline Stage</Label>
+                  <Select value={formData.pipeline_stage} onValueChange={(v) => handleChange('pipeline_stage', v)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PIPELINE_STAGES.map(s => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label} <span className="opacity-50">· {s.description}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {!isTLF && !isPipeline && (
+                <div className="space-y-2">
+                  <Label htmlFor="initial_facility">Initial Facility</Label>
+                  <Input
+                    id="initial_facility"
+                    value={formData.initial_facility}
+                    onChange={(e) => handleChange('initial_facility', e.target.value)}
+                    placeholder="e.g., TLFOKT25"
+                  />
+                </div>
+              )}
               <div className="space-y-2">
-                <Label htmlFor="initial_facility">Initial Facility</Label>
-                <Input
-                  id="initial_facility"
-                  value={formData.initial_facility}
-                  onChange={(e) => handleChange('initial_facility', e.target.value)}
-                  placeholder="e.g., TLFOKT25"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="loan_number">Loan_ID *</Label>
+                <Label htmlFor="loan_number">Loan ID *<PdfPill field="loan_number" /></Label>
                 <Input
                   id="loan_number"
                   value={formData.loan_number}
                   onChange={(e) => handleChange('loan_number', e.target.value)}
                   placeholder="e.g., 484"
                   required
+                  className={pdfFieldClass('loan_number')}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="borrower_name">Borrower Legal Name</Label>
+                <Label htmlFor="borrower_name">Borrower Legal Name<PdfPill field="borrower_name" /></Label>
                 <Input
                   id="borrower_name"
                   value={formData.borrower_name}
                   onChange={(e) => handleChange('borrower_name', e.target.value)}
+                  onBlur={() => {
+                    if (formData.borrower_name) {
+                      handleChange('borrower_name', cleanBorrowerName(formData.borrower_name));
+                    }
+                  }}
                   placeholder="Enter borrower name"
+                  className={pdfFieldClass('borrower_name')}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="loan_start_date">Loan Start Date *</Label>
+                <Label htmlFor="loan_start_date">Loan Start Date{!isPipeline && ' *'}</Label>
                 <Input
                   id="loan_start_date"
                   type="date"
                   value={formData.loan_start_date}
                   onChange={(e) => handleChange('loan_start_date', e.target.value)}
-                  required
+                  required={!isPipeline}
                 />
               </div>
               <div className="space-y-2">
@@ -220,39 +474,42 @@ export function CreateLoanDialog() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="maturity_date">Maturity Date</Label>
+                <Label htmlFor="maturity_date">Maturity Date<PdfPill field="maturity_date" /></Label>
                 <Input
                   id="maturity_date"
                   type="date"
                   value={formData.maturity_date}
                   onChange={(e) => handleChange('maturity_date', e.target.value)}
+                  className={pdfFieldClass('maturity_date')}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="city">City</Label>
+                <Label htmlFor="city">City<PdfPill field="city" /></Label>
                 <Input
                   id="city"
                   value={formData.city}
                   onChange={(e) => handleChange('city', e.target.value)}
                   placeholder="e.g., Amsterdam"
+                  className={pdfFieldClass('city')}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
+                <Label htmlFor="category">Category<PdfPill field="category" /></Label>
                 <Input
                   id="category"
                   value={formData.category}
                   onChange={(e) => handleChange('category', e.target.value)}
                   placeholder="e.g., Office, Residential"
+                  className={pdfFieldClass('category')}
                 />
               </div>
               <div className="space-y-2">
-                <Label>Property Status</Label>
+                <Label>Property Status<PdfPill field="property_status" /></Label>
                 <Select
                   value={formData.property_status}
                   onValueChange={(v) => handleChange('property_status', v)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={pdfFieldClass('property_status')}>
                     <SelectValue placeholder="Select status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -268,7 +525,7 @@ export function CreateLoanDialog() {
                   checked={formData.earmarked}
                   onCheckedChange={(checked) => setFormData(prev => ({ ...prev, earmarked: checked === true }))}
                 />
-                <Label htmlFor="earmarked" className="cursor-pointer">Earmarked</Label>
+                <Label htmlFor="earmarked" className="cursor-pointer">Earmarked<PdfPill field="earmarked" /></Label>
               </div>
             </div>
           </div>
@@ -282,21 +539,23 @@ export function CreateLoanDialog() {
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="borrower_address">Borrower Address</Label>
+                <Label htmlFor="borrower_address">Borrower Address<PdfPill field="borrower_address" /></Label>
                 <Input
                   id="borrower_address"
                   value={formData.borrower_address}
                   onChange={(e) => handleChange('borrower_address', e.target.value)}
                   placeholder="e.g., Keizersgracht 127, 1015CJ Amsterdam"
+                  className={pdfFieldClass('borrower_address')}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="property_address">Property Address</Label>
+                <Label htmlFor="property_address">Property Address<PdfPill field="property_address" /></Label>
                 <Input
                   id="property_address"
                   value={formData.property_address}
                   onChange={(e) => handleChange('property_address', e.target.value)}
                   placeholder="e.g., Oudenoord 330-340, Utrecht"
+                  className={pdfFieldClass('property_address')}
                 />
               </div>
               <div className="space-y-2 col-span-2">
@@ -320,7 +579,7 @@ export function CreateLoanDialog() {
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="interest_rate">Interest Rate (%)</Label>
+                <Label htmlFor="interest_rate">Interest Rate (%)<PdfPill field="interest_rate" /></Label>
                 <Input
                   id="interest_rate"
                   type="number"
@@ -328,6 +587,7 @@ export function CreateLoanDialog() {
                   value={formData.interest_rate}
                   onChange={(e) => handleChange('interest_rate', e.target.value)}
                   placeholder="e.g., 8.5000"
+                  className={pdfFieldClass('interest_rate')}
                 />
               </div>
               <div className="space-y-2">
@@ -345,12 +605,32 @@ export function CreateLoanDialog() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {formData.interest_payment_type === 'pik' 
-                    ? 'Monthly interest rolled into principal' 
+                  {formData.interest_payment_type === 'pik'
+                    ? 'Monthly interest rolled into principal'
                     : 'Monthly interest invoiced for payment'}
                 </p>
               </div>
             </div>
+            {formData.interest_payment_type === 'cash' && (
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="cash_interest_percentage">Cash Interest %</Label>
+                  <Input
+                    id="cash_interest_percentage"
+                    type="number"
+                    step="1"
+                    min="0"
+                    max="100"
+                    value={formData.cash_interest_percentage}
+                    onChange={(e) => handleChange('cash_interest_percentage', e.target.value)}
+                    placeholder="100 (default)"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    % of interest paid in cash. Leave empty for 100%. Remainder from interest depot.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <Separator />
@@ -379,7 +659,7 @@ export function CreateLoanDialog() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="total_commitment">Total Commitment (EUR)</Label>
+                <Label htmlFor="total_commitment">Total Commitment (EUR)<PdfPill field="total_commitment" /></Label>
                 <Input
                   id="total_commitment"
                   type="number"
@@ -387,10 +667,11 @@ export function CreateLoanDialog() {
                   value={formData.total_commitment}
                   onChange={(e) => handleChange('total_commitment', e.target.value)}
                   placeholder="Optional"
+                  className={pdfFieldClass('total_commitment')}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="commitment_fee_rate">Commitment Fee Rate (%)</Label>
+                <Label htmlFor="commitment_fee_rate">Commitment Fee Rate (%)<PdfPill field="commitment_fee_rate" /></Label>
                 <Input
                   id="commitment_fee_rate"
                   type="number"
@@ -398,6 +679,7 @@ export function CreateLoanDialog() {
                   value={formData.commitment_fee_rate}
                   onChange={(e) => handleChange('commitment_fee_rate', e.target.value)}
                   placeholder="e.g., 1.0000"
+                  className={pdfFieldClass('commitment_fee_rate')}
                 />
               </div>
               <div className="space-y-2">
@@ -420,14 +702,64 @@ export function CreateLoanDialog() {
 
           <Separator />
 
+          {/* Valuation Section */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Valuation
+            </h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="valuation">Valuation (EUR)<PdfPill field="valuation" /></Label>
+                <Input
+                  id="valuation"
+                  type="number"
+                  step="0.01"
+                  value={formData.valuation}
+                  onChange={(e) => handleChange('valuation', e.target.value)}
+                  placeholder="0"
+                  className={pdfFieldClass('valuation')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ltv">LTV (%)<PdfPill field="ltv" /></Label>
+                <Input
+                  id="ltv"
+                  type="number"
+                  step="0.01"
+                  value={formData.ltv}
+                  onChange={(e) => handleChange('ltv', e.target.value)}
+                  placeholder="e.g., 34"
+                  className={pdfFieldClass('ltv')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rental_income">Rental Income (EUR/yr)<PdfPill field="rental_income" /></Label>
+                <Input
+                  id="rental_income"
+                  type="number"
+                  step="0.01"
+                  value={formData.rental_income}
+                  onChange={(e) => handleChange('rental_income', e.target.value)}
+                  placeholder="0"
+                  className={pdfFieldClass('rental_income')}
+                />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
           {/* Fees Section */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Fees
+              Fees — As of Start Date
             </h3>
+            <p className="text-xs text-muted-foreground -mt-2">
+              Only enter fees effective on {formData.loan_start_date || 'the loan start date'}. Fees charged on later dates must be added as separate events.
+            </p>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="arrangement_fee">Arrangement Fee (EUR)</Label>
+                <Label htmlFor="arrangement_fee">Arrangement Fee (EUR)<PdfPill field="arrangement_fee" /></Label>
                 <Input
                   id="arrangement_fee"
                   type="number"
@@ -435,6 +767,7 @@ export function CreateLoanDialog() {
                   value={formData.arrangement_fee}
                   onChange={(e) => handleChange('arrangement_fee', e.target.value)}
                   placeholder="0.00"
+                  className={pdfFieldClass('arrangement_fee')}
                 />
                 <Select 
                   value={formData.fee_payment_type} 
@@ -466,12 +799,12 @@ export function CreateLoanDialog() {
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Notice Frequency</Label>
-                <Select 
-                  value={formData.notice_frequency} 
+                <Label>Notice Frequency<PdfPill field="notice_frequency" /></Label>
+                <Select
+                  value={formData.notice_frequency}
                   onValueChange={(v) => handleChange('notice_frequency', v)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className={pdfFieldClass('notice_frequency')}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -481,12 +814,13 @@ export function CreateLoanDialog() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="payment_due_rule">Payment Due Date Rule</Label>
+                <Label htmlFor="payment_due_rule">Payment Due Date Rule<PdfPill field="payment_due_rule" /></Label>
                 <Input
                   id="payment_due_rule"
                   value={formData.payment_due_rule}
                   onChange={(e) => handleChange('payment_due_rule', e.target.value)}
                   placeholder="e.g., 5 business days after period end"
+                  className={pdfFieldClass('payment_due_rule')}
                 />
               </div>
             </div>

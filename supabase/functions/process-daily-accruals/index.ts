@@ -200,11 +200,12 @@ Deno.serve(async (req) => {
 
     console.log(`Created job: ${job.id}`);
 
-    // Fetch all active loans
+    // Fetch all active loans (exclude Pipeline — no accruals for prospective deals)
     const { data: loans, error: loansError } = await supabase
       .from('loans')
       .select('*')
-      .eq('status', 'active');
+      .eq('status', 'active')
+      .neq('vehicle', 'Pipeline');
 
     if (loansError) {
       throw loansError;

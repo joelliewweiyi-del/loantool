@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getAfasToken, getAfasEnvId } from "../_shared/afas-config.ts";
+import { getAfasToken, getAfasBaseUrl, buildAfasAuthHeader } from "../_shared/afas-config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,18 +13,20 @@ serve(async (req) => {
 
   try {
     const afasToken = await getAfasToken();
-    const afasEnvId = getAfasEnvId();
+    const baseUrl = await getAfasBaseUrl();
 
-    if (!afasToken || !afasEnvId) {
+    if (!afasToken || !baseUrl) {
       return new Response(
         JSON.stringify({
           success: false,
           error: 'Missing AFAS credentials',
-          details: { hasToken: !!afasToken, hasEnvId: !!afasEnvId }
+          details: { hasToken: !!afasToken, hasBaseUrl: !!baseUrl }
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const authHeader = buildAfasAuthHeader(afasToken);
 
     // Allow overriding take/skip/filters via request body
     let take = 20;
@@ -32,6 +34,7 @@ serve(async (req) => {
     let filterFieldIds = 'JournalId,AccountNo';
     let filterValues = '50,1750..1751';
     let operatorTypes = '1,15';
+    let connector = 'Profit_Transactions_Allocated';
     try {
       const body = await req.json();
       if (body?.take) take = Math.min(parseInt(body.take, 10), 5000);
@@ -39,13 +42,12 @@ serve(async (req) => {
       if (body?.filterFieldIds) filterFieldIds = body.filterFieldIds;
       if (body?.filterValues) filterValues = body.filterValues;
       if (body?.operatorTypes) operatorTypes = body.operatorTypes;
+      if (body?.connector) connector = body.connector;
     } catch {
       // No body, use defaults
     }
 
-    const baseUrl = `https://${afasEnvId}.rest.afas.online/profitrestservices`;
-
-    const connectorUrl = `${baseUrl}/connectors/Profit_Transactions_Allocated` +
+    const connectorUrl = `${baseUrl}/connectors/${connector}` +
       `?filterfieldids=${encodeURIComponent(filterFieldIds)}` +
       `&filtervalues=${encodeURIComponent(filterValues)}` +
       `&operatortypes=${encodeURIComponent(operatorTypes)}` +
@@ -57,7 +59,7 @@ serve(async (req) => {
     const response = await fetch(connectorUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `AfasToken ${btoa(afasToken)}`,
+        'Authorization': authHeader,
         'Content-Type': 'application/json',
         'Accept': 'application/json',
         'Accept-language': 'nl-nl',

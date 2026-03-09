@@ -214,9 +214,180 @@ The AFAS debtor code equals the loan ID (e.g. loan 507 = debtor "507", shown as 
 
 ---
 
-## 2. Push: Post Cash-Pay Interest (Invoice/Receivable)
+## 2. Push: Post Cash-Pay Interest (Receivable Entry)
 
-*JSON template to be added — awaiting connector example from user.*
+**Direction:** Loan Tool → AFAS
+**AFAS Connector:** FiEntries (Financial Entry, via `FiEntryPar` wrapper)
+**Purpose:** Post cash-pay interest as a debtor receivable. Debits the debtor account (creating an open item), credits interest income and commitment fee accounts. The open item can then be matched against the bank payment when the borrower pays.
+
+### Structure
+
+One **debit line** (debtor account) and one or more **credit lines** (interest income + commitment fee). The entry must balance: debit = sum of credits.
+
+| Line | Account | Side | VaAs | DimAx1 | Represents |
+|---|---|---|---|---|---|
+| 1 | Debtor code (e.g. "484") | Debit (AmDe) | "2" | null | Debtor receivable (open item) |
+| 2 | 9350 | Credit (AmCr) | "1" | loan ID | Interest income |
+| 3 | 9351 | Credit (AmCr) | "1" | loan ID | Commitment fee income |
+
+If commitment fee = 0 for a period, the 9351 line should be omitted (only 2 lines).
+
+**Important:** The debit line `AcNr` is the **debtor code** (e.g. "484"), NOT a GL account number. In AFAS journal 70 (memorial), posting to a debtor code creates an open receivable on that debtor. This is different from PIK (Connector #1), which posts to a debtor sub-account GL (104xx range).
+
+### Key Differences from PIK (Connector #1)
+
+| | Cash-Pay (Connector #2) | PIK (Connector #1) |
+|---|---|---|
+| Journal code (`JoCo`) | "70" (memorial) | "90" |
+| Debit `AcNr` | Debtor code (e.g. "484") | Debtor sub-account GL (e.g. "10431") |
+| Debit `VaAs` | "2" (exempt/shifted) | "1" (no VAT) |
+| Effect | Creates open receivable on debtor | Journal entry (no open item) |
+| `BpNr` format | `{loanId}_{month}_{yearShort}` | `{loanId}` |
+| `Ds` format | `{loanId} Rente P{period:02} {year}` | `{loanId}-P{period:02}-{year}` |
+
+### Field Reference
+
+#### Header — `FiEntryPar.Element.Fields`
+
+| Field | Example | Static/Dynamic | Description |
+|---|---|---|---|
+| `Year` | 2026 | Dynamic | Fiscal year — from period end date |
+| `Peri` | 3 | Dynamic | Fiscal period (month) — from period end date |
+| `UnId` | 5 | Dynamic | Administration unit. **5 = RED IV**, TLF code TBD |
+| `JoCo` | "70" | Static | Journal code — always "70" for cash interest entries |
+| `AuNu` | true | Static | Auto-numbering — always true |
+
+#### Debit Line (debtor) — `FiEntries.Element[0].Fields`
+
+| Field | Example | Static/Dynamic | Description |
+|---|---|---|---|
+| `VaAs` | "2" | Static | VAT scenario — "2" for debtor line |
+| `AcNr` | "484" | Dynamic | **Debtor code** (= loan ID, NOT a GL account) |
+| `EnDa` | "2026-03-03" | Dynamic | Entry date — period end date (YYYY-MM-DD) |
+| `BpDa` | "2026-03-03" | Dynamic | Booking period date — same as EnDa |
+| `BpNr` | "484_03_26" | Dynamic | Invoice reference — `{loanId}_{month:02}_{yearShort:02}` |
+| `Ds` | "484 Rente P03 2026" | Dynamic | Description — `{loanId} Rente P{period:02} {year}` |
+| `AmDe` | "71562.47" | Dynamic | **Debit** amount — total (interest + commitment fee) |
+
+No `FiDimEntries` on the debit line — the debtor is identified by `AcNr`.
+
+#### Credit Lines (income accounts) — `FiEntries.Element[1..n].Fields`
+
+| Field | Example | Static/Dynamic | Description |
+|---|---|---|---|
+| `VaAs` | "1" | Static | VAT scenario — "1" (no VAT) |
+| `AcNr` | "9350" / "9351" | Static | Interest income / commitment fee income |
+| `EnDa` | "2026-03-03" | Dynamic | Entry date — same as debit line |
+| `BpDa` | "2026-03-03" | Dynamic | Booking period date — same as EnDa |
+| `BpNr` | "484_03_26" | Dynamic | Invoice reference — same as debit line |
+| `Ds` | "484 Rente P03 2026" | Dynamic | Description — same as debit line |
+| `AmCr` | "57976.16" | Dynamic | **Credit** amount per income account |
+
+#### Dimension Entry — `FiDimEntries.Element.Fields` (credit lines only)
+
+| Field | Example | Static/Dynamic | Description |
+|---|---|---|---|
+| `DiC1` | "484" | Dynamic | DimAx1 — **loan ID**, mandatory on credit lines |
+| `AmCr` | "57976.16" | Dynamic | Mirrors the line's credit amount |
+
+### Dynamic Field Mapping
+
+| JSON Field | Source in Loan Tool |
+|---|---|
+| `Year` | `period.period_end.getFullYear()` |
+| `Peri` | `period.period_end.getMonth() + 1` |
+| `UnId` | Vehicle lookup: RED IV = 5, TLF = TBD |
+| `AcNr` (debit) | `String(loan.id)` — debtor code = loan ID |
+| `BpNr` | `{loanId}_{String(month).padStart(2,'0')}_{String(year % 100).padStart(2,'0')}` |
+| `Ds` | `{loanId} Rente P${String(month).padStart(2,'0')} {year}` |
+| `EnDa` / `BpDa` | `period.period_end` formatted as YYYY-MM-DD |
+| `AmDe` (debit line) | `interestAmount + commitmentFeeAmount` (total for period) |
+| `AmCr` (9350 line) | Interest amount from `calculatePeriodAccruals()` |
+| `AmCr` (9351 line) | Commitment fee amount from `calculatePeriodAccruals()` |
+| `DiC1` | `String(loan.id)` — loan ID |
+
+### Example JSON
+
+```json
+{
+  "FiEntryPar": {
+    "Element": {
+      "Fields": {
+        "Year": 2026,
+        "Peri": 3,
+        "UnId": 5,
+        "JoCo": "70",
+        "AuNu": true
+      },
+      "Objects": [
+        {
+          "FiEntries": {
+            "Element": [
+              {
+                "Fields": {
+                  "VaAs": "2",
+                  "AcNr": "484",
+                  "EnDa": "2026-03-03",
+                  "BpDa": "2026-03-03",
+                  "BpNr": "484_03_26",
+                  "Ds": "484 Rente P03 2026",
+                  "AmDe": "71562.47"
+                }
+              },
+              {
+                "Fields": {
+                  "VaAs": "1",
+                  "AcNr": "9350",
+                  "EnDa": "2026-03-03",
+                  "BpDa": "2026-03-03",
+                  "BpNr": "484_03_26",
+                  "Ds": "484 Rente P03 2026",
+                  "AmCr": "57976.16"
+                },
+                "Objects": [
+                  {
+                    "FiDimEntries": {
+                      "Element": {
+                        "Fields": {
+                          "DiC1": "484",
+                          "AmCr": "57976.16"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "Fields": {
+                  "VaAs": "1",
+                  "AcNr": "9351",
+                  "EnDa": "2026-03-03",
+                  "BpDa": "2026-03-03",
+                  "BpNr": "484_03_26",
+                  "Ds": "484 Rente P03 2026",
+                  "AmCr": "13586.31"
+                },
+                "Objects": [
+                  {
+                    "FiDimEntries": {
+                      "Element": {
+                        "Fields": {
+                          "DiC1": "484",
+                          "AmCr": "13586.31"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+```
 
 ---
 
@@ -422,7 +593,114 @@ Cash interest payments from borrowers do **NOT** appear on accounts 1750/1751. T
 
 ## 5. Push: Create New Debtor
 
-*JSON template to be added — awaiting connector example from user.*
+**Direction:** Loan Tool → AFAS
+**AFAS Connector:** KnSalesRelationOrg (Sales Relation — Organisation)
+**Purpose:** Create a new debtor in AFAS when a new loan is onboarded. The debtor code equals the loan ID (e.g. loan 518 = debtor "518", displayed as "RAX518" in AFAS UI). Required data: debtor code, organisation name, and borrower address.
+
+### Structure
+
+Single element with nested `KnOrganisation` (org details) and `KnBasicAddressAdr` (address) objects.
+
+### Field Reference
+
+#### Sales Relation — `KnSalesRelationOrg.Element`
+
+| Field | Location | Example | Static/Dynamic | Description |
+|---|---|---|---|---|
+| `@DbId` | Element attribute | "518" | Dynamic | Debtor ID — loan ID (string). Set as XML attribute on Element, not in Fields. |
+
+#### Sales Relation Fields — `KnSalesRelationOrg.Element.Fields`
+
+| Field | Example | Static/Dynamic | Description |
+|---|---|---|---|
+| `IsDb` | true | Static | Is debtor — always true |
+| `PaCd` | "30" | Static | Payment condition code (30 days) |
+| `CuId` | "EUR" | Static | Currency — always EUR |
+| `ColA` | "1400" | Static | Collection account (default receivables GL) |
+
+#### Organisation — `KnOrganisation.Element.Fields`
+
+| Field | Example | Static/Dynamic | Description |
+|---|---|---|---|
+| `PadAdr` | true | Static | Pad address — always true |
+| `AutoNum` | false | Static | No auto-numbering — we provide our own debtor code |
+| `MatchOga` | "6" | Static | Match method (6 = match on BcCo) |
+| `BcCo` | "518" | Dynamic | Business/debtor code — same as `@DbId` (= loan ID) |
+| `Nm` | "Borrower Name B.V." | Dynamic | Organisation name — from `loan.borrower_name` |
+
+#### Address — `KnBasicAddressAdr.Element.Fields`
+
+| Field | Example | Static/Dynamic | Description |
+|---|---|---|---|
+| `CoId` | "NL" | Static | Country code — always NL |
+| `PbAd` | false | Static | Is postal address — false |
+| `StAd` | "" | Static | State — empty (not used in NL) |
+| `Ad` | "Keizersgracht" | Dynamic | Street name — from borrower address |
+| `HmNr` | 100 | Dynamic | House number — from borrower address |
+| `ZpCd` | "1015 AA" | Dynamic | Postal code — from borrower address |
+| `Rs` | "Amsterdam" | Dynamic | City — from borrower address |
+
+### Dynamic Field Mapping
+
+| JSON Field | Source in Loan Tool |
+|---|---|
+| `@DbId` | `String(loan.id)` — loan ID as debtor code |
+| `BcCo` | Same as `@DbId` |
+| `Nm` | `loan.borrower_name` |
+| `Ad` | Borrower street name |
+| `HmNr` | Borrower house number |
+| `ZpCd` | Borrower postal code |
+| `Rs` | Borrower city |
+
+### Example JSON
+
+```json
+{
+  "KnSalesRelationOrg": {
+    "Element": {
+      "@DbId": "518",
+      "Fields": {
+        "IsDb": true,
+        "PaCd": "30",
+        "CuId": "EUR",
+        "ColA": "1400"
+      },
+      "Objects": [
+        {
+          "KnOrganisation": {
+            "Element": {
+              "Fields": {
+                "PadAdr": true,
+                "AutoNum": false,
+                "MatchOga": "6",
+                "BcCo": "518",
+                "Nm": "Borrower Name B.V."
+              },
+              "Objects": [
+                {
+                  "KnBasicAddressAdr": {
+                    "Element": {
+                      "Fields": {
+                        "CoId": "NL",
+                        "PbAd": false,
+                        "StAd": "",
+                        "Ad": "Keizersgracht",
+                        "HmNr": 100,
+                        "ZpCd": "1015 AA",
+                        "Rs": "Amsterdam"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
 
 ---
 

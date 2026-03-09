@@ -27,6 +27,48 @@ The app is a SPA (React) backed by Supabase (PostgreSQL + Auth + Deno Edge Funct
 
 ---
 
+## Design System — "Ink & Parchment"
+
+The UI follows a custom design system called **Ink & Parchment**, derived from the RAX Finance brand. All tokens live in CSS custom properties in `src/index.css`.
+
+### Color Palette
+
+| Token | HSL | Purpose |
+|---|---|---|
+| `--primary` | `200 100% 18%` | RAX teal-navy (from logo `#003B5C`). Headings, active states, links. |
+| `--accent-amber` | `40 90% 52%` | Attention/action: drafts, pending items, warnings, draws. |
+| `--accent-sage` | `152 35% 45%` | Confirmation/success: approved, paid, matched, connected. |
+| `--destructive` | `0 65% 48%` | Errors, variance, missing data. |
+| `--background` | `40 20% 97%` | Warm parchment off-white (not cold gray). |
+| `--sidebar-background` | `210 15% 94%` | Cool light gray — temperature contrast with warm content. |
+
+**Rule: Only 3 semantic accents** (amber, sage, destructive). No raw Tailwind color classes (`emerald-600`, `orange-100`, etc.) — always use the design tokens.
+
+### Text Hierarchy
+
+`--foreground` → `--foreground-secondary` → `--foreground-tertiary` → `--foreground-muted` (4 levels, warm-tinted).
+
+### Typography
+
+IBM Plex Sans (body) + IBM Plex Mono (numbers, loan IDs, amounts). No Barlow.
+
+### Signature Patterns
+
+- **FinancialStrip** (`src/components/loans/FinancialStrip.tsx`): Horizontal label-value pairs with top/bottom border. Replaces card-grid KPI bars. Used on Loans, LoanDetail, MonthlyApproval.
+- **PeriodPipeline** (`src/components/loans/PeriodPipeline.tsx`): 5-dot lifecycle visualization (open → submitted → approved → sent → paid). Horizontal in table rows, vertical in notice workflow.
+- **LoanStatusBadge** (`src/components/loans/LoanStatusBadge.tsx`): 3 semantic categories — action (amber), done (sage), problem (destructive).
+
+### Status Color Mapping
+
+| Category | CSS Class | Color | Statuses |
+|---|---|---|---|
+| Action needed | `.status-action` | amber | `draft`, `open`, `submitted` |
+| Completed | `.status-done` | sage | `approved`, `sent`, `paid`, `active`, `repaid` |
+| Problem | `.status-problem` | destructive | `defaulted` |
+| Neutral | `.status-neutral` | muted | fallback |
+
+---
+
 ## Key Concepts and Architecture
 
 ### Event Sourcing
@@ -94,6 +136,32 @@ GL accounts 9350–9354 are used for different types of interest income (exact m
 
 Push is always **controller-initiated** (click to post, no auto-push). The dashboard confirms success/failure per posting.
 
+#### Depot Split Accounting in AFAS (CRITICAL)
+
+Loans with `cash_interest_percentage < 100` (e.g. 50% cash) have a depot/interest reserve split. The borrower pays the full interest, but only the cash portion is actual bank revenue — the rest settles against an interest reserve (depot).
+
+**How AFAS books this — TWO methods exist for the same economic outcome:**
+
+**Method 1 (used Dec 2025, Jan 2026):** Within a single J50 bank entry:
+- Credit on debtor account (e.g. 514) for the **full invoice amount** (e.g. €4,812.50)
+- Debit on account **1751** (interest depot reserve) for the depot portion (e.g. €2,406.25)
+- Net cash = credit − debit = €2,406.25
+
+**Method 2 (used Feb 2026+):** Split across two journals:
+- J50 credit on debtor account for **only the cash portion** (€2,406.25)
+- J90 (memorial) credit on debtor account for the **depot portion** (€2,406.25)
+
+**Both methods produce the same net cash of €2,406.25.**
+
+**IMPORTANT for code:** When reading J50 (bank) entries via `Profit_Transactions_Allocated` or `Profit_Transactions`, the credit on the debtor account may be the GROSS amount (Method 1) or the NET amount (Method 2). You MUST also query account 1751 debits in the same bank entry (same `EntryNo`) and subtract them to get the true cash amount. Never assume the J50 credit on the debtor account equals the actual cash received.
+
+**Key accounts:**
+- **Account 514** (or any debtor account): J50 credit = invoice settlement (may be gross or net depending on method)
+- **Account 1751**: J50 debit = depot portion clawed back from the gross settlement. Only present in Method 1.
+- **Journal 90**: Credit on debtor account = depot settlement. Only present in Method 2.
+
+**The `test-afas-draws` Edge Function** accepts an optional `connector` parameter (default: `Profit_Transactions_Allocated`). Use `Profit_Transactions` for raw/unallocated data.
+
 #### Pull from AFAS (AFAS → Loan Tool)
 
 Two types of incoming data, synced via **daily automated background job**:
@@ -114,8 +182,8 @@ Debtor codes need to be mapped to loans (`afas_debtor_code` column on `loans` ta
 Existing AFAS integration code is **draft/test quality**:
 - `post-period-to-afas` Edge Function exists but only handles PIK, GL account hardcoded
 - `get-afas-debtors`, `test-afas-connection`, `test-afas-read`, `test-afas-write` are test utilities
-- No pull (read) integration exists yet
-- No AFAS dashboard exists yet
+- No pull (read) integration exists yet (daily sync jobs not built)
+- **AFAS Dashboard exists** (`/afas` route) — shows connector status, cash payments, draws, and a data explorer with reconciliation. However, it reads raw AFAS data directly via Edge Functions, not from a staging table.
 - JSON connector mappings and API keys are being prepared
 
 AFAS credentials and admin code are stored as Supabase secrets (`AFAS_BASE_URL`, `AFAS_TOKEN`, `AFAS_ADMINISTRATIE_CODE`).
@@ -176,7 +244,7 @@ Daily sync upserts into this table. The dashboard reads from it. When controller
 | `sync-afas-draws` Edge Function | Deno | Daily job: pull bank payments with DimAx1 |
 | `create-afas-debtor` Edge Function | Deno | Create minimal debtor in AFAS |
 | Rework `post-period-to-afas` | Deno | Handle both PIK and cash-pay, dynamic GL, DimAx1 |
-| AFAS Dashboard page | React | Outbox + Inbox + Reconciliation panels |
+| AFAS Dashboard page | React | **Done (basic)** — needs Outbox + Inbox panels with staging table |
 | Period `paid` status | DB + frontend | New status in lifecycle |
 
 **Blocked on:** AFAS JSON connector definitions (GET response field names), GL account mapping (9350–9354), and debtor code bulk upload.
@@ -197,6 +265,13 @@ Role checks via `useAuth()` hook which exposes `isPM`, `isController`, `isAdmin`
 ---
 
 ## Important Files
+
+### Design System
+
+| File | Purpose |
+|---|---|
+| [src/index.css](src/index.css) | All CSS custom properties (design tokens), status classes, data-table styles, utility classes. Source of truth for the color system. |
+| [tailwind.config.ts](tailwind.config.ts) | Tailwind extended with semantic tokens from CSS vars: `accent.amber`, `accent.sage`, `border.strong`, `foreground.secondary/tertiary/muted` |
 
 ### Core Calculation Engine
 
@@ -226,22 +301,27 @@ Role checks via `useAuth()` hook which exposes `isPM`, `isController`, `isAdmin`
 
 | File | Purpose |
 |---|---|
-| [src/pages/Loans.tsx](src/pages/Loans.tsx) | Loan portfolio list with vehicle tabs (RED IV / TLF), portfolio metrics bar, sortable table, search |
-| [src/pages/LoanDetail.tsx](src/pages/LoanDetail.tsx) | Single loan view: key metrics bar, Accruals tab, Events ledger tab, Interest Notices tab |
-| [src/pages/MonthlyApproval.tsx](src/pages/MonthlyApproval.tsx) | Month-by-month batch approval for controller |
-| [src/pages/AfasData.tsx](src/pages/AfasData.tsx) | AFAS data explorer (debtors, GL accounts) |
-| [src/pages/AfasGLExplorer.tsx](src/pages/AfasGLExplorer.tsx) | AFAS GL account explorer |
+| [src/pages/Loans.tsx](src/pages/Loans.tsx) | Loan portfolio list with vehicle tabs (RED IV / TLF), FinancialStrip metrics, sortable table, search. Single-click rows navigate to detail. |
+| [src/pages/LoanDetail.tsx](src/pages/LoanDetail.tsx) | Single loan view: FinancialStrip, tabs: Interest Periods → Notices → Event Ledger |
+| [src/pages/MonthlyApproval.tsx](src/pages/MonthlyApproval.tsx) | Month-by-month batch approval for controller. Tabs: Cash Payments / Draws & Repayments. FinancialStrip summaries. |
+| [src/pages/Afas.tsx](src/pages/Afas.tsx) | Consolidated AFAS page with 2 tabs: Dashboard + Data Explorer. Route: `/afas`. |
+| [src/pages/AfasDashboard.tsx](src/pages/AfasDashboard.tsx) | AFAS connector status, cash payments, draws. Embedded inside Afas.tsx via `embedded` prop. |
+| [src/pages/AfasData.tsx](src/pages/AfasData.tsx) | AFAS data explorer (connectors, raw data, reconciliation). Embedded inside Afas.tsx via `embedded` prop. |
 | [src/pages/Auth.tsx](src/pages/Auth.tsx) | Login / sign-up |
 
 ### Key Components
 
 | File | Purpose |
 |---|---|
-| [src/components/loans/AccrualsTab.tsx](src/components/loans/AccrualsTab.tsx) | Main accruals UI: period table with expandable segments, PIK "Roll Up" button, daily breakdown |
-| [src/components/loans/NoticePreviewTab.tsx](src/components/loans/NoticePreviewTab.tsx) | Interest notice preview — renders the full PDF-style notice document per period |
+| [src/components/loans/FinancialStrip.tsx](src/components/loans/FinancialStrip.tsx) | Ledger-style horizontal metrics strip. Items: `{ label, value, accent?, mono? }`. |
+| [src/components/loans/PeriodPipeline.tsx](src/components/loans/PeriodPipeline.tsx) | 5-dot period lifecycle visualization. Horizontal (table rows) or vertical (notices). |
+| [src/components/loans/LoanStatusBadge.tsx](src/components/loans/LoanStatusBadge.tsx) | Status badges with 3 semantic color categories. |
+| [src/components/loans/AccrualsTab.tsx](src/components/loans/AccrualsTab.tsx) | Main accruals UI: period table with PeriodPipeline, expandable segments, PIK "Roll Up" button, daily breakdown |
+| [src/components/loans/NoticePreviewTab.tsx](src/components/loans/NoticePreviewTab.tsx) | Interest notice preview — renders the full PDF-style notice document per period, vertical PeriodPipeline for workflow |
 | [src/components/loans/CreateLoanDialog.tsx](src/components/loans/CreateLoanDialog.tsx) | New loan creation form |
 | [src/components/loans/BatchUploadDialog.tsx](src/components/loans/BatchUploadDialog.tsx) | CSV batch loan import |
 | [src/components/loans/EditLoanDialog.tsx](src/components/loans/EditLoanDialog.tsx) | Edit loan metadata (borrower name, dates, rates, etc.) |
+| [src/components/layout/AppLayout.tsx](src/components/layout/AppLayout.tsx) | Sidebar layout with grouped navigation: Portfolio, Workflow, Integration |
 
 ### Edge Functions (Supabase / Deno)
 
@@ -352,7 +432,7 @@ Events are hidden from the UI's event ledger view: `cash_received`, correction/r
 
 ## Roadmap
 
-### Phase 1 — Current: Core Functionality ✓
+### Phase 1 — Core Functionality ✓
 - Event sourcing loan ledger
 - 30E/360 interest accruals
 - PIK and cash-pay loan types
@@ -362,6 +442,18 @@ Events are hidden from the UI's event ledger view: `cash_received`, correction/r
 - AFAS posting (PIK)
 - Two-vehicle portfolio (RED IV, TLF)
 - RBAC (pm / controller / admin)
+
+### Phase 1.5 — UI Rework ✓ ("Ink & Parchment")
+- Custom design system: warm parchment surfaces, RAX teal-navy primary, 3 semantic accents
+- Cool light sidebar (temperature contrast) with grouped navigation
+- FinancialStrip component replacing card-grid KPI bars
+- PeriodPipeline lifecycle visualization (5-dot horizontal/vertical)
+- LoanStatusBadge with 3 semantic categories
+- Consolidated AFAS page (`/afas`) with Dashboard + Data Explorer tabs
+- Deleted AfasGLExplorer (no longer needed)
+- Single-click loan rows, tighter data density
+- IBM Plex Sans + Mono typography
+- All colors use semantic tokens (no raw Tailwind color classes)
 
 ### Phase 2 — Hardening for Production
 
@@ -393,6 +485,15 @@ Events are hidden from the UI's event ledger view: `cash_received`, correction/r
 - Unit tests for `getLoanStateAtDate` with all 11 event types
 - Integration tests for the monthly approval batch flow
 - End-to-end test: create loan → accrue → roll up PIK → approve → post to AFAS
+
+**AFAS push testing:**
+- Make `test-afas-write` generic: accept a `connector` parameter (default `FiEntries`) so it can post to any AFAS update connector (needed for `KnSalesRelationOrg` debtor creation)
+- Test cash-pay interest push (Connector #2 / `FiEntryPar`) against AFAS test env using a real loan's calculated accruals — verify via `test-afas-read` that the entry landed correctly
+- Test new debtor creation (Connector #5 / `KnSalesRelationOrg`) against AFAS test env — create a test debtor, then read it back via `get-afas-debtors` to confirm
+- Build `create-afas-debtor` Edge Function using the `KnSalesRelationOrg` template from `docs/afas-connectors.md`
+- Implement cash-pay posting path in `post-period-to-afas` using the `FiEntryPar` template (Connector #2) from `docs/afas-connectors.md`
+- Add dry-run mode to both new push functions (debtor creation + cash-pay posting) — preview the JSON payload without actually posting
+- Read-back verification after each push: query AFAS to confirm the posted entry/debtor exists and matches expected values
 
 **Reconciliation:**
 - Expose a reconciliation view: 30/360 period totals vs. sum of daily `accrual_entries`
@@ -441,3 +542,92 @@ Events are hidden from the UI's event ledger view: `cash_received`, correction/r
 - Path alias `@/` maps to `src/` (configured in `vite.config.ts`)
 - All monetary amounts are stored and calculated in **EUR**, displayed with `formatCurrency()` which uses `€` symbol
 - Rates are stored as decimals (0.08 = 8%) but displayed as percentages via `formatPercent()`
+- Routes: `/loans`, `/loans/:id`, `/monthly-approval`, `/afas` (consolidated). Legacy routes `/afas-dashboard`, `/afas-data`, `/afas-gl-explorer` redirect to `/afas`.
+- Sidebar navigation is grouped: **Portfolio** (Loans), **Workflow** (Monthly Approval), **Integration** (AFAS)
+- **Color rule**: Never use raw Tailwind color classes (e.g. `text-emerald-600`, `bg-orange-100`). Always use semantic tokens: `text-accent-sage`, `text-accent-amber`, `text-primary`, `text-destructive`, or their `bg-` / `border-` variants with opacity modifiers.
+
+---
+
+## Daily Backup System
+
+Automated daily backup to OneDrive with full system restore capability. Creates a single zip file containing the database dump, git bundle, env config, and self-contained restore tools.
+
+### How It Works
+
+- **Backup**: `supabase db dump` (wraps pg_dump) captures the full database — schema, data, functions, triggers, RLS, enums, auth users. `git bundle` captures all code + history. Everything goes into one zip on OneDrive.
+- **Restore**: Extract zip → run bundled `restore.mjs` → `psql` restores schema + data (triggers auto-disabled via `SET session_replication_role = replica`), `git clone` restores code, Edge Functions auto-redeployed.
+- **Automation**: Windows Task Scheduler runs `backup.ps1` daily at 2 AM. `StartWhenAvailable` catches up if the PC was asleep.
+- **Self-contained**: Every backup zip includes `restore.mjs` and `RESTORE.md` — restore works from a fresh machine without cloning the repo first.
+- **Smart**: Git bundle is skipped if HEAD hasn't changed since last backup. Old backups auto-deleted after retention period.
+- **Alerting**: On failure, `BACKUP_FAILED.txt` is created in the project root (visible in VS Code) and an entry is written to Windows Event Log.
+
+### Backup Files
+
+| File | Purpose |
+|---|---|
+| [scripts/backup.mjs](scripts/backup.mjs) | Main backup script — dumps DB, creates git bundle, verifies, zips to OneDrive |
+| [scripts/restore.mjs](scripts/restore.mjs) | Interactive restore script — also bundled inside every backup zip |
+| [scripts/backup.ps1](scripts/backup.ps1) | PowerShell wrapper for Task Scheduler — loads env, runs backup, alerts on failure |
+| [scripts/setup-scheduled-backup.ps1](scripts/setup-scheduled-backup.ps1) | One-time Task Scheduler registration (run as admin) |
+| [scripts/RESTORE.md](scripts/RESTORE.md) | Plain-text restore guide bundled in every zip |
+
+### Commands
+
+```bash
+npm run backup                                          # Manual backup
+npm run restore                                         # Interactive restore (lists available backups)
+npm run restore -- --file path/to/backup.zip            # Direct restore
+npm run restore -- --db-only --file path.zip            # Database only (most common)
+npm run restore -- --dry-run --file path.zip            # Preview without changes
+npm run restore -- --db-url "postgresql://..." --file .  # From extracted zip on fresh machine
+```
+
+### Environment Variables (`.env.local`)
+
+```bash
+DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-eu-central-1.pooler.supabase.com:5432/postgres
+BACKUP_ONEDRIVE_PATH=C:/Users/joel_/OneDrive/RAX-Backups
+BACKUP_RETENTION_DAYS=30
+```
+
+`DATABASE_URL`: From Supabase Dashboard → Settings → Database → Connection string (URI).
+
+### Setup
+
+```bash
+# 1. Add DATABASE_URL and BACKUP_ONEDRIVE_PATH to .env.local
+# 2. Install psql (needed for restore only):
+scoop install postgresql
+# 3. Register daily Task Scheduler job (run as admin):
+powershell -ExecutionPolicy Bypass -File scripts/setup-scheduled-backup.ps1
+```
+
+### Backup ZIP Contents
+
+```
+rax-backup-2026-03-04T0200.zip
+├── RESTORE.md        # Human-readable restore instructions
+├── restore.mjs       # Self-contained restore script
+├── manifest.json     # Metadata + verification results
+├── schema.sql        # Full DB schema (tables, functions, triggers, RLS, enums)
+├── data.sql          # All data (including auth.users)
+├── repo.bundle       # Complete git repo + history (omitted if no new commits)
+└── env/
+    ├── .env          # Public config
+    └── .env.local    # Secrets redacted
+```
+
+### What's Backed Up vs. Not
+
+| Backed up | Not backed up (manual) |
+|---|---|
+| All database tables, functions, triggers, RLS, enums | Supabase vault secrets (AFAS_TOKEN, etc.) |
+| Auth users (auth.users) | Supabase project settings (auth config, rate limits) |
+| All code + git history | |
+| All Edge Function source code | |
+| Environment config (.env) | |
+
+### Marker Files
+
+- `last-successful-backup.json` — Updated after each successful backup. If this is days old, backups may be failing.
+- `BACKUP_FAILED.txt` — Created on backup failure, deleted on next success. Visible in VS Code file explorer.

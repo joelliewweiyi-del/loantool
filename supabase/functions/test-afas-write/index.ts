@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getAfasToken, getAfasBaseUrl, buildAfasAuthHeader } from "../_shared/afas-config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,22 +12,22 @@ serve(async (req) => {
   }
 
   try {
-    const afasToken = Deno.env.get('AFAS_TOKEN');
-    const afasEnvId = Deno.env.get('AFAS_ENVIRONMENT_ID');
+    const afasToken = await getAfasToken();
+    const baseUrl = await getAfasBaseUrl();
     const adminCode = Deno.env.get('AFAS_ADMINISTRATIE_CODE') || '05';
 
-    if (!afasToken || !afasEnvId) {
+    if (!afasToken || !baseUrl) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Missing AFAS credentials' 
+        JSON.stringify({
+          success: false,
+          error: 'Missing AFAS credentials'
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const baseUrl = `https://${afasEnvId}.rest.afas.online/profitrestservices`;
-    
+    const authHeader = buildAfasAuthHeader(afasToken);
+
     // Test payload for FiEntries UpdateConnector
     // This is a minimal test entry - adjust based on actual schema requirements
     const testPayload = {
@@ -79,8 +80,8 @@ serve(async (req) => {
         // Allow dry-run mode
         if (body.dryRun === true) {
           return new Response(
-            JSON.stringify({ 
-              success: true, 
+            JSON.stringify({
+              success: true,
               message: 'Dry run - payload that would be sent:',
               dryRun: true,
               payload: customPayload || testPayload,
@@ -96,14 +97,14 @@ serve(async (req) => {
 
     const updateUrl = `${baseUrl}/connectors/FiEntries`;
     const payloadToSend = customPayload || testPayload;
-    
+
     console.log('Posting to:', updateUrl);
     console.log('Payload:', JSON.stringify(payloadToSend, null, 2));
 
     const response = await fetch(updateUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `AfasToken ${btoa(afasToken)}`,
+        'Authorization': authHeader,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payloadToSend),
@@ -115,8 +116,8 @@ serve(async (req) => {
 
     if (response.ok) {
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           message: 'Successfully posted test entry to FiEntries',
           status: response.status,
           response: responseText || 'Entry created successfully'
@@ -125,8 +126,8 @@ serve(async (req) => {
       );
     } else {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
+        JSON.stringify({
+          success: false,
           error: 'Failed to post entry',
           status: response.status,
           details: responseText,
@@ -139,9 +140,9 @@ serve(async (req) => {
     const errMessage = error instanceof Error ? error.message : String(error);
     console.error('Error writing to AFAS:', errMessage);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: errMessage 
+      JSON.stringify({
+        success: false,
+        error: errMessage
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

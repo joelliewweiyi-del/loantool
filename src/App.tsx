@@ -8,9 +8,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import Auth from "./pages/Auth";
 import Loans from "./pages/Loans";
 import LoanDetail from "./pages/LoanDetail";
-import AfasData from "./pages/AfasData";
-import AfasGLExplorer from "./pages/AfasGLExplorer";
-import AfasDashboard from "./pages/AfasDashboard";
+import Afas from "./pages/Afas";
 import MonthlyApproval from "./pages/MonthlyApproval";
 import Export from "./pages/Export";
 import NotFound from "./pages/NotFound";
@@ -75,29 +73,17 @@ function AppRoutes() {
         }
       />
       <Route
-        path="/afas-data"
+        path="/afas"
         element={
           <ProtectedRoute>
-            <AfasData />
+            <Afas />
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/afas-gl-explorer"
-        element={
-          <ProtectedRoute>
-            <AfasGLExplorer />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/afas-dashboard"
-        element={
-          <ProtectedRoute>
-            <AfasDashboard />
-          </ProtectedRoute>
-        }
-      />
+      {/* Redirects from old AFAS routes */}
+      <Route path="/afas-dashboard" element={<Navigate to="/afas" replace />} />
+      <Route path="/afas-data" element={<Navigate to="/afas?tab=data" replace />} />
+      <Route path="/afas-gl-explorer" element={<Navigate to="/afas" replace />} />
       <Route
         path="/export"
         element={

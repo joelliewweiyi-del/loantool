@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import { Loan, LoanEvent } from '@/types/loan';
 import { getLoanStateAtDate } from './loanCalculations';
 import { differenceInDays, parseISO } from 'date-fns';
+import { getPipelineStage } from './constants';
 
 export interface LoanWithEvents {
   loan: Loan;
@@ -16,6 +17,7 @@ interface LoanTapeData {
   category: string;
   earmarked: boolean;
   currentFacility: string;
+  facility: string;
   initialFacility: string;
   commitment: number | null;
   outstanding: number;
@@ -29,7 +31,9 @@ interface LoanTapeData {
   valuationDate: string | null;
   ltv: number | null;
   duration: number | null;
+  pipelineStage: string | null;
   // Extra fields for detailed / full exports
+  occupancy: number | null;
   googleMapsUrl?: string;
   kadastraleKaartUrl?: string;
   photoUrl?: string;
@@ -62,19 +66,22 @@ export function buildLoanTapeData(
       category: loan.category || '',
       earmarked: loan.earmarked ?? false,
       currentFacility: loan.vehicle || '',
+      facility: loan.facility || '',
       initialFacility: loan.initial_facility || '',
       commitment: effectiveCommitment > 0 ? effectiveCommitment : null,
       outstanding,
       undrawn,
-      interestRate: state.currentRate,
+      interestRate: state.currentRate || loan.interest_rate || 0,
       redIVStartDate: loan.red_iv_start_date || null,
       originalStartDate: loan.loan_start_date || null,
       maturityDate: loan.maturity_date || null,
       rentalIncome: loan.rental_income,
       valuation: loan.valuation,
       valuationDate: loan.valuation_date || null,
-      ltv: loan.ltv,
+      ltv: loan.valuation ? Math.max(effectiveCommitment, outstanding) / loan.valuation : null,
       duration: computeDuration(loan.maturity_date, asOfDate),
+      pipelineStage: loan.pipeline_stage || null,
+      occupancy: loan.occupancy,
       googleMapsUrl: loan.google_maps_url || '',
       kadastraleKaartUrl: loan.kadastrale_kaart_url || '',
       photoUrl: loan.photo_url || '',
@@ -91,15 +98,20 @@ const HEADER_FILL: ExcelJS.Fill = {
   fgColor: { argb: 'FF1F3864' },
 };
 
-const HEADER_FONT: Partial<ExcelJS.Font> = {
-  bold: true,
-  color: { argb: 'FFFFFFFF' },
+const DEFAULT_FONT: Partial<ExcelJS.Font> = {
+  name: 'Barlow',
   size: 10,
 };
 
-const GROUP_FONT: Partial<ExcelJS.Font> = {
+const HEADER_FONT: Partial<ExcelJS.Font> = {
+  ...DEFAULT_FONT,
   bold: true,
-  size: 10,
+  color: { argb: 'FFFFFFFF' },
+};
+
+const GROUP_FONT: Partial<ExcelJS.Font> = {
+  ...DEFAULT_FONT,
+  bold: true,
 };
 
 const SUBTOTAL_FILL: ExcelJS.Fill = {
@@ -171,6 +183,7 @@ const SUMMARY_COLUMNS: ColDef[] = [
 // Detailed: current 20 + 4 extra
 const DETAILED_COLUMNS: ColDef[] = [
   ...COLUMNS,
+  { header: 'Occupancy', key: 'occupancy', width: 12, numFmt: PERCENT_FMT, isPercent: true },
   { header: 'Google Maps', key: 'googleMapsUrl', width: 30 },
   { header: 'kadastralekaart', key: 'kadastraleKaartUrl', width: 30 },
   { header: 'Photo', key: 'photoUrl', width: 30 },
@@ -197,6 +210,7 @@ function styleHeaderRow(ws: ExcelJS.Worksheet, rowNum: number) {
 function applyFormats(row: ExcelJS.Row, columns: ColDef[]) {
   columns.forEach((col, i) => {
     const cell = row.getCell(i + 1);
+    cell.font = DEFAULT_FONT;
     if (col.numFmt && cell.value !== '' && cell.value != null) {
       cell.numFmt = col.numFmt;
     }
@@ -239,21 +253,23 @@ export async function downloadSummaryLoanTapeXlsx(
   vehicle: string
 ) {
   const data = buildLoanTapeData(loansWithEvents, asOfDate);
-  const incomeProducing = data.filter(d => d.earmarked);
-  const nonIncomeProducing = data.filter(d => !d.earmarked);
+  const byStartDate = (a: LoanTapeData, b: LoanTapeData) =>
+    (a.originalStartDate || '').localeCompare(b.originalStartDate || '');
+  const incomeProducing = data.filter(d => d.earmarked).sort(byStartDate);
+  const nonIncomeProducing = data.filter(d => !d.earmarked).sort(byStartDate);
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'RAX Finance Loan Tool';
   wb.created = new Date();
 
   const ws = wb.addWorksheet('Loan Tape', {
-    views: [{ state: 'frozen', ySplit: 2 }],
+    views: [{ state: 'frozen', ySplit: 2, showGridLines: false }],
   });
 
   const cols = SUMMARY_COLUMNS;
 
-  // Set column widths (col A is spacer, data starts at B)
-  ws.getColumn(1).width = 3;
+  // Set column widths (col A is pipeline indicator, data starts at B)
+  ws.getColumn(1).width = 14;
   cols.forEach((col, i) => { ws.getColumn(i + 2).width = col.width; });
 
   // Row 1: empty
@@ -273,7 +289,10 @@ export async function downloadSummaryLoanTapeXlsx(
 
   // Helper: add data row with offset
   function addDataRow(item: LoanTapeData) {
-    const values: unknown[] = [null]; // spacer col A
+    const isPipeline = item.currentFacility === 'Pipeline';
+    const stage = isPipeline ? getPipelineStage(item.pipelineStage) : null;
+    const pipelineLabel = stage ? `${stage.label} Pipeline` : isPipeline ? 'Pipeline' : null;
+    const values: unknown[] = [pipelineLabel]; // col A: pipeline indicator
     for (const col of cols) {
       const v = (item as any)[col.key];
       if (col.isDate) values.push(toExcelDate(v));
@@ -281,8 +300,14 @@ export async function downloadSummaryLoanTapeXlsx(
       else values.push(v ?? '');
     }
     const row = ws.addRow(values);
+    if (pipelineLabel) {
+      const cellA = row.getCell(1);
+      cellA.font = { ...DEFAULT_FONT, italic: true, color: { argb: 'FF888888' } };
+    }
     cols.forEach((col, i) => {
       const cell = row.getCell(i + 2);
+      cell.font = DEFAULT_FONT;
+      if (col.key === 'loanId') cell.alignment = { horizontal: 'center' };
       if (col.numFmt && cell.value !== '' && cell.value != null) cell.numFmt = col.numFmt;
       if (col.isDate && cell.value instanceof Date) cell.numFmt = DATE_FMT;
     });
@@ -307,6 +332,7 @@ export async function downloadSummaryLoanTapeXlsx(
     const commitCol = colLetterOf('commitment');
     const outCol = colLetterOf('outstanding');
     const undrawnCol = colLetterOf('undrawn');
+    const rateCol = colLetterOf('interestRate');
     const ltvCol = colLetterOf('ltv');
     const durCol = colLetterOf('duration');
 
@@ -318,13 +344,19 @@ export async function downloadSummaryLoanTapeXlsx(
       if (col.key === 'loanId') {
         // COUNTA for number of loans
         cell.value = { formula: `COUNTA(${range})` } as any;
-      } else if (col.key === 'commitment' || col.key === 'outstanding' || col.key === 'undrawn' || col.key === 'rentalIncome') {
+        cell.alignment = { horizontal: 'center' };
+      } else if (col.key === 'commitment' || col.key === 'outstanding' || col.key === 'undrawn' || col.key === 'rentalIncome' || col.key === 'valuation') {
         cell.value = { formula: `SUM(${range})` } as any;
       } else if (col.key === 'ltv') {
         // Weighted average LTV by commitment
         const ltvRange = `${ltvCol}${firstDataRow}:${ltvCol}${lastDataRow}`;
         const commitRange = `${commitCol}${firstDataRow}:${commitCol}${lastDataRow}`;
         cell.value = { formula: `IFERROR(SUMPRODUCT(${ltvRange},${commitRange})/SUM(${commitRange}),"")` } as any;
+      } else if (col.key === 'interestRate') {
+        // Weighted average Interest Rate by commitment
+        const rateRange = `${rateCol}${firstDataRow}:${rateCol}${lastDataRow}`;
+        const commitRange = `${commitCol}${firstDataRow}:${commitCol}${lastDataRow}`;
+        cell.value = { formula: `IFERROR(SUMPRODUCT(${rateRange},${commitRange})/SUM(${commitRange}),"")` } as any;
       } else if (col.key === 'duration') {
         // Weighted average Duration by commitment
         const durRange = `${durCol}${firstDataRow}:${durCol}${lastDataRow}`;
@@ -339,7 +371,7 @@ export async function downloadSummaryLoanTapeXlsx(
 
     row.eachCell((cell, colNumber) => {
       if (colNumber >= 2) {
-        cell.font = { bold: true, size: 10 };
+        cell.font = GROUP_FONT;
         cell.fill = SUBTOTAL_FILL;
       }
     });
@@ -372,6 +404,7 @@ export async function downloadSummaryLoanTapeXlsx(
   {
     const row = ws.addRow([]);
     const commitCol = colLetterOf('commitment');
+    const rateCol = colLetterOf('interestRate');
     const ltvCol = colLetterOf('ltv');
     const durCol = colLetterOf('duration');
 
@@ -386,8 +419,20 @@ export async function downloadSummaryLoanTapeXlsx(
 
       if (col.key === 'loanId') {
         cell.value = { formula: parts.map(r => `COUNTA(${r})`).join('+') || '0' } as any;
-      } else if (col.key === 'commitment' || col.key === 'outstanding' || col.key === 'undrawn' || col.key === 'rentalIncome') {
+        cell.alignment = { horizontal: 'center' };
+      } else if (col.key === 'commitment' || col.key === 'outstanding' || col.key === 'undrawn' || col.key === 'rentalIncome' || col.key === 'valuation') {
         cell.value = { formula: parts.map(r => `SUM(${r})`).join('+') || '0' } as any;
+      } else if (col.key === 'interestRate') {
+        // Weighted average Interest Rate by commitment
+        const commitParts = parts.map((_, pi) => {
+          const src = pi === 0 && incomeProducing.length > 0
+            ? { first: ipFirstRow, last: ipLastRow }
+            : { first: nipFirstRow, last: nipLastRow };
+          return { rate: `${rateCol}${src.first}:${rateCol}${src.last}`, commit: `${commitCol}${src.first}:${commitCol}${src.last}` };
+        });
+        const sumProd = commitParts.map(p => `SUMPRODUCT(${p.rate},${p.commit})`).join('+');
+        const sumCommit = commitParts.map(p => `SUM(${p.commit})`).join('+');
+        cell.value = { formula: `IFERROR((${sumProd})/(${sumCommit}),"")` } as any;
       } else if (col.key === 'ltv') {
         const commitParts = parts.map((_, pi) => {
           const src = pi === 0 && incomeProducing.length > 0
@@ -417,7 +462,7 @@ export async function downloadSummaryLoanTapeXlsx(
 
     row.eachCell((cell, colNumber) => {
       if (colNumber >= 2) {
-        cell.font = { bold: true, size: 10 };
+        cell.font = GROUP_FONT;
         cell.fill = SUBTOTAL_FILL;
       }
     });
@@ -435,7 +480,9 @@ export async function downloadDetailedLoanTapeXlsx(
   asOfDate: string,
   vehicle: string
 ) {
-  const data = buildLoanTapeData(loansWithEvents, asOfDate);
+  const data = buildLoanTapeData(loansWithEvents, asOfDate)
+    .filter(d => d.currentFacility !== 'Pipeline')
+    .sort((a, b) => (a.originalStartDate || '').localeCompare(b.originalStartDate || ''));
   const cols = DETAILED_COLUMNS;
 
   const wb = new ExcelJS.Workbook();
@@ -443,20 +490,198 @@ export async function downloadDetailedLoanTapeXlsx(
   wb.created = new Date();
 
   const ws = wb.addWorksheet('Loan Tape', {
-    views: [{ state: 'frozen', ySplit: 1 }],
+    views: [{ state: 'frozen', ySplit: 2, showGridLines: false }],
   });
 
-  ws.columns = cols.map(col => ({ header: col.header, key: col.key, width: col.width }));
-  styleHeaderRow(ws, 1);
+  // Set column widths (col A is spacer, data starts at B)
+  ws.getColumn(1).width = 3;
+  cols.forEach((col, i) => { ws.getColumn(i + 2).width = col.width; });
 
-  for (const row of data) {
-    const excelRow = ws.addRow(buildRowValues(row, cols));
-    applyFormats(excelRow, cols);
+  // Row 1: empty
+  ws.addRow([]);
+
+  // Row 2: header row (offset by 1 col for spacer)
+  const headerValues = ['', ...cols.map(c => c.header)];
+  const headerRow = ws.addRow(headerValues);
+  headerRow.eachCell((cell, colNumber) => {
+    if (colNumber >= 2) {
+      cell.fill = HEADER_FILL;
+      cell.font = HEADER_FONT;
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    }
+  });
+  headerRow.height = 24;
+
+  // Column-letter lookup (col B = index 0 in cols)
+  const colLetter = (colIdx: number) => {
+    const n = colIdx + 2;
+    return String.fromCharCode(64 + n);
+  };
+  const colLetterOf = (key: string) => {
+    const idx = cols.findIndex(c => c.key === key);
+    return idx >= 0 ? colLetter(idx) : '';
+  };
+
+  const firstDataRow = ws.rowCount + 1;
+  for (const item of data) {
+    const values: unknown[] = [''];
+    for (const col of cols) {
+      const v = (item as any)[col.key];
+      if (col.isDate) values.push(toExcelDate(v));
+      else if (col.key === 'earmarked') values.push(v ? 'TRUE' : 'FALSE');
+      else values.push(v ?? '');
+    }
+    const row = ws.addRow(values);
+    cols.forEach((col, i) => {
+      const cell = row.getCell(i + 2);
+      cell.font = DEFAULT_FONT;
+      if (col.key === 'loanId') cell.alignment = { horizontal: 'center' };
+      if (col.numFmt && cell.value !== '' && cell.value != null) cell.numFmt = col.numFmt;
+      if (col.isDate && cell.value instanceof Date) cell.numFmt = DATE_FMT;
+    });
+  }
+  const lastDataRow = ws.rowCount;
+
+  // Summary row
+  if (data.length > 0) {
+    const commitCol = colLetterOf('commitment');
+
+    const sumRow = ws.addRow([]);
+    cols.forEach((col, i) => {
+      const cell = sumRow.getCell(i + 2);
+      const letter = colLetter(i);
+      const range = `${letter}${firstDataRow}:${letter}${lastDataRow}`;
+
+      if (col.key === 'loanId') {
+        cell.value = { formula: `COUNTA(${range})` } as any;
+        cell.alignment = { horizontal: 'center' };
+      } else if (col.key === 'commitment' || col.key === 'outstanding' || col.key === 'undrawn' || col.key === 'rentalIncome' || col.key === 'valuation') {
+        cell.value = { formula: `SUM(${range})` } as any;
+      } else if (col.key === 'interestRate' || col.key === 'ltv' || col.key === 'duration') {
+        const valRange = `${letter}${firstDataRow}:${letter}${lastDataRow}`;
+        const commitRange = `${commitCol}${firstDataRow}:${commitCol}${lastDataRow}`;
+        cell.value = { formula: `IFERROR(SUMPRODUCT(${valRange},${commitRange})/SUM(${commitRange}),"")` } as any;
+      } else {
+        cell.value = '';
+      }
+
+      if (col.numFmt && col.key !== 'loanId') cell.numFmt = col.numFmt;
+    });
+
+    sumRow.eachCell((cell, colNumber) => {
+      if (colNumber >= 2) {
+        cell.font = GROUP_FONT;
+        cell.fill = SUBTOTAL_FILL;
+      }
+    });
   }
 
   const buffer = await wb.xlsx.writeBuffer();
-  const dateStr = asOfDate.replace(/-/g, '');
-  triggerDownload(buffer, `Loan_Tape_${vehicle.replace(/\s+/g, '_')}_${dateStr}_detailed.xlsx`);
+  const [yyyy, mm, dd] = asOfDate.split('-');
+  // Always label as "RED IV" — TLF loans originate in the RED IV vehicle first,
+  // so the detailed tape represents the full RED IV origination portfolio.
+  triggerDownload(buffer, `Loan tape RED IV ${dd}-${mm}-${yyyy.slice(2)}.xlsx`);
+}
+
+// ── Export 2b: CSV for investor portal ──────────────────────────
+// Matches the "Loan Tape RED IV" Supabase table schema used by the
+// investor portal. All values are text. EU number format (comma decimal,
+// no thousand separator). Semicolon-delimited.
+
+function fmtEuNumber(v: number | null | undefined, decimals = 2): string {
+  if (v == null || v === 0) return '';
+  return v.toFixed(decimals).replace('.', ',');
+}
+
+function fmtEuPercent(v: number | null | undefined): string {
+  if (v == null || v === 0) return '';
+  return (v * 100).toFixed(2).replace('.', ',') + '%';
+}
+
+function fmtDateDDMMYYYY(dateStr: string | null): string {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+const CSV_COLUMNS = [
+  'Loan ID',
+  'Outstanding Loan Amount',
+  'Total Commitment',
+  'Undrawn Amount',
+  'Remarks',
+  'Facility',
+  'City',
+  'Status',
+  'Duration',
+  'LTV',
+  'Valuation (as-is)',
+  'Rental Income',
+  'Maturity',
+  'Start Date',
+  'Interest Rate',
+  'Category',
+  'Earmarked',
+  'google_maps',
+  'kadastralekaart',
+  'Photo',
+  'Additional Information',
+] as const;
+
+export function downloadInvestorPortalCsv(
+  loansWithEvents: LoanWithEvents[],
+  asOfDate: string,
+) {
+  const data = buildLoanTapeData(loansWithEvents, asOfDate)
+    .filter(d => d.currentFacility !== 'Pipeline')
+    .sort((a, b) => (a.originalStartDate || '').localeCompare(b.originalStartDate || ''));
+
+  const escCsv = (v: string) => {
+    if (v.includes(';') || v.includes('"') || v.includes('\n')) {
+      return `"${v.replace(/"/g, '""')}"`;
+    }
+    return v;
+  };
+
+  const rows = data.map(d => [
+    d.loanId,
+    fmtEuNumber(d.outstanding),
+    fmtEuNumber(d.commitment),
+    fmtEuNumber(d.undrawn),
+    d.remarks,
+    d.facility || d.currentFacility,
+    d.city,
+    d.status,
+    fmtEuNumber(d.duration),
+    fmtEuPercent(d.ltv),
+    fmtEuNumber(d.valuation),
+    fmtEuNumber(d.rentalIncome),
+    fmtDateDDMMYYYY(d.maturityDate),
+    fmtDateDDMMYYYY(d.originalStartDate),
+    fmtEuPercent(d.interestRate),
+    d.category,
+    d.earmarked ? 'TRUE' : 'FALSE',
+    d.googleMapsUrl || '',
+    d.kadastraleKaartUrl || '',
+    d.photoUrl || '',
+    d.additionalInfo || '',
+  ].map(v => escCsv(String(v ?? ''))));
+
+  const header = CSV_COLUMNS.map(h => escCsv(h)).join(';');
+  const body = rows.map(r => r.join(';')).join('\n');
+  const csv = header + '\n' + body;
+
+  // BOM for Excel to detect UTF-8
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  const [yyyy, mm, dd] = asOfDate.split('-');
+  link.download = `Loan tape RED IV ${dd}-${mm}-${yyyy.slice(2)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 // ── Export 3: Full database export ──────────────────────────────
@@ -471,7 +696,7 @@ export async function downloadFullExportXlsx(
   wb.created = new Date();
 
   const ws = wb.addWorksheet('Full Export', {
-    views: [{ state: 'frozen', ySplit: 1 }],
+    views: [{ state: 'frozen', ySplit: 1, showGridLines: false }],
   });
 
   const FULL_COLUMNS: ColDef[] = [
@@ -537,7 +762,7 @@ export async function downloadFullExportXlsx(
       commitment: hasCommitment ? commitment : '',
       outstanding,
       undrawn: hasCommitment ? commitment - outstanding : '',
-      interestRate: state.currentRate,
+      interestRate: state.currentRate || loan.interest_rate || 0,
       interestType: loan.interest_type || '',
       feePaymentType: loan.fee_payment_type || '',
       cashInterestPct: loan.cash_interest_percentage ?? '',
@@ -551,7 +776,7 @@ export async function downloadFullExportXlsx(
       rentalIncome: loan.rental_income ?? '',
       valuation: loan.valuation ?? '',
       valuationDate: toExcelDate(loan.valuation_date || null),
-      ltv: loan.ltv ?? '',
+      ltv: loan.valuation ? Math.max(commitment > 0 ? commitment : outstanding, outstanding) / loan.valuation : '',
       remarks: loan.remarks || '',
       afasDebtor: loan.afas_debtor_account || '',
       borrowerEmail: loan.borrower_email || '',
@@ -589,7 +814,7 @@ export async function downloadLoanTapeXlsx(
   wb.created = new Date();
 
   const ws = wb.addWorksheet(vehicle, {
-    views: [{ state: 'frozen', ySplit: 1 }],
+    views: [{ state: 'frozen', ySplit: 1, showGridLines: false }],
   });
 
   ws.columns = COLUMNS.map(col => ({ header: col.header, key: col.key, width: col.width }));

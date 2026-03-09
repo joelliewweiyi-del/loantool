@@ -28,8 +28,11 @@ export interface EnrichedPeriod {
   commitmentFeeAccrued: number;
   totalDue: number;
   expectedCashDue: number;
+  expectedDepotDue: number;
+  cashPct: number;
   // AFAS match
   afasPayment: AfasMatch | null;
+  afasDepot: AfasMatch | null;
   delta: number | null; // afas amount - calculated, null if no match
   allAfasPayments: AfasMatch[]; // all AFAS transactions for this loan
   // Already confirmed
@@ -100,7 +103,7 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
     enabled: loanIds.length > 0,
   });
 
-  // AFAS payments (bulk fetch for all loan accounts)
+  // AFAS cash payments (journal 50 — bank)
   const { data: afasData, isLoading: afasLoading } = useQuery({
     queryKey: ['monthly-approval-afas'],
     queryFn: async () => {
@@ -109,6 +112,62 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
           filterFieldIds: 'UnitId,JournalId,AccountNo',
           filterValues: '5,50,400..599',
           operatorTypes: '1,1,15',
+          take: 5000,
+        },
+      });
+      if (error) throw error;
+      return (data?.allData?.rows ?? []) as Array<{
+        AccountNo: number;
+        EntryDate: string;
+        AmtCredit: number;
+        AmtDebit: number;
+        Description: string;
+        EntryNo: number;
+        SeqNo: number;
+      }>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // AFAS depot payments (journal 90 — memorial) — for loans with depot split
+  const { data: afasDepotData, isLoading: afasDepotLoading } = useQuery({
+    queryKey: ['monthly-approval-afas-depot'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('test-afas-draws', {
+        body: {
+          filterFieldIds: 'UnitId,JournalId,AccountNo',
+          filterValues: '5,90,400..599',
+          operatorTypes: '1,1,15',
+          take: 5000,
+        },
+      });
+      if (error) throw error;
+      return (data?.allData?.rows ?? []) as Array<{
+        AccountNo: number;
+        EntryDate: string;
+        AmtCredit: number;
+        AmtDebit: number;
+        Description: string;
+        EntryNo: number;
+        SeqNo: number;
+      }>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // AFAS account 1751 debits (journal 50) — depot reserve netting.
+  // When AFAS books the full invoice amount as a J50 credit on the debtor account,
+  // it simultaneously debits 1751 for the depot portion in the same bank entry.
+  // We subtract these to get the true net cash amount.
+  // See CLAUDE.md → "Depot Split Accounting in AFAS".
+  const { data: afas1751Data, isLoading: afas1751Loading } = useQuery({
+    queryKey: ['monthly-approval-afas-1751'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('test-afas-draws', {
+        body: {
+          filterFieldIds: 'UnitId,JournalId,AccountNo',
+          filterValues: '5,50,1751',
+          operatorTypes: '1,1,1',
           take: 5000,
         },
       });
@@ -140,22 +199,48 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
       else eventsByLoan.set(event.loan_id, [event]);
     }
 
-    // Build AFAS payments grouped by loan UUID
-    const afasByLoan = new Map<string, Array<{ amount: number; date: string; description: string; ref: string }>>();
-    for (const row of afasData) {
-      if (row.AmtCredit <= 0) continue; // only credit entries
-      const uuid = numericToUuid.get(String(row.AccountNo));
-      if (!uuid) continue;
-      const entry = {
-        amount: row.AmtCredit,
-        date: row.EntryDate,
-        description: row.Description,
-        ref: `${row.EntryNo}-${row.SeqNo}`,
-      };
-      const existing = afasByLoan.get(uuid);
-      if (existing) existing.push(entry);
-      else afasByLoan.set(uuid, [entry]);
+    // Build 1751 depot debit map: "EntryNo-loanNumericId" → debit amount.
+    // This nets out the depot portion from gross J50 settlements.
+    const depotDebits1751 = new Map<string, number>();
+    if (afas1751Data) {
+      for (const row of afas1751Data) {
+        if (row.AmtDebit <= 0) continue;
+        // Match to loan by checking description for loan numeric ID
+        for (const loan of loansData) {
+          if ((row.Description || '').includes(loan.loan_id)) {
+            const key = `${row.EntryNo}-${loan.loan_id}`;
+            depotDebits1751.set(key, (depotDebits1751.get(key) ?? 0) + row.AmtDebit);
+          }
+        }
+      }
     }
+
+    // Build AFAS payments grouped by loan UUID, with 1751 netting applied
+    type AfasEntry = { amount: number; date: string; description: string; ref: string };
+    function groupAfasRows(rows: typeof afasData, applyNetting = false): Map<string, AfasEntry[]> {
+      const map = new Map<string, AfasEntry[]>();
+      for (const row of rows) {
+        if (row.AmtCredit <= 0) continue;
+        const loanId = String(row.AccountNo);
+        const uuid = numericToUuid.get(loanId);
+        if (!uuid) continue;
+        // Subtract matching 1751 depot debit from this bank entry
+        const depotDebit = applyNetting ? (depotDebits1751.get(`${row.EntryNo}-${loanId}`) ?? 0) : 0;
+        const entry: AfasEntry = {
+          amount: row.AmtCredit - depotDebit,
+          date: row.EntryDate,
+          description: row.Description,
+          ref: `${row.EntryNo}-${row.SeqNo}`,
+        };
+        const existing = map.get(uuid);
+        if (existing) existing.push(entry);
+        else map.set(uuid, [entry]);
+      }
+      return map;
+    }
+
+    const afasByLoan = groupAfasRows(afasData, true); // apply 1751 netting to J50 data
+    const depotByLoan = afasDepotData ? groupAfasRows(afasDepotData) : new Map<string, AfasEntry[]>();
 
     // Collect confirmed AFAS refs (already linked to paid periods)
     const confirmedRefs = new Set<string>();
@@ -196,13 +281,36 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
       const isConfirmed = period.status === 'paid' && !!period.payment_date;
       const cashPct = (loan?.cash_interest_percentage ?? 100) / 100;
       const expectedCashDue = accruals.interestAccrued * cashPct + accruals.commitmentFeeAccrued + accruals.feesInvoiced;
+      const expectedDepotDue = cashPct < 1 ? accruals.interestAccrued * (1 - cashPct) : 0;
       totalDue += accruals.totalDue;
 
-      // Try to match an AFAS payment
+      // Try to match an AFAS depot payment (journal 90)
+      let afasDepot: AfasMatch | null = null;
+      if (!isConfirmed && expectedDepotDue > 0) {
+        const loanDepot = depotByLoan.get(period.loan_id) ?? [];
+        const windowStart = new Date(period.period_start);
+        const windowEnd = new Date(period.period_end);
+        windowEnd.setDate(windowEnd.getDate() + 14);
+
+        let bestDelta = Infinity;
+        for (const payment of loanDepot) {
+          const payDate = new Date(payment.date);
+          if (payDate >= windowStart && payDate <= windowEnd) {
+            const delta = Math.abs(payment.amount - expectedDepotDue);
+            if (!afasDepot || delta < bestDelta) {
+              afasDepot = payment;
+              bestDelta = delta;
+            }
+          }
+        }
+      }
+
+      // Try to match an AFAS cash payment.
+      // The amounts in afasByLoan are already netted (1751 debits subtracted),
+      // so they represent the true cash amount regardless of AFAS booking method.
       let afasPayment: AfasMatch | null = null;
 
       if (isConfirmed) {
-        // Already confirmed — show the stored payment data
         confirmedCount++;
         afasPayment = period.payment_amount != null ? {
           amount: period.payment_amount,
@@ -211,7 +319,6 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
           ref: period.payment_afas_ref ?? '',
         } : null;
       } else if (expectedCashDue > 0) {
-        // Try matching from AFAS data — date window only, pick closest amount
         const loanAfas = afasByLoan.get(period.loan_id) ?? [];
         const windowStart = new Date(period.period_start);
         const windowEnd = new Date(period.period_end);
@@ -251,7 +358,10 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
         commitmentFeeAccrued: accruals.commitmentFeeAccrued,
         totalDue: accruals.totalDue,
         expectedCashDue,
+        expectedDepotDue,
+        cashPct,
         afasPayment,
+        afasDepot,
         delta: afasPayment && !isConfirmed ? afasPayment.amount - expectedCashDue : null,
         allAfasPayments: afasByLoan.get(period.loan_id) ?? [],
         isConfirmed,
@@ -272,11 +382,11 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
       confirmedCount,
       totalAllPeriods: baseData.periods.length,
     };
-  }, [baseData, loansData, eventsData, afasData]);
+  }, [baseData, loansData, eventsData, afasData, afasDepotData, afas1751Data]);
 
   return {
     data: result,
-    isLoading: baseLoading || loansLoading || eventsLoading || afasLoading,
+    isLoading: baseLoading || loansLoading || eventsLoading || afasLoading || afasDepotLoading || afas1751Loading,
   };
 }
 

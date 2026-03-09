@@ -79,6 +79,21 @@ export function formatEventType(type: string): string {
 }
 
 /**
+ * Format activity type for display
+ */
+export function formatActivityType(type: string | null | undefined): string {
+  if (!type) return '';
+  const labels: Record<string, string> = {
+    'call': 'Call',
+    'email': 'Email',
+    'meeting': 'Meeting',
+    'site_visit': 'Site Visit',
+    'other': 'Other',
+  };
+  return labels[type] || type;
+}
+
+/**
  * Calculate days between two dates using actual calendar days
  */
 export function daysBetween(startDate: string | Date, endDate: string | Date): number {

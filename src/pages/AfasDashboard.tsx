@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -11,6 +11,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useConfirmDraw } from '@/hooks/useConfirmDraw';
 import { useAuth } from '@/hooks/useAuth';
@@ -30,6 +32,7 @@ import {
   Settings,
   Clock,
   CircleDashed,
+  Landmark,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -87,6 +90,22 @@ function useAfasConnection() {
     },
     staleTime: 60 * 1000,
     retry: false,
+  });
+}
+
+function useAfasEnvToggle() {
+  return useQuery({
+    queryKey: ['app-config', 'AFAS_USE_TEST_ENV'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('app_config')
+        .select('value')
+        .eq('key', 'AFAS_USE_TEST_ENV')
+        .single();
+      if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+      return (data?.value ?? 'true') !== 'false'; // default: test
+    },
+    staleTime: 60 * 1000,
   });
 }
 
@@ -168,7 +187,7 @@ function useAfasDrawConfirmations() {
 
 // ── Page component ─────────────────────────────────────────────
 
-export default function AfasDashboard() {
+export default function AfasDashboard({ embedded }: { embedded?: boolean } = {}) {
   const connection = useAfasConnection();
   const loanIds = useLoanIds();
   const drawConfirmations = useAfasDrawConfirmations();
@@ -179,6 +198,26 @@ export default function AfasDashboard() {
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [tokenValue, setTokenValue] = useState('');
   const [tokenSaving, setTokenSaving] = useState(false);
+  const envToggle = useAfasEnvToggle();
+  const isTestEnv = envToggle.data ?? true;
+
+  const toggleEnv = useMutation({
+    mutationFn: async (useTest: boolean) => {
+      const { error } = await supabase
+        .from('app_config')
+        .upsert({ key: 'AFAS_USE_TEST_ENV', value: String(useTest) }, { onConflict: 'key' });
+      if (error) throw error;
+    },
+    onSuccess: (_data, useTest) => {
+      queryClient.setQueryData(['app-config', 'AFAS_USE_TEST_ENV'], useTest);
+      queryClient.invalidateQueries({ queryKey: ['afas-connection'] });
+      queryClient.invalidateQueries({ queryKey: ['afas-connector'] });
+      toast({ title: `Switched to ${useTest ? 'Test' : 'Production'} environment`, description: 'Refreshing AFAS data...' });
+    },
+    onError: (e) => {
+      toast({ title: 'Failed to switch environment', description: (e as Error).message, variant: 'destructive' });
+    },
+  });
 
   // Connector #3: Cash interest payments — debtor accounts = loan IDs (400..599)
   const payments = useAfasConnector('cash-payments', {
@@ -194,10 +233,19 @@ export default function AfasDashboard() {
     operatorTypes: '1,1,15',
   });
 
+  // Depot interest settlements (journal 90, debtor accounts = loan IDs)
+  const depot = useAfasConnector('depot-payments', {
+    filterFieldIds: 'UnitId,JournalId,AccountNo',
+    filterValues: '5,90,400..599',
+    operatorTypes: '1,1,15',
+  });
+
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
   const [drawFilter, setDrawFilter] = useState<string>('all');
+  const [depotFilter, setDepotFilter] = useState<string>('all');
   const [expandedPayments, setExpandedPayments] = useState<Set<string>>(new Set());
   const [expandedDraws, setExpandedDraws] = useState<Set<string>>(new Set());
+  const [expandedDepot, setExpandedDepot] = useState<Set<string>>(new Set());
 
   const validIds = loanIds.data?.ids;
   const numericToUuid = loanIds.data?.numericToUuid;
@@ -234,6 +282,22 @@ export default function AfasDashboard() {
     return drawGroups.filter(g => g.loanId === drawFilter);
   }, [drawGroups, drawFilter]);
 
+  // Group depot by loan, filtered to known loans only
+  const depotGroups = useMemo(() => {
+    const rows = depot.data ?? [];
+    const groups = groupByLoan(
+      rows,
+      (r) => String(r.AccountNo),
+      (r) => r.AmtCredit > 0 ? r.AmtCredit : -r.AmtDebit,
+    );
+    return validIds ? groups.filter(g => validIds.has(g.loanId)) : groups;
+  }, [depot.data, validIds]);
+
+  const filteredDepotGroups = useMemo(() => {
+    if (depotFilter === 'all') return depotGroups;
+    return depotGroups.filter(g => g.loanId === depotFilter);
+  }, [depotGroups, depotFilter]);
+
   const isConnected = connection.data?.success === true;
 
   function togglePayment(loanId: string) {
@@ -252,10 +316,19 @@ export default function AfasDashboard() {
     });
   }
 
+  function toggleDepot(loanId: string) {
+    setExpandedDepot(prev => {
+      const next = new Set(prev);
+      if (next.has(loanId)) next.delete(loanId); else next.add(loanId);
+      return next;
+    });
+  }
+
   function handleRefresh() {
     connection.refetch();
     payments.refetch();
     draws.refetch();
+    depot.refetch();
     loanIds.refetch();
     drawConfirmations.refetch();
   }
@@ -297,23 +370,25 @@ export default function AfasDashboard() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className={embedded ? 'space-y-6' : 'p-6 space-y-6'}>
       {/* Header */}
       <div className="flex items-center justify-between">
+        {!embedded && (
         <div>
           <h1 className="text-2xl font-semibold">AFAS Dashboard</h1>
           <p className="text-muted-foreground">Live connector status and data from AFAS Profit</p>
         </div>
+        )}
         <div className="flex items-center gap-3">
           {connection.isLoading ? (
             <Badge variant="outline" className="gap-1"><RefreshCw className="h-3 w-3 animate-spin" />Connecting...</Badge>
           ) : isConnected ? (
-            <Badge className="bg-green-100 text-green-800 border-green-300 gap-1"><Wifi className="h-3 w-3" />Connected</Badge>
+            <Badge className="bg-accent-sage/15 text-accent-sage border-accent-sage/30 gap-1"><Wifi className="h-3 w-3" />Connected {isTestEnv ? '(Test)' : '(Prod)'}</Badge>
           ) : (
             <Badge variant="destructive" className="gap-1"><WifiOff className="h-3 w-3" />Disconnected</Badge>
           )}
-          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={payments.isFetching || draws.isFetching}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${payments.isFetching || draws.isFetching ? 'animate-spin' : ''}`} />
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={payments.isFetching || draws.isFetching || depot.isFetching}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${payments.isFetching || draws.isFetching || depot.isFetching ? 'animate-spin' : ''}`} />
             Refresh
           </Button>
           <Button variant="ghost" size="icon" onClick={() => setShowTokenInput(v => !v)} title="AFAS Token Settings">
@@ -322,39 +397,66 @@ export default function AfasDashboard() {
         </div>
       </div>
 
-      {/* Token input (collapsible) */}
+      {/* Settings panel (collapsible) */}
       {showTokenInput && (
         <Card className="border-dashed">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-2 mb-2">
-              <KeyRound className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Update AFAS Token</span>
-              <span className="text-xs text-muted-foreground">(rotates daily)</span>
+          <CardContent className="pt-4 pb-4 space-y-4">
+            {/* Environment toggle */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Settings className="h-4 w-4 text-muted-foreground" />
+                <Label htmlFor="afas-env-toggle" className="text-sm font-medium">Environment</Label>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs font-medium ${!isTestEnv ? 'text-destructive' : 'text-foreground-muted'}`}>Production</span>
+                <Switch
+                  id="afas-env-toggle"
+                  checked={isTestEnv}
+                  onCheckedChange={(checked) => toggleEnv.mutate(checked)}
+                  disabled={toggleEnv.isPending}
+                />
+                <span className={`text-xs font-medium ${isTestEnv ? 'text-accent-sage' : 'text-foreground-muted'}`}>Test</span>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Input
-                type="password"
-                placeholder="Paste new AFAS token XML here..."
-                value={tokenValue}
-                onChange={e => setTokenValue(e.target.value)}
-                className="font-mono text-xs"
-              />
-              <Button size="sm" onClick={handleSaveToken} disabled={tokenSaving || !tokenValue.trim()}>
-                {tokenSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Save'}
-              </Button>
+            {/* Token input */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <KeyRound className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Update AFAS Token</span>
+                <span className="text-xs text-muted-foreground">(rotates daily)</span>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="password"
+                  placeholder="Paste new AFAS token XML here..."
+                  value={tokenValue}
+                  onChange={e => setTokenValue(e.target.value)}
+                  className="font-mono text-xs"
+                />
+                <Button size="sm" onClick={handleSaveToken} disabled={tokenSaving || !tokenValue.trim()}>
+                  {tokenSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Save'}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Connector status cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <ConnectorStatusCard
           title="Connector #3 — Cash Payments"
           description="Interest payments received (debtor acct = loan ID)"
           data={payments}
           count={payments.data?.length}
           loanCount={paymentGroups.length}
+        />
+        <ConnectorStatusCard
+          title="Depot Settlements"
+          description="Interest depot settlements (journal 90, debtor acct = loan ID)"
+          data={depot}
+          count={depot.data?.length}
+          loanCount={depotGroups.length}
         />
         <ConnectorStatusCard
           title="Connector #4 — Draws & Repayments"
@@ -373,6 +475,13 @@ export default function AfasDashboard() {
             Cash Payments
             <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{payments.data?.length ?? 0}</Badge>
           </TabsTrigger>
+          {depotGroups.length > 0 && (
+            <TabsTrigger value="depot" className="gap-1.5">
+              <Landmark className="h-4 w-4" />
+              Depot Settlements
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{depot.data?.length ?? 0}</Badge>
+            </TabsTrigger>
+          )}
           <TabsTrigger value="draws" className="gap-1.5">
             <ArrowUpRight className="h-4 w-4" />
             Draws & Repayments
@@ -429,6 +538,90 @@ export default function AfasDashboard() {
                               key={group.loanId}
                               className="cursor-pointer hover:bg-muted/50"
                               onClick={() => togglePayment(group.loanId)}
+                            >
+                              <TableCell className="w-8 pr-0">
+                                {isExpanded
+                                  ? <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                  : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                              </TableCell>
+                              <TableCell className="font-mono font-semibold">#{group.loanId}</TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="secondary">{group.count}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right font-mono font-semibold">{formatCurrency(group.total)}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {formatDate(group.minDate)}{group.minDate !== group.maxDate && ` — ${formatDate(group.maxDate)}`}
+                              </TableCell>
+                            </TableRow>
+                            {isExpanded && group.rows.map((row, i) => (
+                              <TableRow key={`${group.loanId}-${row.EntryNo}-${row.SeqNo}-${i}`} className="bg-muted/20">
+                                <TableCell />
+                                <TableCell className="text-sm text-muted-foreground pl-6">{formatDate(row.EntryDate)}</TableCell>
+                                <TableCell />
+                                <TableCell className="text-right font-mono text-sm">{formatCurrency(row.amount)}</TableCell>
+                                <TableCell className="text-sm text-muted-foreground max-w-[300px] truncate" title={row.Description}>{row.Description}</TableCell>
+                              </TableRow>
+                            ))}
+                          </>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── Depot Settlements Tab ── */}
+        <TabsContent value="depot">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-lg">Interest Depot Settlements</CardTitle>
+                <CardDescription>
+                  Dagboek 90 (memorial), debtor accounts = loan IDs. Interest paid from commitment depot.
+                  {depot.isError && <span className="ml-2 text-destructive">— Failed to load: {(depot.error as Error)?.message}</span>}
+                </CardDescription>
+              </div>
+              <Select value={depotFilter} onValueChange={setDepotFilter}>
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue placeholder="Filter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All ({depotGroups.length})</SelectItem>
+                  {depotGroups.map(g => (
+                    <SelectItem key={g.loanId} value={g.loanId}>#{g.loanId}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardHeader>
+            <CardContent>
+              {depot.isLoading ? (
+                <div className="space-y-3">{[1, 2, 3].map(i => <Skeleton key={i} className="h-10" />)}</div>
+              ) : depotGroups.length === 0 ? (
+                <EmptyState icon={<Landmark className="h-8 w-8" />} text="No depot settlements found in AFAS." />
+              ) : (
+                <ScrollArea className="h-[calc(100vh-480px)]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-8" />
+                        <TableHead>ID</TableHead>
+                        <TableHead className="text-center">Transactions</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead>Period</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredDepotGroups.map(group => {
+                        const isExpanded = expandedDepot.has(group.loanId);
+                        return (
+                          <>
+                            <TableRow
+                              key={group.loanId}
+                              className="cursor-pointer hover:bg-muted/50"
+                              onClick={() => toggleDepot(group.loanId)}
                             >
                               <TableCell className="w-8 pr-0">
                                 {isExpanded
@@ -530,7 +723,7 @@ export default function AfasDashboard() {
                                 {formatDate(group.minDate)}{group.minDate !== group.maxDate && ` — ${formatDate(group.maxDate)}`}
                               </TableCell>
                               <TableCell className="text-center text-xs text-muted-foreground">
-                                {groupConfirmed > 0 && <span className="text-emerald-600">{groupConfirmed}/{group.count}</span>}
+                                {groupConfirmed > 0 && <span className="text-accent-sage">{groupConfirmed}/{group.count}</span>}
                               </TableCell>
                             </TableRow>
                             {isExpanded && group.rows.map((row, i) => {
@@ -542,21 +735,21 @@ export default function AfasDashboard() {
                                   <TableCell className="text-sm text-muted-foreground pl-6">{formatDate(row.EntryDate)}</TableCell>
                                   <TableCell className="text-center">
                                     {row.AmtCredit > 0 ? (
-                                      <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-xs">Repayment</Badge>
+                                      <Badge className="bg-primary/10 text-primary border-primary/30 text-xs">Repayment</Badge>
                                     ) : (
-                                      <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs">Draw</Badge>
+                                      <Badge className="bg-accent-amber/10 text-accent-amber border-accent-amber/30 text-xs">Draw</Badge>
                                     )}
                                   </TableCell>
                                   <TableCell className="text-right font-mono text-sm">{formatCurrency(row.amount)}</TableCell>
                                   <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={row.Description}>{row.Description}</TableCell>
                                   <TableCell className="text-center">
                                     {confirmation?.status === 'approved' ? (
-                                      <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                                      <span className="inline-flex items-center gap-1 text-xs text-accent-sage">
                                         <CheckCircle2 className="h-3.5 w-3.5" />
                                         Approved
                                       </span>
                                     ) : confirmation ? (
-                                      <span className="inline-flex items-center gap-1 text-xs text-amber-600">
+                                      <span className="inline-flex items-center gap-1 text-xs text-accent-amber">
                                         <Clock className="h-3.5 w-3.5" />
                                         Draft
                                       </span>
@@ -566,7 +759,7 @@ export default function AfasDashboard() {
                                         variant="outline"
                                         onClick={(e) => { e.stopPropagation(); handleConfirmDraw(row, group.loanId); }}
                                         disabled={confirmDraw.isPending}
-                                        className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                        className="h-7 text-xs border-accent-sage/40 text-accent-sage hover:bg-accent-sage/10"
                                       >
                                         Confirm
                                       </Button>
@@ -610,9 +803,9 @@ function ConnectorStatusCard({ title, description, data, count, loanCount }: {
           {data.isLoading ? (
             <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : data.isError ? (
-            <XCircle className="h-4 w-4 text-red-600" />
+            <XCircle className="h-4 w-4 text-destructive" />
           ) : (
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <CheckCircle2 className="h-4 w-4 text-accent-sage" />
           )}
           <span className="text-sm font-medium">{title}</span>
         </div>

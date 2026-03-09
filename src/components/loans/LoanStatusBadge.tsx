@@ -6,24 +6,25 @@ interface StatusBadgeProps {
   className?: string;
 }
 
-export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const statusClasses: Record<string, string> = {
-    // Loan statuses
-    active: 'status-badge status-active',
-    repaid: 'status-badge status-repaid',
-    defaulted: 'status-badge status-defaulted',
-    // Event statuses
-    draft: 'status-badge status-draft',
-    approved: 'status-badge status-approved',
-    // Period statuses
-    open: 'status-badge status-open',
-    submitted: 'status-badge status-submitted',
-    sent: 'status-badge status-sent',
-    paid: 'status-badge status-paid',
-  };
+const statusClasses: Record<string, string> = {
+  // Action needed (amber)
+  draft: 'status-badge status-draft',
+  open: 'status-badge status-open',
+  submitted: 'status-badge status-submitted',
+  // Done (sage)
+  approved: 'status-badge status-approved',
+  sent: 'status-badge status-sent',
+  paid: 'status-badge status-paid',
+  // Neutral
+  active: 'status-badge status-active',
+  repaid: 'status-badge status-repaid',
+  // Problem
+  defaulted: 'status-badge status-defaulted',
+};
 
+export function StatusBadge({ status, className }: StatusBadgeProps) {
   return (
-    <span className={cn(statusClasses[status] || 'status-badge', className)}>
+    <span className={cn(statusClasses[status] || 'status-badge status-neutral', className)}>
       {status}
     </span>
   );

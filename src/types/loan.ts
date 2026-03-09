@@ -53,7 +53,9 @@ export interface Loan {
   ltv: number | null;
   rental_income: number | null;
   property_status: string | null;
+  occupancy: number | null;
   earmarked: boolean;
+  original_vehicle: string | null;
   initial_facility: string | null;
   red_iv_start_date: string | null;
   borrower_email: string | null;
@@ -63,6 +65,10 @@ export interface Loan {
   kadastrale_kaart_url: string | null;
   photo_url: string | null;
   additional_info: string | null;
+  guarantor: string | null;
+  pipeline_stage: string | null;
+  walt: number | null;
+  walt_comment: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -203,6 +209,19 @@ export interface AuditLog {
   timestamp: string;
   before_state: Record<string, unknown> | null;
   after_state: Record<string, unknown> | null;
+}
+
+export type ActivityType = 'call' | 'email' | 'meeting' | 'site_visit' | 'other';
+
+export interface LoanActivityLog {
+  id: string;
+  loan_id: string;
+  content: string;
+  activity_type: ActivityType | null;
+  activity_date: string | null;
+  created_by: string;
+  updated_at: string | null;
+  created_at: string;
 }
 
 export interface AfasDrawTransaction {

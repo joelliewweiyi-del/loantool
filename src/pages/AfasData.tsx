@@ -260,7 +260,7 @@ function formatCellValue(value: unknown): string {
   return String(value);
 }
 
-export default function AfasData() {
+export default function AfasData({ embedded }: { embedded?: boolean } = {}) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedUnit, setSelectedUnit] = useState<string>('all');
 
@@ -269,15 +269,17 @@ export default function AfasData() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className={embedded ? 'space-y-6' : 'p-6 space-y-6'}>
       {/* Header */}
       <div className="flex items-center justify-between">
+        {!embedded && (
         <div>
           <h1 className="text-2xl font-bold">AFAS Data Explorer</h1>
           <p className="text-muted-foreground">
             All available Profit connectors grouped by category
           </p>
         </div>
+        )}
         <div className="flex items-center gap-3">
           <Select value={selectedUnit} onValueChange={setSelectedUnit}>
             <SelectTrigger className="w-[220px]">

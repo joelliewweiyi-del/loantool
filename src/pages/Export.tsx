@@ -3,11 +3,12 @@ import { useLoans } from '@/hooks/useLoans';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, FileSpreadsheet, Loader2, Table2, DatabaseZap } from 'lucide-react';
+import { Download, FileSpreadsheet, Loader2, Table2, DatabaseZap, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   downloadSummaryLoanTapeXlsx,
   downloadDetailedLoanTapeXlsx,
+  downloadInvestorPortalCsv,
   downloadFullExportXlsx,
   LoanWithEvents,
 } from '@/lib/exportLoanTape';
@@ -15,10 +16,10 @@ import { getCurrentDateString } from '@/lib/simulatedDate';
 import { LoanEvent } from '@/types/loan';
 import { VEHICLES, DEFAULT_VEHICLE, type Vehicle } from '@/lib/constants';
 
-type ExportType = 'summary' | 'detailed' | 'full';
+type ExportType = 'summary' | 'detailed' | 'csv' | 'full';
 
 export default function Export() {
-  const [activeVehicle, setActiveVehicle] = useState<Vehicle | 'all'>(DEFAULT_VEHICLE);
+  const [activeVehicle, setActiveVehicle] = useState<Vehicle | 'all'>('all');
   const { data: loans, isLoading } = useLoans();
   const [exporting, setExporting] = useState<ExportType | null>(null);
 
@@ -51,6 +52,8 @@ export default function Export() {
         await downloadSummaryLoanTapeXlsx(loansWithEvents, asOfDate, label);
       } else if (type === 'detailed') {
         await downloadDetailedLoanTapeXlsx(loansWithEvents, asOfDate, label);
+      } else if (type === 'csv') {
+        downloadInvestorPortalCsv(loansWithEvents, asOfDate);
       } else {
         await downloadFullExportXlsx(loansWithEvents, asOfDate, label);
       }
@@ -139,18 +142,35 @@ export default function Export() {
               </CardHeader>
               <CardContent className="flex items-center justify-between pt-0">
                 <span className="text-xs text-muted-foreground">{exp.columns} columns</span>
-                <Button
-                  size="sm"
-                  onClick={() => handleExport(exp.type)}
-                  disabled={!!exporting || isLoading || !vehicleLoans.length}
-                >
-                  {isActive ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Download className="h-4 w-4 mr-2" />
+                <div className="flex gap-2">
+                  {exp.type === 'detailed' && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleExport('csv')}
+                      disabled={!!exporting || isLoading || !vehicleLoans.length}
+                    >
+                      {exporting === 'csv' ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <FileText className="h-4 w-4 mr-2" />
+                      )}
+                      {exporting === 'csv' ? 'Exporting...' : '.csv'}
+                    </Button>
                   )}
-                  {isActive ? 'Exporting...' : 'Download'}
-                </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleExport(exp.type)}
+                    disabled={!!exporting || isLoading || !vehicleLoans.length}
+                  >
+                    {isActive ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    {isActive ? 'Exporting...' : 'Download'}
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           );

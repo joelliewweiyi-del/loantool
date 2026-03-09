@@ -7,9 +7,10 @@ import { formatCurrency, formatDate, formatPercent } from '@/lib/format';
 import { LoanEvent, PeriodStatus, InterestType } from '@/types/loan';
 import { PeriodAccrual, AccrualsSummary, InterestSegment, DailyAccrual } from '@/lib/loanCalculations';
 import { StatusBadge } from './LoanStatusBadge';
+import { PeriodPipeline } from './PeriodPipeline';
 import { useCreateInterestChargeEvent } from '@/hooks/useLoans';
 import { useTriggerDailyAccruals } from '@/hooks/useMonthlyApproval';
-import { useAfasCashPayments, AfasCashPayment } from '@/hooks/useAfasCashPayments';
+import { useAfasCashPayments, useAfasDepotPayments, AfasCashPayment } from '@/hooks/useAfasCashPayments';
 import { useConfirmPayment } from '@/hooks/useConfirmPayment';
 import { useAuth } from '@/hooks/useAuth';
 import {
@@ -23,6 +24,7 @@ import {
   CircleDashed,
   RefreshCw,
   Banknote,
+  Landmark,
 } from 'lucide-react';
 import {
   Tooltip,
@@ -40,9 +42,10 @@ interface AccrualsTabProps {
   events?: LoanEvent[];
   interestType?: InterestType;
   cashInterestPct?: number | null;
+  initialFacility?: string | null;
 }
 
-export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNumericId, events, interestType = 'cash_pay', cashInterestPct }: AccrualsTabProps) {
+export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNumericId, events, interestType = 'cash_pay', cashInterestPct, initialFacility }: AccrualsTabProps) {
   const [expandedPeriods, setExpandedPeriods] = useState<Set<string>>(new Set());
   const [showDailyBreakdown, setShowDailyBreakdown] = useState<string | null>(null);
   const createInterestCharge = useCreateInterestChargeEvent();
@@ -57,44 +60,46 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
   const afasPayments = useAfasCashPayments(loanNumericId, isCashPay);
   const confirmPayment = useConfirmPayment(loanId);
 
+  const cashPct = (cashInterestPct ?? 100) / 100;
+  const hasDepotSplit = cashPct < 1;
+
+  // Fetch AFAS depot payments (journal 90) — only for loans with a depot split
+  const afasDepotPayments = useAfasDepotPayments(loanNumericId, isCashPay && hasDepotSplit);
+
   // Match AFAS payments to periods:
-  // - Payment date within 7 days before to 14 days after period_end
+  // - Payment date within period_start to 14 days after period_end
   // - Each AFAS payment can only match one period (earliest period first)
   // - If multiple payments fall in the window, pick the closest amount match
   // - Controller verifies amount discrepancy before confirming
-  const cashPct = (cashInterestPct ?? 100) / 100;
-
-  const paymentMatches = useMemo(() => {
-    if (!isCashPay || !afasPayments.data) return new Map<string, AfasCashPayment>();
+  function matchPaymentsToPeriods(
+    payments: AfasCashPayment[] | undefined,
+    expectedAmountFn: (period: PeriodAccrual) => number,
+  ): Map<string, AfasCashPayment> {
+    if (!payments) return new Map();
     const matches = new Map<string, AfasCashPayment>();
-    const usedPaymentRefs = new Set<string>();
+    const usedRefs = new Set<string>();
 
-    // Sort periods chronologically so earlier periods claim payments first
     const sortedPeriods = [...periodAccruals].sort(
       (a, b) => new Date(a.periodEnd).getTime() - new Date(b.periodEnd).getTime()
     );
 
     for (const period of sortedPeriods) {
-      // Skip periods already confirmed as paid
       if (period.paymentDate) continue;
-
-      // Interest portion adjusted for depot split; fees always fully cash
-      const expectedCash = period.interestAccrued * cashPct + period.commitmentFeeAccrued;
-      if (expectedCash <= 0) continue;
+      const expected = expectedAmountFn(period);
+      if (expected <= 0) continue;
 
       const windowStart = new Date(period.periodStart);
       const windowEnd = new Date(period.periodEnd);
       windowEnd.setDate(windowEnd.getDate() + 14);
 
-      // Find all payments in the date window, pick closest amount
       let bestMatch: AfasCashPayment | null = null;
       let bestDelta = Infinity;
 
-      for (const payment of afasPayments.data) {
-        if (usedPaymentRefs.has(payment.ref)) continue;
+      for (const payment of payments) {
+        if (usedRefs.has(payment.ref)) continue;
         const payDate = new Date(payment.date);
         if (payDate >= windowStart && payDate <= windowEnd) {
-          const delta = Math.abs(payment.amount - expectedCash);
+          const delta = Math.abs(payment.amount - expected);
           if (!bestMatch || delta < bestDelta) {
             bestMatch = payment;
             bestDelta = delta;
@@ -104,11 +109,33 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
 
       if (bestMatch) {
         matches.set(period.periodId, bestMatch);
-        usedPaymentRefs.add(bestMatch.ref);
+        usedRefs.add(bestMatch.ref);
       }
     }
     return matches;
-  }, [isCashPay, afasPayments.data, periodAccruals, cashPct]);
+  }
+
+  // Match depot payments (journal 90) to periods
+  const depotMatches = useMemo(
+    () => matchPaymentsToPeriods(
+      hasDepotSplit ? afasDepotPayments.data : undefined,
+      (p) => p.interestAccrued * (1 - cashPct),
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hasDepotSplit, afasDepotPayments.data, periodAccruals, cashPct],
+  );
+
+  // Match cash payments (journal 50) to periods.
+  // The AFAS amounts are already netted (1751 debits subtracted in the hook),
+  // so they represent the true cash amount regardless of AFAS booking method.
+  const paymentMatches = useMemo(
+    () => matchPaymentsToPeriods(
+      isCashPay ? afasPayments.data : undefined,
+      (p) => p.interestAccrued * cashPct + p.commitmentFeeAccrued + p.feesInvoiced,
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isCashPay, afasPayments.data, periodAccruals, cashPct],
+  );
 
   // Check if a period has an existing interest charge event (draft or approved)
   const getInterestChargeStatus = (periodId: string): 'none' | 'draft' | 'approved' => {
@@ -165,42 +192,42 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
     <div className="space-y-6">
       {/* Latest Period Header */}
       {latestPeriod && (
-        <Card className="border-l-4 border-l-primary bg-gradient-to-r from-primary/5 to-transparent">
-          <CardContent className="py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="bg-primary/10 p-2 rounded-lg">
-                  <Calendar className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Current Period</div>
-                  <div className="font-mono font-semibold">
-                    {formatDate(latestPeriod.periodStart)} – {formatDate(latestPeriod.periodEnd)}
-                  </div>
-                </div>
-                <StatusBadge status={latestPeriod.status as PeriodStatus} />
-              </div>
-              <div className="flex items-center gap-8">
-                <div className="text-right">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Principal</div>
-                  <div className="font-mono font-semibold">{formatCurrency(latestPeriod.openingPrincipal)}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">Rate</div>
-                  <div className="font-mono font-semibold">{formatPercent(latestPeriod.openingRate, 2)}</div>
-                </div>
-                <div className="text-right border-l pl-6">
-                  <div className="text-xs text-muted-foreground uppercase tracking-wider mb-0.5">
-                    {isPik ? 'Interest Charge' : 'Interest Due'}
-                  </div>
-                  <div className="font-mono font-bold text-lg text-primary">
-                    {formatCurrency(latestPeriod.interestAccrued + latestPeriod.commitmentFeeAccrued)}
-                  </div>
-                </div>
+        <div className="flex items-center justify-between py-3 px-4 border rounded-sm bg-card">
+          <div className="flex items-center gap-4">
+            <div>
+              <div className="ledger-label mb-0.5">Current Period</div>
+              <div className="font-mono font-semibold text-sm">
+                {formatDate(latestPeriod.periodStart)} – {formatDate(latestPeriod.periodEnd)}
               </div>
             </div>
-          </CardContent>
-        </Card>
+            <PeriodPipeline current={latestPeriod.status as PeriodStatus} />
+          </div>
+          <div className="flex items-center gap-6">
+            <div className="text-right">
+              <div className="ledger-label mb-0.5">Principal</div>
+              <div className="font-mono font-semibold text-sm">{formatCurrency(latestPeriod.openingPrincipal)}</div>
+            </div>
+            <div className="text-right">
+              <div className="ledger-label mb-0.5">Rate</div>
+              <div className="font-mono font-semibold text-sm">{formatPercent(latestPeriod.openingRate, 2)}</div>
+            </div>
+            <div className="text-right border-l pl-6">
+              <div className="ledger-label mb-0.5">
+                {isPik ? 'Interest Charge' : cashPct < 1 ? `Cash Due (${Math.round(cashPct * 100)}%)` : 'Interest Due'}
+              </div>
+              <div className="font-mono font-bold text-base text-primary">
+                {cashPct < 1 && !isPik
+                  ? formatCurrency(latestPeriod.interestAccrued * cashPct + latestPeriod.commitmentFeeAccrued)
+                  : formatCurrency(latestPeriod.interestAccrued + latestPeriod.commitmentFeeAccrued)}
+              </div>
+              {cashPct < 1 && !isPik && (
+                <div className="text-[10px] text-foreground-tertiary font-normal">
+                  of {formatCurrency(latestPeriod.interestAccrued + latestPeriod.commitmentFeeAccrued)} total
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Period Breakdown */}
@@ -208,7 +235,14 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base">Period-by-Period Accruals</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2">
+                Period-by-Period Accruals
+                {initialFacility && (
+                  <span className="text-xs font-normal font-mono text-foreground-tertiary bg-muted px-1.5 py-0.5 rounded">
+                    {initialFacility}
+                  </span>
+                )}
+              </CardTitle>
               <CardDescription className="text-xs flex items-center gap-1">
                 <TooltipProvider>
                   <Tooltip>
@@ -261,7 +295,7 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Opening</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">Rate</th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground">
-                      {isPik ? 'Interest Charge' : 'Interest Due'}
+                      {isPik ? 'Interest Charge' : hasDepotSplit ? `Cash Due (${Math.round(cashPct * 100)}%)` : 'Interest Due'}
                     </th>
                     <th className="text-right py-3 px-4 font-semibold text-muted-foreground bg-primary/10">Closing</th>
                     <th className="text-center py-3 px-4 font-semibold text-muted-foreground w-32">
@@ -298,15 +332,21 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
                         isCreatingCharge={createInterestCharge.isPending}
                         isPik={isPik}
                         matchedPayment={paymentMatches.get(period.periodId)}
-                        onConfirmPayment={(payment) => confirmPayment.mutate({
-                          periodId: period.periodId,
-                          paymentDate: payment.date,
-                          paymentAmount: payment.amount,
-                          paymentAfasRef: payment.ref,
-                        })}
+                        matchedDepot={depotMatches.get(period.periodId)}
+                        onConfirmPayment={(payment) => {
+                          // payment.amount is already the net cash amount
+                          // (1751 depot debits subtracted in useAfasCashPayments)
+                          confirmPayment.mutate({
+                            periodId: period.periodId,
+                            paymentDate: payment.date,
+                            paymentAmount: payment.amount,
+                            paymentAfasRef: payment.ref,
+                          });
+                        }}
                         isConfirmingPayment={confirmPayment.isPending}
                         isController={isController}
                         drawEvents={periodDrawEvents.length > 0 ? periodDrawEvents : undefined}
+                        cashPct={cashPct}
                       />
                     );
                   })}
@@ -333,10 +373,12 @@ interface PeriodTableRowProps {
   isCreatingCharge: boolean;
   isPik: boolean;
   matchedPayment?: AfasCashPayment;
+  matchedDepot?: AfasCashPayment;
   onConfirmPayment?: (payment: AfasCashPayment) => void;
   isConfirmingPayment?: boolean;
   isController?: boolean;
   drawEvents?: LoanEvent[];
+  cashPct: number;
 }
 
 function PeriodTableRow({
@@ -352,23 +394,28 @@ function PeriodTableRow({
   isCreatingCharge,
   isPik,
   matchedPayment,
+  matchedDepot,
   onConfirmPayment,
   isConfirmingPayment,
   isController,
   drawEvents,
+  cashPct,
 }: PeriodTableRowProps) {
   const getStatusBorderColor = (status: string) => {
     switch (status) {
-      case 'open': return 'border-l-blue-400';
-      case 'submitted': return 'border-l-yellow-400';
-      case 'approved': return 'border-l-green-400';
-      case 'sent': return 'border-l-primary';
-      case 'paid': return 'border-l-emerald-500';
+      case 'open': return 'border-l-accent-amber';
+      case 'submitted': return 'border-l-accent-amber';
+      case 'approved': return 'border-l-primary';
+      case 'sent': return 'border-l-accent-sage';
+      case 'paid': return 'border-l-accent-sage';
       default: return 'border-l-muted';
     }
   };
 
   const totalInterestDue = period.interestAccrued + period.commitmentFeeAccrued;
+  const expectedCashDue = period.interestAccrued * cashPct + period.commitmentFeeAccrued + period.feesInvoiced;
+  const fullDue = period.interestAccrued + period.commitmentFeeAccrued + period.feesInvoiced;
+  const hasDepotSplit = cashPct < 1;
 
   // Determine payment status
   const getPaymentStatus = (): 'pending' | 'invoiced' | 'paid' | 'matched' => {
@@ -407,7 +454,10 @@ function PeriodTableRow({
           </span>
         </td>
         <td className="py-4 px-4 text-center">
-          <StatusBadge status={period.status as PeriodStatus} />
+          <div className="flex items-center gap-2 justify-center">
+            <StatusBadge status={period.status as PeriodStatus} />
+            <PeriodPipeline current={period.status as PeriodStatus} />
+          </div>
         </td>
         <td className="py-4 px-4 text-right font-mono text-sm text-muted-foreground">
           {period.days}
@@ -419,7 +469,12 @@ function PeriodTableRow({
           {formatPercent(period.openingRate, 2)}
         </td>
         <td className="py-4 px-4 text-right font-mono text-sm text-primary font-semibold">
-          {formatCurrency(totalInterestDue)}
+          {hasDepotSplit ? formatCurrency(expectedCashDue) : formatCurrency(totalInterestDue)}
+          {hasDepotSplit && (
+            <div className="text-[10px] text-foreground-tertiary font-normal">
+              of {formatCurrency(totalInterestDue)} total
+            </div>
+          )}
         </td>
         <td className="py-4 px-4 text-right font-mono text-sm font-bold bg-primary/10">
           {formatCurrency(period.closingPrincipal)}
@@ -472,7 +527,7 @@ function PeriodTableRow({
                 </span>
               )}
               {paymentStatus === 'matched' && matchedPayment && isController && onConfirmPayment && (() => {
-                const hasDelta = Math.abs(matchedPayment.amount - totalInterestDue) > 0.01;
+                const hasDelta = Math.abs(matchedPayment.amount - expectedCashDue) > 0.01;
                 return (
                   <Button
                     size="sm"
@@ -524,8 +579,15 @@ function PeriodTableRow({
                   <div className="font-mono">{formatCurrency(period.closingPrincipal)} @ {formatPercent(period.closingRate, 2)}</div>
                 </div>
                 <div className="space-y-1">
-                  <div className="text-muted-foreground uppercase tracking-wide">Interest</div>
+                  <div className="text-muted-foreground uppercase tracking-wide">
+                    {hasDepotSplit ? 'Interest (gross)' : 'Interest'}
+                  </div>
                   <div className="font-mono text-primary">{formatCurrency(period.interestAccrued)}</div>
+                  {hasDepotSplit && (
+                    <div className="text-[10px] text-foreground-tertiary font-normal font-mono">
+                      {formatCurrency(period.interestAccrued * cashPct)} cash / {formatCurrency(period.interestAccrued * (1 - cashPct))} depot
+                    </div>
+                  )}
                 </div>
                 {period.commitmentFeeAccrued > 0 && (
                   <div className="space-y-1">
@@ -541,8 +603,7 @@ function PeriodTableRow({
 
               {/* AFAS Payment Match */}
               {!isPik && matchedPayment && paymentStatus === 'matched' && (() => {
-                const expectedAmount = period.interestAccrued * cashPct + period.commitmentFeeAccrued;
-                const delta = matchedPayment.amount - expectedAmount;
+                const delta = matchedPayment.amount - expectedCashDue;
                 const hasDelta = Math.abs(delta) > 0.01;
                 const borderColor = hasDelta ? 'border-amber-200' : 'border-emerald-200';
                 const bgColor = hasDelta ? 'bg-amber-50' : 'bg-emerald-50';
@@ -555,7 +616,7 @@ function PeriodTableRow({
                       <span className={hasDelta ? 'text-amber-700' : 'text-emerald-700'}> on {formatDate(matchedPayment.date)}</span>
                       {hasDelta && (
                         <span className="ml-2 font-medium text-amber-700">
-                          (expected {formatCurrency(expectedAmount)}, delta {delta > 0 ? '+' : ''}{formatCurrency(delta)})
+                          (expected {formatCurrency(expectedCashDue)}, delta {delta > 0 ? '+' : ''}{formatCurrency(delta)})
                         </span>
                       )}
                       {!hasDelta && cashPct < 1 && (
@@ -583,20 +644,94 @@ function PeriodTableRow({
                 );
               })()}
 
-              {/* Confirmed Payment Info */}
-              {!isPik && paymentStatus === 'paid' && period.paymentDate && (
-                <div className="flex items-center gap-3 p-3 bg-emerald-50/50 border border-emerald-100 rounded-md text-xs">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <div>
-                    <span className="font-medium text-emerald-800">Payment received: </span>
-                    <span className="font-mono">{formatCurrency(period.paymentAmount ?? 0)}</span>
-                    <span className="text-emerald-700"> on {formatDate(period.paymentDate)}</span>
-                    {period.paymentAfasRef && (
-                      <span className="text-muted-foreground ml-1">(ref: {period.paymentAfasRef})</span>
-                    )}
+              {/* AFAS Depot Match (journal 90) */}
+              {!isPik && hasDepotSplit && matchedDepot && (() => {
+                const expectedDepot = period.interestAccrued * (1 - cashPct);
+                const delta = matchedDepot.amount - expectedDepot;
+                const hasDelta = Math.abs(delta) > 0.01;
+                return (
+                  <div className={`flex items-center gap-3 p-3 ${hasDelta ? 'bg-amber-50' : 'bg-blue-50'} border ${hasDelta ? 'border-amber-200' : 'border-blue-200'} rounded-md text-xs`}>
+                    <Landmark className={`h-4 w-4 ${hasDelta ? 'text-amber-600' : 'text-blue-600'} shrink-0`} />
+                    <div className="flex-1">
+                      <span className={`font-medium ${hasDelta ? 'text-amber-800' : 'text-blue-800'}`}>Depot settlement: </span>
+                      <span className="font-mono">{formatCurrency(matchedDepot.amount)}</span>
+                      <span className={hasDelta ? 'text-amber-700' : 'text-blue-700'}> on {formatDate(matchedDepot.date)}</span>
+                      {hasDelta && (
+                        <span className="ml-2 font-medium text-amber-700">
+                          (expected {formatCurrency(expectedDepot)}, delta {delta > 0 ? '+' : ''}{formatCurrency(delta)})
+                        </span>
+                      )}
+                      {!hasDelta && (
+                        <span className="ml-2 text-blue-600">({Math.round((1 - cashPct) * 100)}% depot)</span>
+                      )}
+                      {matchedDepot.description && (
+                        <span className={`${hasDelta ? 'text-amber-600' : 'text-blue-600'} ml-1`}>— {matchedDepot.description}</span>
+                      )}
+                    </div>
                   </div>
+                );
+              })()}
+
+              {/* Depot — no match found */}
+              {!isPik && hasDepotSplit && !matchedDepot && paymentStatus !== 'paid' && (
+                <div className="flex items-center gap-3 p-3 bg-muted/30 border border-border rounded-md text-xs">
+                  <Landmark className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="text-muted-foreground">
+                    No depot settlement found (expected {formatCurrency(period.interestAccrued * (1 - cashPct))} from journal 90)
+                  </span>
                 </div>
               )}
+
+              {/* Confirmed Payment Info */}
+              {!isPik && paymentStatus === 'paid' && period.paymentDate && (() => {
+                const paymentMismatch = hasDepotSplit && Math.abs((period.paymentAmount ?? 0) - expectedCashDue) > 0.01;
+                return (
+                  <div className={`flex items-center gap-3 p-3 ${paymentMismatch ? 'bg-destructive/5 border-destructive/20' : 'bg-accent-sage/10 border-accent-sage/20'} border rounded-md text-xs`}>
+                    <CheckCircle2 className={`h-4 w-4 ${paymentMismatch ? 'text-destructive' : 'text-accent-sage'} shrink-0`} />
+                    <div>
+                      <span className={`font-medium ${paymentMismatch ? 'text-destructive' : 'text-accent-sage'}`}>
+                        {hasDepotSplit ? 'Cash payment received: ' : 'Payment received: '}
+                      </span>
+                      <span className="font-mono">{formatCurrency(period.paymentAmount ?? 0)}</span>
+                      <span className={paymentMismatch ? 'text-destructive/70' : 'text-accent-sage/80'}> on {formatDate(period.paymentDate)}</span>
+                      {hasDepotSplit && !paymentMismatch && (
+                        <span className="text-accent-sage/70 ml-1">({Math.round(cashPct * 100)}% cash)</span>
+                      )}
+                      {paymentMismatch && (
+                        <span className="text-destructive ml-1">
+                          (expected {formatCurrency(expectedCashDue)}, mismatch {formatCurrency((period.paymentAmount ?? 0) - expectedCashDue)})
+                        </span>
+                      )}
+                      {period.paymentAfasRef && (
+                        <span className="text-muted-foreground ml-1">(ref: {period.paymentAfasRef})</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Depot settlement for paid periods */}
+              {!isPik && hasDepotSplit && paymentStatus === 'paid' && matchedDepot && (() => {
+                const expectedDepot = period.interestAccrued * (1 - cashPct);
+                const delta = matchedDepot.amount - expectedDepot;
+                const hasDelta = Math.abs(delta) > 0.01;
+                return (
+                  <div className={`flex items-center gap-3 p-3 ${hasDelta ? 'bg-amber-50' : 'bg-blue-50/50'} border ${hasDelta ? 'border-amber-200' : 'border-blue-100'} rounded-md text-xs`}>
+                    <Landmark className={`h-4 w-4 ${hasDelta ? 'text-amber-600' : 'text-blue-600'} shrink-0`} />
+                    <div>
+                      <span className={`font-medium ${hasDelta ? 'text-amber-800' : 'text-blue-800'}`}>Depot settlement: </span>
+                      <span className="font-mono">{formatCurrency(matchedDepot.amount)}</span>
+                      <span className={hasDelta ? 'text-amber-700' : 'text-blue-700'}> on {formatDate(matchedDepot.date)}</span>
+                      <span className="text-blue-600 ml-1">({Math.round((1 - cashPct) * 100)}% depot)</span>
+                      {hasDelta && (
+                        <span className="ml-2 font-medium text-amber-700">
+                          (expected {formatCurrency(expectedDepot)}, delta {delta > 0 ? '+' : ''}{formatCurrency(delta)})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Principal Movements */}
               {(period.principalDrawn > 0 || period.feesInvoiced > 0 || period.principalRepaid > 0 || period.pikCapitalized > 0) && (

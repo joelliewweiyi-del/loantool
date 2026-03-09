@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { formatCurrency, formatDate, formatPercent, formatEventType } from '@/lib/format';
 import { PeriodAccrual, AccrualsSummary } from '@/lib/loanCalculations';
-import { Loan, LoanEvent } from '@/types/loan';
+import { Loan, LoanEvent, PeriodStatus } from '@/types/loan';
+import { PeriodPipeline } from './PeriodPipeline';
 import { ChevronRight, AlertTriangle } from 'lucide-react';
 import raxLogo from '@/assets/rax-logo.png';
 import { useAppConfig } from '@/hooks/useAppConfig';
@@ -81,36 +82,20 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
           </CardContent>
         </Card>
 
-        {/* Workflow Steps */}
+        {/* Workflow Pipeline */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Notice Workflow</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <WorkflowStep 
-              number={1} 
-              title="Period Accrued" 
-              description="Daily interest calculated (30/360)"
-              completed={true}
-            />
-            <WorkflowStep 
-              number={2} 
-              title="Interest Rolled Up" 
-              description="PM creates interest charge event"
-              completed={selectedPeriod?.status !== 'open'}
-            />
-            <WorkflowStep 
-              number={3} 
-              title="Controller Approved" 
-              description="Events approved & locked"
-              completed={selectedPeriod?.status === 'approved' || selectedPeriod?.status === 'sent'}
-            />
-            <WorkflowStep 
-              number={4} 
-              title="Notice Sent" 
-              description="PDF generated & emailed"
-              completed={selectedPeriod?.status === 'sent'}
-            />
+          <CardContent>
+            {selectedPeriod ? (
+              <PeriodPipeline
+                current={selectedPeriod.status as PeriodStatus}
+                variant="vertical"
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">Select a period</p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -142,11 +127,13 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
 
             {/* Notice Document */}
             <CardContent className="p-8 bg-white dark:bg-background">
-              <NoticeDocument 
-                loan={loan} 
-                period={selectedPeriod} 
+              <NoticeDocument
+                loan={loan}
+                period={selectedPeriod}
                 summary={summary}
                 events={periodEvents}
+                bankConfig={bankConfig}
+                bankIncomplete={bankIncomplete}
               />
             </CardContent>
           </Card>
@@ -167,9 +154,11 @@ interface NoticeDocumentProps {
   period: PeriodAccrual;
   summary: AccrualsSummary;
   events: LoanEvent[];
+  bankConfig?: Record<string, string>;
+  bankIncomplete: boolean;
 }
 
-function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) {
+function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncomplete }: NoticeDocumentProps) {
   const paymentDueDate = new Date(period.periodEnd);
   paymentDueDate.setDate(paymentDueDate.getDate() + 5);
 
@@ -197,7 +186,7 @@ function NoticeDocument({ loan, period, summary, events }: NoticeDocumentProps) 
   const isPik = loan.interest_type === 'pik';
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 font-barlow">
+    <div className="max-w-3xl mx-auto space-y-8">
       {/* Letterhead */}
       <div className="text-center border-b pb-6">
         <img src={raxLogo} alt="RAX LMS" className="h-10 mx-auto mb-4" />

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Loan, LoanEvent, Period, LoanFacility, EventType, EventStatus } from '@/types/loan';
+import { isPipelineVehicle } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
 import type { Database, Json } from '@/integrations/supabase/types';
 import { startOfMonth, endOfMonth, addMonths, format, parseISO, isBefore, isAfter } from 'date-fns';
@@ -233,6 +234,19 @@ export function useCreateLoan() {
       vehicle?: string;
       facility?: string | null;
       arrangement_fee?: number | null;
+      city?: string | null;
+      category?: string | null;
+      property_status?: string | null;
+      earmarked?: boolean;
+      initial_facility?: string | null;
+      red_iv_start_date?: string | null;
+      borrower_email?: string | null;
+      borrower_address?: string | null;
+      property_address?: string | null;
+      valuation?: number | null;
+      ltv?: number | null;
+      rental_income?: number | null;
+      pipeline_stage?: string | null;
     }) => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error('Not authenticated');
@@ -262,25 +276,28 @@ export function useCreateLoan() {
         if (error) throw error;
       };
 
-      if (loanData.total_commitment && loanData.total_commitment > 0)
-        await createFoundingEvent('commitment_set', loanData.total_commitment, null, { auto_generated: true, description: 'Initial commitment' });
-      if (loanData.interest_rate && loanData.interest_rate > 0)
-        await createFoundingEvent('interest_rate_set', null, loanData.interest_rate, { auto_generated: true, description: 'Initial rate' });
-      if (loanData.outstanding && loanData.outstanding > 0)
-        await createFoundingEvent('principal_draw', loanData.outstanding, null, { auto_generated: true, description: 'Opening principal draw' });
-      if (arrangement_fee && arrangement_fee > 0)
-        await createFoundingEvent('fee_invoice', arrangement_fee, null, {
-          auto_generated: true, fee_type: 'arrangement',
-          payment_type: isFeeCapitalized ? 'pik' : 'cash',
-          description: isFeeCapitalized ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)',
-        });
+      // Pipeline loans are prospective — skip events and periods
+      if (!isPipelineVehicle(loanData.vehicle || '')) {
+        if (loanData.total_commitment && loanData.total_commitment > 0)
+          await createFoundingEvent('commitment_set', loanData.total_commitment, null, { auto_generated: true, description: 'Initial commitment' });
+        if (loanData.interest_rate && loanData.interest_rate > 0)
+          await createFoundingEvent('interest_rate_set', null, loanData.interest_rate, { auto_generated: true, description: 'Initial rate' });
+        if (loanData.outstanding && loanData.outstanding > 0)
+          await createFoundingEvent('principal_draw', loanData.outstanding, null, { auto_generated: true, description: 'Opening principal draw' });
+        if (arrangement_fee && arrangement_fee > 0)
+          await createFoundingEvent('fee_invoice', arrangement_fee, null, {
+            auto_generated: true, fee_type: 'arrangement',
+            payment_type: isFeeCapitalized ? 'pik' : 'cash',
+            description: isFeeCapitalized ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)',
+          });
 
-      if (loanData.loan_start_date) {
-        const monthlyPeriods = generateMonthlyPeriods(createdLoan.id, loanData.loan_start_date, loanData.maturity_date);
-        if (monthlyPeriods.length > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error: periodsError } = await supabase.from('periods').insert(monthlyPeriods as any);
-          if (periodsError) throw new Error(`Failed to create periods: ${periodsError.message}`);
+        if (loanData.loan_start_date) {
+          const monthlyPeriods = generateMonthlyPeriods(createdLoan.id, loanData.loan_start_date, loanData.maturity_date);
+          if (monthlyPeriods.length > 0) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { error: periodsError } = await supabase.from('periods').insert(monthlyPeriods as any);
+            if (periodsError) throw new Error(`Failed to create periods: ${periodsError.message}`);
+          }
         }
       }
       return createdLoan;
@@ -511,6 +528,109 @@ export function useUpdateLoan() {
     },
     onError: (error) => {
       toast({ title: 'Failed to update loan', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+/**
+ * Activates a pipeline loan: updates loan fields, creates founding events, and generates periods.
+ * Used when a prospective deal closes and moves from Pipeline to an active vehicle.
+ */
+export function useActivatePipelineLoan() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (data: {
+      loanId: string;
+      vehicle: string;
+      loan_start_date: string;
+      maturity_date?: string | null;
+      interest_rate: number;
+      outstanding: number;
+      total_commitment?: number | null;
+      commitment_fee_rate?: number | null;
+      commitment_fee_basis?: string | null;
+      interest_type?: string;
+      fee_payment_type?: string;
+      interest_payment_type?: string;
+      facility?: string | null;
+      arrangement_fee?: number | null;
+    }) => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) throw new Error('Not authenticated');
+      const userId = user.user.id;
+
+      const { loanId, arrangement_fee, ...loanUpdates } = data;
+
+      // Update loan record
+      const { data: loan, error: updateError } = await supabase
+        .from('loans')
+        .update({
+          ...loanUpdates,
+          interest_rate: loanUpdates.interest_rate,
+          interest_type: (loanUpdates.interest_payment_type === 'pik' ? 'pik' : 'cash_pay'),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', loanId)
+        .select()
+        .single();
+      if (updateError) throw updateError;
+
+      const effectiveDate = loanUpdates.loan_start_date;
+      const isFeeCapitalized = loanUpdates.fee_payment_type === 'pik';
+
+      const createFoundingEvent = async (
+        eventType: DbEventType,
+        amount: number | null,
+        rate: number | null,
+        metadata: Record<string, unknown>
+      ) => {
+        const { error } = await supabase.rpc('create_founding_event', {
+          p_loan_id: loanId,
+          p_event_type: eventType,
+          p_effective_date: effectiveDate,
+          p_amount: amount,
+          p_rate: rate,
+          p_created_by: userId,
+          p_metadata: metadata as unknown as Json,
+        });
+        if (error) throw error;
+      };
+
+      // Create founding events
+      if (loanUpdates.total_commitment && loanUpdates.total_commitment > 0)
+        await createFoundingEvent('commitment_set', loanUpdates.total_commitment, null, { auto_generated: true, description: 'Initial commitment' });
+      if (loanUpdates.interest_rate > 0)
+        await createFoundingEvent('interest_rate_set', null, loanUpdates.interest_rate, { auto_generated: true, description: 'Initial rate' });
+      if (loanUpdates.outstanding > 0)
+        await createFoundingEvent('principal_draw', loanUpdates.outstanding, null, { auto_generated: true, description: 'Opening principal draw' });
+      if (arrangement_fee && arrangement_fee > 0)
+        await createFoundingEvent('fee_invoice', arrangement_fee, null, {
+          auto_generated: true, fee_type: 'arrangement',
+          payment_type: isFeeCapitalized ? 'pik' : 'cash',
+          description: isFeeCapitalized ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)',
+        });
+
+      // Generate periods
+      const monthlyPeriods = generateMonthlyPeriods(loanId, loanUpdates.loan_start_date, loanUpdates.maturity_date);
+      if (monthlyPeriods.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: periodsError } = await supabase.from('periods').insert(monthlyPeriods as any);
+        if (periodsError) throw new Error(`Failed to create periods: ${periodsError.message}`);
+      }
+
+      return loan as Loan;
+    },
+    onSuccess: (loan) => {
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      queryClient.invalidateQueries({ queryKey: ['loans', loan.id] });
+      queryClient.invalidateQueries({ queryKey: ['loan-events', loan.id] });
+      queryClient.invalidateQueries({ queryKey: ['loan-periods', loan.id] });
+      toast({ title: 'Pipeline loan activated with founding events and periods' });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to activate loan', description: error.message, variant: 'destructive' });
     },
   });
 }

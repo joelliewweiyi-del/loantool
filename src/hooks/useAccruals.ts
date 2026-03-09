@@ -84,19 +84,47 @@ export function useAccruals(loanId: string | undefined): UseAccrualsResult {
       };
     }
 
-    const periodAccruals = calculateAllPeriodAccruals(
-      periods,
-      events,
-      commitmentFeeRate,
-      initialCommitment,
-      loanInterestType
-    );
+    try {
+      const periodAccruals = calculateAllPeriodAccruals(
+        periods,
+        events,
+        commitmentFeeRate,
+        initialCommitment,
+        loanInterestType
+      );
 
-    // Pass approved events to calculate current principal from event ledger only
-    const approvedEvents = events.filter(e => e.status === 'approved');
-    const summary = calculateAccrualsSummary(periodAccruals, approvedEvents);
+      // Pass approved events to calculate current principal from event ledger only
+      const approvedEvents = events.filter(e => e.status === 'approved');
+      const summary = calculateAccrualsSummary(periodAccruals, approvedEvents);
 
-    return { periodAccruals, summary };
+      return { periodAccruals, summary };
+    } catch (err) {
+      console.error('[useAccruals] Calculation error:', err, {
+        loanId: loan.id,
+        periodsCount: periods.length,
+        eventsCount: events.length,
+        commitmentFeeRate,
+        initialCommitment,
+        loanInterestType,
+      });
+      return {
+        periodAccruals: [],
+        summary: {
+          totalDays: 0,
+          totalInterestAccrued: 0,
+          totalCommitmentFees: 0,
+          totalFeesInvoiced: 0,
+          totalPikCapitalized: 0,
+          totalDue: 0,
+          currentPrincipal: 0,
+          currentRate: 0,
+          averageRate: 0,
+          totalCommitment: 0,
+          currentUndrawn: 0,
+          commitmentFeeRate: 0,
+        },
+      };
+    }
   }, [loan, events, periods]);
 
   return {

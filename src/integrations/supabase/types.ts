@@ -375,6 +375,7 @@ export type Database = {
           created_at: string
           facility: string | null
           fee_payment_type: string
+          guarantor: string | null
           id: string
           initial_facility: string | null
           interest_payment_type: string
@@ -385,6 +386,7 @@ export type Database = {
           ltv: number | null
           maturity_date: string | null
           notice_frequency: string
+          occupancy: number | null
           outstanding: number | null
           payment_due_rule: string | null
           remarks: string | null
@@ -412,6 +414,7 @@ export type Database = {
           earmarked?: boolean | null
           facility?: string | null
           fee_payment_type?: string
+          guarantor?: string | null
           id?: string
           initial_facility?: string | null
           interest_payment_type?: string
@@ -422,6 +425,7 @@ export type Database = {
           ltv?: number | null
           maturity_date?: string | null
           notice_frequency?: string
+          occupancy?: number | null
           outstanding?: number | null
           payment_due_rule?: string | null
           remarks?: string | null
@@ -449,6 +453,7 @@ export type Database = {
           earmarked?: boolean | null
           facility?: string | null
           fee_payment_type?: string
+          guarantor?: string | null
           id?: string
           initial_facility?: string | null
           interest_payment_type?: string
@@ -459,6 +464,7 @@ export type Database = {
           ltv?: number | null
           maturity_date?: string | null
           notice_frequency?: string
+          occupancy?: number | null
           outstanding?: number | null
           payment_due_rule?: string | null
           remarks?: string | null

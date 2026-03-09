@@ -1,24 +1,25 @@
 import { useState, useMemo } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { useLoans, useLatestChargesPerLoan } from '@/hooks/useLoans';
-import { useGeneratePeriods } from '@/hooks/useGeneratePeriods';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useLoans, useLatestChargesPerLoan, useUpdateLoan } from '@/hooks/useLoans';
+import { useLatestActivityPerLoan, useCreateActivityLog } from '@/hooks/useActivityLog';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { StatusBadge } from '@/components/loans/LoanStatusBadge';
 import { CreateLoanDialog } from '@/components/loans/CreateLoanDialog';
-import { BatchUploadDialog } from '@/components/loans/BatchUploadDialog';
+
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Textarea } from '@/components/ui/textarea';
 import { formatDate, formatCurrency, formatPercent } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChevronRight, Search, ArrowUpDown, ArrowUp, ArrowDown, CalendarPlus, Download } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
-import { downloadLoanTapeXlsx } from '@/lib/exportLoanTape';
-import { getCurrentDateString } from '@/lib/simulatedDate';
-import { LoanEvent } from '@/types/loan';
-import { VEHICLES, DEFAULT_VEHICLE, type Vehicle, vehicleRequiresFacility } from '@/lib/constants';
-type SortField = 'loan_id' | 'city' | 'category' | 'outstanding' | 'total_commitment' | 'interest_rate' | 'loan_start_date' | 'maturity_date' | 'last_interest' | 'last_cf';
+import { Search, ArrowUpDown, ArrowUp, ArrowDown, Plus, MessageSquare } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { FinancialStrip } from '@/components/loans/FinancialStrip';
+import { VEHICLES, DEFAULT_VEHICLE, type Vehicle, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
+type SortField = 'loan_id' | 'city' | 'category' | 'initial_facility' | 'outstanding' | 'total_commitment' | 'interest_rate' | 'loan_start_date' | 'maturity_date' | 'last_interest' | 'last_cf';
 type SortDir = 'asc' | 'desc';
 export default function Loans() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -28,6 +29,8 @@ export default function Loans() {
     isLoading
   } = useLoans();
   const { data: latestCharges = {} } = useLatestChargesPerLoan();
+  const { data: latestActivity = {} } = useLatestActivityPerLoan();
+  const createActivityLog = useCreateActivityLog();
   // Derive the period label from the first available charge entry
   const chargesPeriodLabel = useMemo(() => {
     const firstEntry = Object.values(latestCharges)[0];
@@ -40,33 +43,8 @@ export default function Loans() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const generatePeriods = useGeneratePeriods();
-  const isController = roles.includes('controller');
-  const canCreate = roles.includes('pm') || isController;
-  const [isExporting, setIsExporting] = useState(false);
-
-  const handleExportLoanTape = async () => {
-    if (!vehicleLoans.length) return;
-    setIsExporting(true);
-    try {
-      const loanIds = vehicleLoans.map(l => l.id);
-      const { data: events } = await supabase
-        .from('loan_events')
-        .select('*')
-        .in('loan_id', loanIds)
-        .eq('status', 'approved');
-
-      const asOfDate = getCurrentDateString();
-      const loansWithEvents = vehicleLoans.map(loan => ({
-        loan,
-        events: ((events || []) as unknown as LoanEvent[]).filter(e => e.loan_id === loan.id),
-      }));
-
-      await downloadLoanTapeXlsx(loansWithEvents, asOfDate, activeVehicle);
-    } finally {
-      setIsExporting(false);
-    }
-  };
+  const updateLoan = useUpdateLoan();
+  const canCreate = roles.includes('pm') || roles.includes('controller');
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -93,6 +71,68 @@ export default function Loans() {
       </span>
     </th>
   );
+  // Quick note popover cell for inline activity logging
+  const QuickNoteCell = ({ loanId }: { loanId: string }) => {
+    const [open, setOpen] = useState(false);
+    const [note, setNote] = useState('');
+    const latest = latestActivity[loanId];
+    const handleQuickAdd = async () => {
+      if (!note.trim()) return;
+      await createActivityLog.mutateAsync({ loan_id: loanId, content: note.trim() });
+      setNote('');
+      setOpen(false);
+    };
+    return (
+      <div className="flex items-center gap-1.5">
+        {latest ? (
+          <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={latest.content}>
+            {latest.content.slice(0, 40)}{latest.content.length > 40 ? '...' : ''}
+            <span className="ml-1 opacity-60">
+              {formatDistanceToNow(new Date(latest.created_at), { addSuffix: false })}
+            </span>
+          </span>
+        ) : (
+          <span className="text-xs text-foreground-muted">—</span>
+        )}
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 shrink-0">
+              <Plus className="h-3 w-3" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-3" align="end">
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-foreground-secondary">Quick note</p>
+              <Textarea
+                placeholder="Log a quick note..."
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={3}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    handleQuickAdd();
+                  }
+                }}
+              />
+              <div className="flex justify-end">
+                <Button
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={handleQuickAdd}
+                  disabled={!note.trim() || createActivityLog.isPending}
+                >
+                  {createActivityLog.isPending ? 'Adding...' : 'Add'}
+                </Button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+    );
+  };
+
   const handleVehicleChange = (vehicle: string) => {
     setSearchParams({
       vehicle
@@ -145,7 +185,6 @@ export default function Loans() {
     return sum + principal * rate;
   }, 0);
   const avgRate = totalPrincipal > 0 ? weightedRateSum / totalPrincipal : 0;
-  const pikLoansCount = activeLoans.filter(l => l.interest_type === 'pik').length;
 
   // Count loans per vehicle for tabs
   const vehicleCounts = VEHICLES.map(v => ({
@@ -161,43 +200,20 @@ export default function Loans() {
   return <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Loans</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl font-semibold">Loans</h1>
+          <p className="text-sm text-foreground-secondary">
             Manage loan portfolio by vehicle
           </p>
         </div>
         
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={handleExportLoanTape}
-            disabled={isExporting || !vehicleLoans.length}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            {isExporting ? 'Exporting...' : 'Loan Tape'}
-          </Button>
-          {isController && (
-            <Button
-              variant="outline"
-              onClick={() => generatePeriods.mutate()}
-              disabled={generatePeriods.isPending}
-            >
-              <CalendarPlus className="h-4 w-4 mr-2" />
-              {generatePeriods.isPending ? 'Generating...' : 'Generate Periods'}
-            </Button>
-          )}
-          {canCreate && (
-            <>
-              <BatchUploadDialog />
-              <CreateLoanDialog />
-            </>
-          )}
+          {canCreate && <CreateLoanDialog />}
         </div>
       </div>
 
       {/* Vehicle Tabs */}
       <Tabs value={activeVehicle} onValueChange={handleVehicleChange} className="w-full">
-        <TabsList className={`grid w-full max-w-md grid-cols-${VEHICLES.length}`}>
+        <TabsList className="grid w-full max-w-md grid-cols-3">
           {vehicleCounts.map(v => (
             <TabsTrigger key={v.value} value={v.value} className="flex items-center gap-2">
               {v.label}
@@ -207,33 +223,39 @@ export default function Loans() {
         </TabsList>
       </Tabs>
 
-      {/* Portfolio Metrics Bar */}
-      <div className="grid grid-cols-6 gap-6 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Outstanding</div>
-          <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(totalPrincipal)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Commitment</div>
-          <div className="text-lg font-semibold font-mono">{formatCurrency(totalCommitment)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Undrawn</div>
-          <div className="text-lg font-semibold font-mono text-green-600">{formatCurrency(totalUndrawn)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Avg Rate</div>
-          <div className="text-lg font-semibold font-mono">{formatPercent(avgRate, 2)}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Active</div>
-          <div className="text-lg font-semibold font-mono">{activeLoans.length}</div>
-        </div>
-        <div>
-          <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">PIK</div>
-          <div className="text-lg font-semibold font-mono text-amber-600">{pikLoansCount}</div>
-        </div>
-      </div>
+      {/* Portfolio Metrics Strip */}
+      {isPipelineVehicle(activeVehicle) ? (() => {
+        const prospectCount = vehicleLoans.filter(l => (l as any).pipeline_stage === 'prospect').length;
+        const softCount = vehicleLoans.filter(l => (l as any).pipeline_stage === 'soft').length;
+        const hardCount = vehicleLoans.filter(l => (l as any).pipeline_stage === 'hard').length;
+        const noStageCount = vehicleLoans.filter(l => !(l as any).pipeline_stage).length;
+        const totalCommitmentPipeline = vehicleLoans.reduce((s, l) => s + (l.total_commitment || 0), 0);
+        const loansWithRate = vehicleLoans.filter(l => l.interest_rate && l.interest_rate > 0);
+        const avgRatePipeline = loansWithRate.length > 0
+          ? loansWithRate.reduce((s, l) => s + (l.interest_rate || 0), 0) / loansWithRate.length
+          : 0;
+        const loansWithLtv = vehicleLoans.filter(l => (l as any).ltv && (l as any).ltv > 0);
+        const avgLtv = loansWithLtv.length > 0
+          ? loansWithLtv.reduce((s, l) => s + ((l as any).ltv || 0), 0) / loansWithLtv.length
+          : 0;
+        return <FinancialStrip items={[
+          { label: 'Deals', value: String(vehicleLoans.length), mono: false },
+          { label: 'Prospect', value: String(prospectCount + noStageCount), mono: false },
+          { label: 'Soft · KB Sent', value: String(softCount), mono: false, accent: 'amber' as const },
+          { label: 'Hard · KB Signed', value: String(hardCount), mono: false, accent: 'sage' as const },
+          { label: 'Est. Commitment', value: formatCurrency(totalCommitmentPipeline) },
+          { label: 'Avg Rate', value: avgRatePipeline > 0 ? formatPercent(avgRatePipeline, 2) : '—' },
+          { label: 'Avg LTV', value: avgLtv > 0 ? formatPercent(avgLtv, 1) : '—' },
+        ]} />;
+      })() : (
+        <FinancialStrip items={[
+          { label: 'Outstanding', value: formatCurrency(totalPrincipal), accent: 'primary' },
+          { label: 'Commitment', value: formatCurrency(totalCommitment) },
+          { label: 'Undrawn', value: formatCurrency(totalUndrawn), accent: 'sage' },
+          { label: 'Avg Rate', value: formatPercent(avgRate, 2) },
+          { label: 'Active', value: String(activeLoans.length), mono: false },
+        ]} />
+      )}
 
       <Card>
         <CardHeader>
@@ -252,6 +274,8 @@ export default function Loans() {
                   {vehicleRequiresFacility(activeVehicle) && <th>Facility</th>}
                   <SortTh field="city">City</SortTh>
                   <SortTh field="category">Category</SortTh>
+                  {isPipelineVehicle(activeVehicle) && <th>Stage</th>}
+                  {activeVehicle === 'RED IV' && <SortTh field="initial_facility">Initial Facility</SortTh>}
                   <SortTh field="outstanding" className="text-right">Outstanding</SortTh>
                   <SortTh field="total_commitment" className="text-right">Commitment</SortTh>
                   <SortTh field="interest_rate" className="text-right">Rate</SortTh>
@@ -259,11 +283,11 @@ export default function Loans() {
                   <SortTh field="last_cf" className="text-right">CF {chargesPeriodLabel || 't-1'}</SortTh>
                   <SortTh field="loan_start_date" className="text-right">Start</SortTh>
                   <SortTh field="maturity_date" className="text-right">Maturity</SortTh>
-                  <th></th>
+                  <th>Last Note</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredLoans.map(loan => <tr key={loan.id} onDoubleClick={() => navigate(`/loans/${loan.id}`)} className="cursor-pointer">
+                {filteredLoans.map(loan => <tr key={loan.id} onClick={() => navigate(`/loans/${loan.id}`)} className="clickable">
                     <td className="font-mono font-medium">{(loan as any).loan_id || '—'}</td>
                     {vehicleRequiresFacility(activeVehicle) && <td>
                         <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
@@ -276,6 +300,25 @@ export default function Loans() {
                         {(loan as any).category || '—'}
                       </span>
                     </td>
+                    {isPipelineVehicle(activeVehicle) && <td onClick={(e) => e.stopPropagation()}>
+                        <Select
+                          value={(loan as any).pipeline_stage || ''}
+                          onValueChange={(v) => updateLoan.mutate({ id: loan.id, updates: { pipeline_stage: v } as any })}
+                        >
+                          <SelectTrigger className="h-7 w-[160px] text-xs">
+                            <SelectValue placeholder="—" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PIPELINE_STAGES.map(s => (
+                              <SelectItem key={s.value} value={s.value}>
+                                <span>{s.label}</span>
+                                <span className="ml-1 opacity-50">· {s.description}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>}
+                    {activeVehicle === 'RED IV' && <td className="text-muted-foreground">{loan.initial_facility || '—'}</td>}
                     <td className="numeric">{formatCurrency(loan.outstanding)}</td>
                     <td className="numeric">{formatCurrency(loan.total_commitment || loan.outstanding)}</td>
                     <td className="numeric">{formatPercent(loan.interest_rate, 2)}</td>
@@ -287,10 +330,8 @@ export default function Loans() {
                     </td>
                     <td className="text-right text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
                     <td className="text-right text-muted-foreground">{formatDate(loan.maturity_date)}</td>
-                    <td className="text-right">
-                      <Link to={`/loans/${loan.id}`} className="text-primary hover:underline inline-flex items-center gap-1">
-                        View <ChevronRight className="h-3 w-3" />
-                      </Link>
+                    <td onClick={(e) => e.stopPropagation()} className="max-w-[200px]">
+                      <QuickNoteCell loanId={loan.id} />
                     </td>
                   </tr>)}
               </tbody>

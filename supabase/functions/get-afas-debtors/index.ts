@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getAfasToken, getAfasEnvId } from "../_shared/afas-config.ts";
+import { getAfasToken, getAfasBaseUrl, buildAfasAuthHeader } from "../_shared/afas-config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -13,21 +13,21 @@ serve(async (req) => {
 
   try {
     const afasToken = await getAfasToken();
-    const afasEnvId = getAfasEnvId();
+    const baseUrl = await getAfasBaseUrl();
 
-    if (!afasToken || !afasEnvId) {
+    if (!afasToken || !baseUrl) {
       return new Response(
         JSON.stringify({ success: false, error: 'Missing AFAS credentials' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const baseUrl = `https://${afasEnvId}.rest.afas.online/profitrestservices`;
-    
+    const authHeader = buildAfasAuthHeader(afasToken);
+
     // Try multiple possible debtor connectors
     const connectorNames = [
       'Profit_Debtor',
-      'Profit_Debtors', 
+      'Profit_Debtors',
       'KnDebtor',
       'Profit_DebtorOverview'
     ];
@@ -39,11 +39,11 @@ serve(async (req) => {
     for (const connectorName of connectorNames) {
       try {
         console.log(`Trying connector: ${connectorName}`);
-        
+
         const response = await fetch(`${baseUrl}/connectors/${connectorName}?take=500`, {
           method: 'GET',
           headers: {
-            'Authorization': `AfasToken ${btoa(afasToken)}`,
+            'Authorization': authHeader,
             'Content-Type': 'application/json',
           },
         });
@@ -67,12 +67,12 @@ serve(async (req) => {
     if (debtors.length === 0) {
       // List available connectors for debugging
       console.log('No debtor connector worked, fetching available connectors...');
-      
+
       try {
         const metaResponse = await fetch(`${baseUrl}/metainfo`, {
           method: 'GET',
           headers: {
-            'Authorization': `AfasToken ${btoa(afasToken)}`,
+            'Authorization': authHeader,
             'Content-Type': 'application/json',
           },
         });
@@ -80,8 +80,8 @@ serve(async (req) => {
         if (metaResponse.ok) {
           const metaData = await metaResponse.json();
           const getConnectors = metaData.getConnectors || [];
-          const debtorRelated = getConnectors.filter((c: { id: string }) => 
-            c.id.toLowerCase().includes('debtor') || 
+          const debtorRelated = getConnectors.filter((c: { id: string }) =>
+            c.id.toLowerCase().includes('debtor') ||
             c.id.toLowerCase().includes('debiteur') ||
             c.id.toLowerCase().includes('customer') ||
             c.id.toLowerCase().includes('klant')
@@ -114,7 +114,7 @@ serve(async (req) => {
 
     // Get sample fields from first debtor
     const availableFields = Object.keys(debtors[0] || {});
-    
+
     console.log(`Fetched ${debtors.length} debtors from ${usedConnector}`);
     console.log('Available fields:', availableFields);
 

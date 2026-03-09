@@ -15,6 +15,7 @@ import {
 import { useApproveMonth } from '@/hooks/useMonthlyApproval';
 import { useAuth } from '@/hooks/useAuth';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { FinancialStrip } from '@/components/loans/FinancialStrip';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -41,6 +42,7 @@ import {
   Clock,
   ChevronDown,
   Database,
+  Landmark,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AfasDrawTransaction } from '@/types/loan';
@@ -102,6 +104,8 @@ export default function MonthlyApproval() {
 
   const handleConfirm = (period: EnrichedPeriod) => {
     if (!period.afasPayment) return;
+    // afasPayment.amount is already the net cash amount
+    // (1751 depot debits subtracted in useMonthlyApprovalAccruals)
     confirmPayment.mutate({
       periodId: period.id,
       paymentDate: period.afasPayment.date,
@@ -175,8 +179,8 @@ export default function MonthlyApproval() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Monthly Approval</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl font-semibold">Monthly Approval</h1>
+          <p className="text-sm text-foreground-secondary">
             Reconcile calculated interest with AFAS payments
           </p>
         </div>
@@ -195,7 +199,7 @@ export default function MonthlyApproval() {
           </div>
 
           {isApproved ? (
-            <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded px-3 py-1.5">
+            <div className="flex items-center gap-2 text-sm text-accent-sage bg-accent-sage/10 border border-accent-sage/30 rounded px-3 py-1.5">
               <CheckCircle2 className="h-4 w-4" />
               Approved {data?.approved_at && `on ${formatDate(data.approved_at)}`}
             </div>
@@ -224,7 +228,7 @@ export default function MonthlyApproval() {
                     </div>
                   </div>
                   {(data?.unmatchedCount ?? 0) > 0 && (
-                    <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 rounded p-3 border border-amber-200">
+                    <div className="flex items-center gap-2 text-sm text-accent-amber bg-accent-amber/10 rounded p-3 border border-accent-amber/30">
                       <AlertTriangle className="h-4 w-4 flex-shrink-0" />
                       {data!.unmatchedCount} period(s) have no matching AFAS payment yet.
                     </div>
@@ -272,26 +276,12 @@ export default function MonthlyApproval() {
         <TabsContent value="payments" className="space-y-6 mt-6">
           {/* Summary */}
           {data && data.periods.length > 0 && (
-            <div className="grid grid-cols-4 gap-6 py-3 px-4 bg-background border-l-4 border-l-primary border rounded-sm shadow-sm">
-              <div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Due</div>
-                <div className="text-lg font-semibold font-mono text-primary">{formatCurrency(data.totalDue)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Confirmed</div>
-                <div className="text-lg font-semibold font-mono text-emerald-600">{data.confirmedCount}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Matched</div>
-                <div className="text-lg font-semibold font-mono text-amber-600">{data.matchedCount}</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">No Payment</div>
-                <div className={cn('text-lg font-semibold font-mono', data.unmatchedCount > 0 ? 'text-red-500' : 'text-muted-foreground')}>
-                  {data.unmatchedCount}
-                </div>
-              </div>
-            </div>
+            <FinancialStrip items={[
+              { label: 'Total Due', value: formatCurrency(data.totalDue), accent: 'primary' },
+              { label: 'Confirmed', value: String(data.confirmedCount), accent: 'sage', mono: false },
+              { label: 'Matched', value: String(data.matchedCount), accent: 'amber', mono: false },
+              { label: 'No Payment', value: String(data.unmatchedCount), accent: data.unmatchedCount > 0 ? 'destructive' : undefined, mono: false },
+            ]} />
           )}
 
           {/* Empty state */}
@@ -332,7 +322,7 @@ export default function MonthlyApproval() {
                           <React.Fragment key={period.id}>
                             <tr
                               className={cn(
-                                period.has_economic_events && 'border-l-2 border-l-amber-400 bg-amber-50/30'
+                                period.has_economic_events && 'border-l-2 border-l-accent-amber bg-accent-amber/5'
                               )}
                             >
                               <td className="font-mono font-medium">{period.loanNumericId || '—'}</td>
@@ -356,20 +346,31 @@ export default function MonthlyApproval() {
                                 ) : (
                                   <span className="text-muted-foreground">—</span>
                                 )}
+                                {period.cashPct < 1 && period.afasDepot && (
+                                  <div className="flex items-center justify-end gap-1 text-[10px] text-blue-600 font-normal">
+                                    <Landmark className="h-2.5 w-2.5" />
+                                    {formatCurrency(period.afasDepot.amount)} depot
+                                  </div>
+                                )}
+                                {period.cashPct < 1 && !period.afasDepot && !period.isConfirmed && (
+                                  <div className="text-[10px] text-muted-foreground font-normal">
+                                    no depot match
+                                  </div>
+                                )}
                               </td>
                               <td className="text-center">
                                 {period.isConfirmed ? (
-                                  <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                                  <span className="inline-flex items-center gap-1 text-xs text-accent-sage">
                                     <CheckCircle2 className="h-3.5 w-3.5" />
                                     Paid
                                   </span>
                                 ) : period.afasPayment && period.delta != null && Math.abs(period.delta) <= 0.01 ? (
-                                  <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                                  <span className="inline-flex items-center gap-1 text-xs text-accent-sage">
                                     <Banknote className="h-3.5 w-3.5" />
                                     Match
                                   </span>
                                 ) : period.afasPayment ? (
-                                  <span className="inline-flex items-center gap-1 text-xs text-amber-600">
+                                  <span className="inline-flex items-center gap-1 text-xs text-accent-amber">
                                     <AlertTriangle className="h-3.5 w-3.5" />
                                     {formatCurrency(period.delta!)}
                                   </span>
@@ -383,7 +384,7 @@ export default function MonthlyApproval() {
                               <td className="text-right">
                                 <div className="flex items-center justify-end gap-1.5">
                                   {period.has_economic_events && (
-                                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                                    <AlertTriangle className="h-3.5 w-3.5 text-accent-amber" />
                                   )}
                                   {!period.isConfirmed && period.afasPayment && isController && (
                                     <Button
@@ -391,7 +392,7 @@ export default function MonthlyApproval() {
                                       variant="outline"
                                       onClick={() => handleConfirm(period)}
                                       disabled={confirmPayment.isPending}
-                                      className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                      className="h-7 text-xs border-accent-sage/40 text-accent-sage hover:bg-accent-sage/10"
                                     >
                                       Confirm
                                     </Button>
@@ -437,7 +438,7 @@ export default function MonthlyApproval() {
                                           {period.allAfasPayments.map(p => (
                                             <tr key={p.ref} className={cn(
                                               'border-b border-border/30',
-                                              period.afasPayment?.ref === p.ref && 'bg-emerald-50'
+                                              period.afasPayment?.ref === p.ref && 'bg-accent-sage/10'
                                             )}>
                                               <td className="py-1.5 font-mono">{formatDate(p.date)}</td>
                                               <td className="text-right font-mono font-medium">{formatCurrency(p.amount)}</td>
@@ -445,7 +446,7 @@ export default function MonthlyApproval() {
                                               <td className="font-mono text-muted-foreground">
                                                 {p.ref}
                                                 {period.afasPayment?.ref === p.ref && (
-                                                  <Badge variant="outline" className="ml-2 text-[10px] h-4 border-emerald-300 text-emerald-700">matched</Badge>
+                                                  <Badge variant="outline" className="ml-2 text-[10px] h-4 border-accent-sage/40 text-accent-sage">matched</Badge>
                                                 )}
                                               </td>
                                             </tr>
@@ -486,26 +487,12 @@ export default function MonthlyApproval() {
           ) : drawsData && drawsData.summary.totalTransactions > 0 ? (
             <>
               {/* Summary */}
-              <div className="grid grid-cols-4 gap-6 py-3 px-4 bg-background border-l-4 border-l-orange-400 border rounded-sm shadow-sm">
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Draws</div>
-                  <div className="text-lg font-semibold font-mono text-orange-600">{formatCurrency(drawsData.summary.totalDrawAmount)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Repayments</div>
-                  <div className="text-lg font-semibold font-mono text-blue-600">{formatCurrency(drawsData.summary.totalRepaymentAmount)}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Confirmed</div>
-                  <div className="text-lg font-semibold font-mono text-emerald-600">{drawsData.summary.confirmedCount}</div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Pending</div>
-                  <div className={cn('text-lg font-semibold font-mono', drawsData.summary.pendingCount > 0 ? 'text-amber-600' : 'text-muted-foreground')}>
-                    {drawsData.summary.pendingCount}
-                  </div>
-                </div>
-              </div>
+              <FinancialStrip items={[
+                { label: 'Total Draws', value: formatCurrency(drawsData.summary.totalDrawAmount), accent: 'amber' },
+                { label: 'Total Repayments', value: formatCurrency(drawsData.summary.totalRepaymentAmount), accent: 'primary' },
+                { label: 'Confirmed', value: String(drawsData.summary.confirmedCount), accent: 'sage', mono: false },
+                { label: 'Pending', value: String(drawsData.summary.pendingCount), accent: drawsData.summary.pendingCount > 0 ? 'amber' : undefined, mono: false },
+              ]} />
 
               {/* Tables grouped by vehicle */}
               {drawsByVehicle.map(([vehicle, transactions]) => {
@@ -545,20 +532,20 @@ export default function MonthlyApproval() {
                                   </td>
                                   <td className="text-center">
                                     {tx.type === 'draw' ? (
-                                      <Badge className="bg-orange-100 text-orange-800 border-orange-300 text-xs">Draw</Badge>
+                                      <Badge className="bg-accent-amber/10 text-accent-amber border-accent-amber/30 text-xs">Draw</Badge>
                                     ) : (
-                                      <Badge className="bg-blue-100 text-blue-800 border-blue-300 text-xs">Repayment</Badge>
+                                      <Badge className="bg-primary/10 text-primary border-primary/30 text-xs">Repayment</Badge>
                                     )}
                                   </td>
                                   <td className="numeric font-medium">{formatCurrency(tx.amount)}</td>
                                   <td className="text-center">
                                     {tx.isConfirmed && tx.eventStatus === 'approved' ? (
-                                      <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                                      <span className="inline-flex items-center gap-1 text-xs text-accent-sage">
                                         <CheckCircle2 className="h-3.5 w-3.5" />
                                         Approved
                                       </span>
                                     ) : tx.isConfirmed ? (
-                                      <span className="inline-flex items-center gap-1 text-xs text-amber-600">
+                                      <span className="inline-flex items-center gap-1 text-xs text-accent-amber">
                                         <Clock className="h-3.5 w-3.5" />
                                         Draft
                                       </span>
@@ -577,7 +564,7 @@ export default function MonthlyApproval() {
                                           variant="outline"
                                           onClick={() => handleConfirmDraw(tx)}
                                           disabled={confirmDraw.isPending}
-                                          className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                          className="h-7 text-xs border-accent-sage/40 text-accent-sage hover:bg-accent-sage/10"
                                         >
                                           Confirm
                                         </Button>
@@ -647,11 +634,11 @@ export default function MonthlyApproval() {
                             </td>
                             <td className="numeric">
                               {vehicleDrawTotal > 0 && (
-                                <span className="text-orange-600">+{formatCurrency(vehicleDrawTotal)}</span>
+                                <span className="text-accent-amber">+{formatCurrency(vehicleDrawTotal)}</span>
                               )}
                               {vehicleDrawTotal > 0 && vehicleRepayTotal > 0 && ' / '}
                               {vehicleRepayTotal > 0 && (
-                                <span className="text-blue-600">-{formatCurrency(vehicleRepayTotal)}</span>
+                                <span className="text-primary">-{formatCurrency(vehicleRepayTotal)}</span>
                               )}
                             </td>
                             <td colSpan={2}></td>

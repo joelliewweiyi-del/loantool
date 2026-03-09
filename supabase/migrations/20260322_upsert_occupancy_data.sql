@@ -1,0 +1,11 @@
+UPDATE loans SET occupancy = 0.86   WHERE loan_id = '507';
+UPDATE loans SET occupancy = 1.00   WHERE loan_id = '511';
+UPDATE loans SET occupancy = 1.00   WHERE loan_id = '509';
+UPDATE loans SET occupancy = 1.00   WHERE loan_id = '504';
+UPDATE loans SET occupancy = 1.00   WHERE loan_id = '493';
+UPDATE loans SET occupancy = 1.00   WHERE loan_id = '520';
+UPDATE loans SET occupancy = 0.97   WHERE loan_id = '513';
+UPDATE loans SET occupancy = 0.98   WHERE loan_id = '518';
+UPDATE loans SET occupancy = 0.9159 WHERE loan_id = '515';
+UPDATE loans SET occupancy = 1.00   WHERE loan_id = '516';
+UPDATE loans SET occupancy = 1.00   WHERE loan_id = '529';

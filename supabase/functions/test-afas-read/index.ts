@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getAfasToken, getAfasBaseUrl, buildAfasAuthHeader } from "../_shared/afas-config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,18 +12,20 @@ serve(async (req) => {
   }
 
   try {
-    const afasToken = Deno.env.get('AFAS_TOKEN');
-    const afasEnvId = Deno.env.get('AFAS_ENVIRONMENT_ID');
+    const afasToken = await getAfasToken();
+    const baseUrl = await getAfasBaseUrl();
 
-    if (!afasToken || !afasEnvId) {
+    if (!afasToken || !baseUrl) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          error: 'Missing AFAS credentials' 
+        JSON.stringify({
+          success: false,
+          error: 'Missing AFAS credentials'
         }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const authHeader = buildAfasAuthHeader(afasToken);
 
     // Parse request body for custom connector name and filters
     let connectorName = 'Profit_Debtor_Invoices';
@@ -43,23 +46,21 @@ serve(async (req) => {
       // No body or invalid JSON, use default
     }
 
-    const baseUrl = `https://${afasEnvId}.rest.afas.online/profitrestservices`;
-    
     // First, get the connector's metainfo to understand available fields
     const metaUrl = `${baseUrl}/metainfo/get/${connectorName}`;
     console.log('Fetching metainfo:', metaUrl);
-    
+
     const metaResponse = await fetch(metaUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `AfasToken ${btoa(afasToken)}`,
+        'Authorization': authHeader,
         'Content-Type': 'application/json',
       },
     });
-    
+
     let schema = null;
     let primaryField = null;
-    
+
     if (metaResponse.ok) {
       const metaText = await metaResponse.text();
       try {
@@ -69,7 +70,7 @@ serve(async (req) => {
           // Look for a date field first (better for chronological sorting)
           const dateField = schema.fields.find((f: { dataType: string; fieldId: string }) => f.dataType === 'date');
           // Or use the first string/int field (avoid decimal fields for sorting)
-          const sortableField = schema.fields.find((f: { dataType: string; fieldId: string }) => 
+          const sortableField = schema.fields.find((f: { dataType: string; fieldId: string }) =>
             f.dataType === 'string' || f.dataType === 'int' || f.dataType === 'date'
           );
           primaryField = dateField?.fieldId || sortableField?.fieldId || schema.fields[0].fieldId;
@@ -78,44 +79,44 @@ serve(async (req) => {
         schema = metaText;
       }
     }
-    
+
     console.log('Schema:', JSON.stringify(schema)?.substring(0, 500));
     console.log('Primary field for sorting:', primaryField);
-    
+
     // Check if this connector has a UnitId field for administration filtering
     const hasUnitIdField = schema?.fields?.some((f: { id: string }) => f.id === 'UnitId');
     console.log('Has UnitId field:', hasUnitIdField);
-    
+
     // Build filters - only add UnitId filter if the connector supports it
     let unitFilter = '';
     if (unitId && hasUnitIdField) {
       unitFilter = `filterfieldids=UnitId&filtervalues=${unitId}&operatortypes=1`;
     }
-    
+
     const filters = [
       unitFilter ? `?${unitFilter}&take=${take}` : `?take=${take}`, // With take limit
     ];
-    
+
     const attempts: Array<{filter: string, status: number, response: string}> = [];
     let successData = null;
-    
+
     for (const filter of filters) {
       const getUrl = `${baseUrl}/connectors/${connectorName}${filter}`;
       console.log('Trying:', getUrl);
-      
+
       const testResponse = await fetch(getUrl, {
         method: 'GET',
         headers: {
-          'Authorization': `AfasToken ${btoa(afasToken)}`,
+          'Authorization': authHeader,
           'Content-Type': 'application/json',
         },
       });
-      
+
       const testText = await testResponse.text();
       console.log('Response:', testResponse.status, testText.substring(0, 300));
-      
+
       attempts.push({ filter: filter || '(no filter)', status: testResponse.status, response: testText.substring(0, 500) });
-      
+
       if (testResponse.ok) {
         try {
           successData = JSON.parse(testText);
@@ -125,11 +126,11 @@ serve(async (req) => {
         break;
       }
     }
-    
+
     if (successData) {
       return new Response(
-        JSON.stringify({ 
-          success: true, 
+        JSON.stringify({
+          success: true,
           message: `Successfully retrieved data from ${connectorName}`,
           data: successData,
           schema: schema,
@@ -140,8 +141,8 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ 
-        success: false, 
+      JSON.stringify({
+        success: false,
         error: `Could not read from ${connectorName}`,
         attempts: attempts,
         connectorSchema: schema,
@@ -153,9 +154,9 @@ serve(async (req) => {
     const errMessage = error instanceof Error ? error.message : String(error);
     console.error('Error reading from AFAS:', errMessage);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: errMessage 
+      JSON.stringify({
+        success: false,
+        error: errMessage
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

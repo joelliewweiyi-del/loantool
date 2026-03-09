@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Database } from '@/integrations/supabase/types';
 import { startOfMonth, endOfMonth, addMonths, isBefore, parseISO, format } from 'date-fns';
 import { getCurrentDate, getCurrentDateString } from '@/lib/simulatedDate';
-import { DEFAULT_VEHICLE, vehicleRequiresFacility } from '@/lib/constants';
+import { DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle } from '@/lib/constants';
 
 type DbEventType = Database['public']['Enums']['event_type'];
 type Json = Database['public']['Tables']['loan_events']['Row']['metadata'];
@@ -132,80 +132,83 @@ export function useBatchCreateLoans() {
           const effectiveDate = loanData.loan_start_date || getCurrentDateString();
           const isPikLoan = loanData.interest_type === 'pik';
 
-          const createFoundingEvent = async (
-            eventType: DbEventType,
-            amount: number | null,
-            rate: number | null,
-            metadata: Record<string, unknown>
-          ) => {
-            const { error } = await supabase.rpc('create_founding_event', {
-              p_loan_id: createdLoan.id,
-              p_event_type: eventType,
-              p_effective_date: effectiveDate,
-              p_amount: amount,
-              p_rate: rate,
-              p_created_by: userId,
-              p_metadata: metadata as unknown as Json,
-            });
-            if (error) throw error;
-          };
+          // Pipeline loans are prospective — skip events and periods
+          if (!isPipelineVehicle(loanData.vehicle || DEFAULT_VEHICLE)) {
+            const createFoundingEvent = async (
+              eventType: DbEventType,
+              amount: number | null,
+              rate: number | null,
+              metadata: Record<string, unknown>
+            ) => {
+              const { error } = await supabase.rpc('create_founding_event', {
+                p_loan_id: createdLoan.id,
+                p_event_type: eventType,
+                p_effective_date: effectiveDate,
+                p_amount: amount,
+                p_rate: rate,
+                p_created_by: userId,
+                p_metadata: metadata as unknown as Json,
+              });
+              if (error) throw error;
+            };
 
-          // 1. Commitment Set
-          if (loanData.total_commitment && loanData.total_commitment > 0) {
-            await createFoundingEvent(
-              'commitment_set',
-              loanData.total_commitment,
-              null,
-              { auto_generated: true, description: 'Initial commitment' }
-            );
-          }
+            // 1. Commitment Set
+            if (loanData.total_commitment && loanData.total_commitment > 0) {
+              await createFoundingEvent(
+                'commitment_set',
+                loanData.total_commitment,
+                null,
+                { auto_generated: true, description: 'Initial commitment' }
+              );
+            }
 
-          // 2. Interest Rate Set
-          if (loanData.interest_rate && loanData.interest_rate > 0) {
-            await createFoundingEvent(
-              'interest_rate_set',
-              null,
-              loanData.interest_rate,
-              { auto_generated: true, description: 'Initial rate' }
-            );
-          }
+            // 2. Interest Rate Set
+            if (loanData.interest_rate && loanData.interest_rate > 0) {
+              await createFoundingEvent(
+                'interest_rate_set',
+                null,
+                loanData.interest_rate,
+                { auto_generated: true, description: 'Initial rate' }
+              );
+            }
 
-          // 3. Principal Draw
-          if (loanData.outstanding && loanData.outstanding > 0) {
-            await createFoundingEvent(
-              'principal_draw',
-              loanData.outstanding,
-              null,
-              { auto_generated: true, description: 'Opening principal draw' }
-            );
-          }
+            // 3. Principal Draw
+            if (loanData.outstanding && loanData.outstanding > 0) {
+              await createFoundingEvent(
+                'principal_draw',
+                loanData.outstanding,
+                null,
+                { auto_generated: true, description: 'Opening principal draw' }
+              );
+            }
 
-          // 4. Arrangement Fee
-          if (arrangement_fee && arrangement_fee > 0) {
-            await createFoundingEvent(
-              'fee_invoice',
-              arrangement_fee,
-              null,
-              {
-                auto_generated: true,
-                fee_type: 'arrangement',
-                payment_type: isPikLoan ? 'pik' : 'cash',
-                description: isPikLoan ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)'
+            // 4. Arrangement Fee
+            if (arrangement_fee && arrangement_fee > 0) {
+              await createFoundingEvent(
+                'fee_invoice',
+                arrangement_fee,
+                null,
+                {
+                  auto_generated: true,
+                  fee_type: 'arrangement',
+                  payment_type: isPikLoan ? 'pik' : 'cash',
+                  description: isPikLoan ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)'
+                }
+              );
+            }
+
+            // Generate monthly periods
+            if (loanData.loan_start_date) {
+              const monthlyPeriods = generateMonthlyPeriods(
+                createdLoan.id,
+                loanData.loan_start_date,
+                loanData.maturity_date
+              );
+
+              if (monthlyPeriods.length > 0) {
+                const { error: periodsError } = await supabase.from('periods').insert(monthlyPeriods);
+                if (periodsError) throw new Error(`Failed to create periods: ${periodsError.message}`);
               }
-            );
-          }
-
-          // Generate monthly periods
-          if (loanData.loan_start_date) {
-            const monthlyPeriods = generateMonthlyPeriods(
-              createdLoan.id,
-              loanData.loan_start_date,
-              loanData.maturity_date
-            );
-
-            if (monthlyPeriods.length > 0) {
-              const { error: periodsError } = await supabase.from('periods').insert(monthlyPeriods);
-              if (periodsError) throw new Error(`Failed to create periods: ${periodsError.message}`);
             }
           }
 

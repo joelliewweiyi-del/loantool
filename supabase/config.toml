@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.correct-event-amount]
 verify_jwt = false
+
+[functions.parse-loan-document]
+verify_jwt = false

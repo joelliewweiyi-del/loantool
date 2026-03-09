@@ -6,7 +6,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, FileSpreadsheet, CheckCircle2, XCircle, AlertTriangle, Download } from 'lucide-react';
 import { useBatchCreateLoans, BatchLoanInput, BatchCreateResult } from '@/hooks/useBatchCreateLoans';
 import Papa from 'papaparse';
-import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility } from '@/lib/constants';
+import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle } from '@/lib/constants';
 
 interface ParsedRow {
   loan_id: string;
@@ -98,9 +98,14 @@ export function BatchUploadDialog() {
       errors.push({ row: index + 1, field: 'loan_id', message: 'Loan ID is required' });
     }
     
-    if (!row.loan_start_date?.trim()) {
-      errors.push({ row: index + 1, field: 'loan_start_date', message: 'Loan start date is required' });
-    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(row.loan_start_date.trim())) {
+    const vehicle = row.vehicle || DEFAULT_VEHICLE;
+    if (!isPipelineVehicle(vehicle)) {
+      if (!row.loan_start_date?.trim()) {
+        errors.push({ row: index + 1, field: 'loan_start_date', message: 'Loan start date is required' });
+      } else if (!/^\d{4}-\d{2}-\d{2}$/.test(row.loan_start_date.trim())) {
+        errors.push({ row: index + 1, field: 'loan_start_date', message: 'Invalid date format (use YYYY-MM-DD)' });
+      }
+    } else if (row.loan_start_date?.trim() && !/^\d{4}-\d{2}-\d{2}$/.test(row.loan_start_date.trim())) {
       errors.push({ row: index + 1, field: 'loan_start_date', message: 'Invalid date format (use YYYY-MM-DD)' });
     }
 

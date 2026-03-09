@@ -9,7 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { Pencil } from 'lucide-react';
 import { useUpdateLoan } from '@/hooks/useLoans';
 import { Loan, InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
-import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility } from '@/lib/constants';
+import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
 
 interface EditLoanDialogProps {
   loan: Loan;
@@ -40,11 +40,19 @@ interface LoanFormData {
   notice_frequency: string;
   payment_due_rule: string;
   cash_interest_percentage: string;
+  guarantor: string;
+  valuation: string;
+  valuation_date: string;
+  rental_income: string;
   remarks: string;
   google_maps_url: string;
   kadastrale_kaart_url: string;
   photo_url: string;
   additional_info: string;
+  pipeline_stage: string;
+  walt: string;
+  walt_comment: string;
+  occupancy: string;
 }
 
 export function EditLoanDialog({ loan }: EditLoanDialogProps) {
@@ -76,11 +84,19 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
     notice_frequency: 'monthly',
     payment_due_rule: '',
     cash_interest_percentage: '',
+    guarantor: '',
+    valuation: '',
+    valuation_date: '',
+    rental_income: '',
     remarks: '',
     google_maps_url: '',
     kadastrale_kaart_url: '',
     photo_url: '',
     additional_info: '',
+    pipeline_stage: '',
+    walt: '',
+    walt_comment: '',
+    occupancy: '',
   });
 
   // Populate form when dialog opens
@@ -111,11 +127,19 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
         notice_frequency: loan.notice_frequency || 'monthly',
         payment_due_rule: loan.payment_due_rule || '',
         cash_interest_percentage: loan.cash_interest_percentage != null ? loan.cash_interest_percentage.toString() : '',
+        guarantor: loan.guarantor || '',
+        valuation: loan.valuation != null ? loan.valuation.toString() : '',
+        valuation_date: loan.valuation_date || '',
+        rental_income: loan.rental_income != null ? loan.rental_income.toString() : '',
         remarks: loan.remarks || '',
         google_maps_url: (loan as any).google_maps_url || '',
         kadastrale_kaart_url: (loan as any).kadastrale_kaart_url || '',
         photo_url: (loan as any).photo_url || '',
         additional_info: (loan as any).additional_info || '',
+        pipeline_stage: (loan as any).pipeline_stage || '',
+        walt: loan.walt != null ? loan.walt.toString() : '',
+        walt_comment: loan.walt_comment || '',
+        occupancy: loan.occupancy != null ? (loan.occupancy * 100).toString() : '',
       });
     }
   }, [isOpen, loan]);
@@ -150,12 +174,27 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
       borrower_email: formData.borrower_email || null,
       borrower_address: formData.borrower_address || null,
       property_address: formData.property_address || null,
+      guarantor: formData.guarantor || null,
+      valuation: formData.valuation ? parseFloat(formData.valuation) : null,
+      valuation_date: formData.valuation_date || null,
+      rental_income: formData.rental_income ? parseFloat(formData.rental_income) : null,
+      ltv: (() => {
+        const val = formData.valuation ? parseFloat(formData.valuation) : 0;
+        if (!val) return null;
+        const commitment = formData.total_commitment ? parseFloat(formData.total_commitment) : 0;
+        const outstanding = loan.outstanding ?? 0;
+        return Math.max(commitment, outstanding) / val;
+      })(),
       remarks: formData.remarks || null,
       cash_interest_percentage: formData.cash_interest_percentage ? parseFloat(formData.cash_interest_percentage) : null,
       google_maps_url: formData.google_maps_url || null,
       kadastrale_kaart_url: formData.kadastrale_kaart_url || null,
       photo_url: formData.photo_url || null,
       additional_info: formData.additional_info || null,
+      pipeline_stage: isPipelineVehicle(formData.vehicle) ? formData.pipeline_stage || null : null,
+      walt: formData.walt ? parseFloat(formData.walt) : null,
+      walt_comment: formData.walt_comment || null,
+      occupancy: formData.occupancy ? parseFloat(formData.occupancy) / 100 : null,
     };
 
     await updateLoan.mutateAsync({ id: loan.id, updates: payload as unknown as Partial<Loan> });
@@ -214,6 +253,23 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                   />
                 </div>
               )}
+              {isPipelineVehicle(formData.vehicle) && (
+                <div className="space-y-2">
+                  <Label>Pipeline Stage</Label>
+                  <Select value={formData.pipeline_stage} onValueChange={(v) => handleChange('pipeline_stage', v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select stage" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PIPELINE_STAGES.map(s => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label} <span className="opacity-50">· {s.description}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="edit-initial_facility">Initial Facility</Label>
                 <Input
@@ -230,6 +286,15 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                   value={formData.borrower_name}
                   onChange={(e) => handleChange('borrower_name', e.target.value)}
                   placeholder="Enter borrower name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-guarantor">Guarantor</Label>
+                <Input
+                  id="edit-guarantor"
+                  value={formData.guarantor}
+                  onChange={(e) => handleChange('guarantor', e.target.value)}
+                  placeholder="e.g., Holding B.V."
                 />
               </div>
               <div className="space-y-2">
@@ -430,6 +495,88 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                     <SelectItem value="total_commitment">Total Commitment</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Valuation Section */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Valuation
+            </h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-valuation">Valuation (EUR)</Label>
+                <Input
+                  id="edit-valuation"
+                  type="number"
+                  step="0.01"
+                  value={formData.valuation}
+                  onChange={(e) => handleChange('valuation', e.target.value)}
+                  placeholder="e.g., 5000000"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-valuation_date">Valuation Date</Label>
+                <Input
+                  id="edit-valuation_date"
+                  type="date"
+                  value={formData.valuation_date}
+                  onChange={(e) => handleChange('valuation_date', e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-rental_income">Rental Income (EUR)</Label>
+                <Input
+                  id="edit-rental_income"
+                  type="number"
+                  step="0.01"
+                  value={formData.rental_income}
+                  onChange={(e) => handleChange('rental_income', e.target.value)}
+                  placeholder="e.g., 120000"
+                />
+              </div>
+            </div>
+            {formData.valuation && (
+              <p className="text-xs text-muted-foreground">
+                LTV is auto-calculated as max(commitment, outstanding) / valuation
+              </p>
+            )}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-walt">WALT (years)</Label>
+                <Input
+                  id="edit-walt"
+                  type="number"
+                  step="0.1"
+                  value={formData.walt}
+                  onChange={(e) => handleChange('walt', e.target.value)}
+                  placeholder="e.g., 5.2"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-walt_comment">WALT Comment</Label>
+                <Input
+                  id="edit-walt_comment"
+                  value={formData.walt_comment}
+                  onChange={(e) => handleChange('walt_comment', e.target.value)}
+                  placeholder="e.g., Peildatum 01-01-2026, bron: taxatierapport"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-occupancy">Occupancy (%)</Label>
+                <Input
+                  id="edit-occupancy"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="100"
+                  value={formData.occupancy}
+                  onChange={(e) => handleChange('occupancy', e.target.value)}
+                  placeholder="e.g., 95"
+                />
               </div>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getAfasToken, getAfasEnvId } from "../_shared/afas-config.ts";
+import { getAfasToken, getAfasBaseUrl, buildAfasAuthHeader } from "../_shared/afas-config.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,16 +27,18 @@ serve(async (req) => {
 
   try {
     const afasToken = await getAfasToken();
-    const afasEnvId = getAfasEnvId();
+    const afasBaseUrl = await getAfasBaseUrl();
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-    if (!afasToken || !afasEnvId) {
+    if (!afasToken || !afasBaseUrl) {
       return new Response(
         JSON.stringify({ success: false, error: 'Missing AFAS credentials' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    const authHeader = buildAfasAuthHeader(afasToken);
 
     const body: PostingRequest = await req.json();
     const { period_id, dry_run = false } = body;
@@ -274,8 +276,7 @@ serve(async (req) => {
     }
 
     // Post to AFAS
-    const baseUrl = `https://${afasEnvId}.rest.afas.online/profitrestservices`;
-    const updateUrl = `${baseUrl}/connectors/FiEntries`;
+    const updateUrl = `${afasBaseUrl}/connectors/FiEntries`;
 
     console.log('Posting to AFAS:', updateUrl);
     console.log('Payload:', JSON.stringify(afasPayload, null, 2));
@@ -283,7 +284,7 @@ serve(async (req) => {
     const afasResponse = await fetch(updateUrl, {
       method: 'POST',
       headers: {
-        'Authorization': `AfasToken ${btoa(afasToken)}`,
+        'Authorization': authHeader,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(afasPayload),
