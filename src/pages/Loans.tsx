@@ -207,7 +207,7 @@ export default function Loans() {
         </div>
         
         <div className="flex items-center gap-2">
-          {canCreate && <CreateLoanDialog />}
+          {canCreate && <CreateLoanDialog defaultVehicle={activeVehicle} />}
         </div>
       </div>
 

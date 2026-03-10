@@ -247,6 +247,16 @@ export function useCreateLoan() {
       ltv?: number | null;
       rental_income?: number | null;
       pipeline_stage?: string | null;
+      walt?: number | null;
+      walt_comment?: string | null;
+      occupancy?: number | null;
+      guarantor?: string | null;
+      valuation_date?: string | null;
+      photo_url?: string | null;
+      remarks?: string | null;
+      additional_info?: string | null;
+      google_maps_url?: string | null;
+      kadastrale_kaart_url?: string | null;
     }) => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error('Not authenticated');

@@ -26,3 +26,4 @@ dist-ssr
 # Backup artifacts
 last-successful-backup.json
 BACKUP_FAILED.txt
+.vercel

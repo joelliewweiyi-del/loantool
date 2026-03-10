@@ -96,6 +96,28 @@ const EXTRACTION_TOOL = {
         type: 'boolean',
         description: 'True if the property generates rental income (income-producing).',
       },
+      walt: {
+        type: ['number', 'null'],
+        description: 'Weighted Average Lease Term (WALT) in years. Look for "WALT", "gewogen gemiddelde looptijd", or lease expiry details. Calculate from lease end dates if not explicitly stated. Return as decimal (e.g. 4.97).',
+      },
+      occupancy: {
+        type: ['number', 'null'],
+        description: 'Occupancy rate as a percentage number (e.g. 95 for 95%). Look for "bezettingsgraad", "occupancy", "fully leased" (=100), "vacant" (=0). Return null if not determinable.',
+      },
+      remarks: {
+        type: ['string', 'null'],
+        description: 'A single-sentence summary of the loan (max 15 words). Format: "[Loan type] of [asset type] in [city]". Examples: "Acquisition financing of leased office property in Den Bosch", "Construction loan for residential redevelopment in Muiden", "Bridge loan secured on residential portfolio in Amsterdam".',
+      },
+      additional_info: {
+        type: ['string', 'null'],
+        description: `A professional loan description paragraph (100-200 words) summarizing the deal for internal records. Write in English, third-person, present tense. Cover: what is being financed, asset type & location, key metrics (LTV, rental income, lease terms), borrower profile, risk mitigants, and conclude with an overall assessment. Match this writing style exactly:
+
+Example 1: "Financing of a light-industrial warehouse in Baarn, near the A1-highway. Consists of 15.358m2 LFA (plot size 15.425m2). The property is in good condition and leased (owner-user) for €900.000 per annum; €59/m2 LFA. LTV (61%) is good, but to further guarantee a solid financing position we arranged a €1.000.000 guarantee from the sponsor. Overall, the transaction presents a well-structured and balanced financing facility with appropriate downside protection."
+
+Example 2: "This financing concerns the acquisition of a fully leased office property in 's-Hertogenbosch. The asset consists of three connected towers with a flexible layout. The property is modern, recently renovated, energy efficient and generates stable rental income. Exit risk is limited; supported by strong occupancy and long-term redevelopment potential."
+
+Do NOT fabricate numbers not in the document. Use only facts from the text.`,
+      },
     },
     required: ['document_type'],
   },
@@ -196,6 +218,10 @@ Deno.serve(async (req) => {
     if (extracted.duration_months != null) fields._duration_months = String(extracted.duration_months);
     if (extracted.earmarked === true) fields.earmarked = 'true';
     if (extracted.earmarked === false) fields.earmarked = 'false';
+    if (extracted.walt != null) fields.walt = String(extracted.walt);
+    if (extracted.occupancy != null) fields.occupancy = String(extracted.occupancy);
+    if (extracted.remarks) fields.remarks = String(extracted.remarks);
+    if (extracted.additional_info) fields.additional_info = String(extracted.additional_info);
 
     return new Response(
       JSON.stringify({

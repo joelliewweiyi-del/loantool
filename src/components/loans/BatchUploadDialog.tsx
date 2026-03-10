@@ -78,7 +78,8 @@ export function BatchUploadDialog() {
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [results, setResults] = useState<BatchCreateResult[] | null>(null);
   const [fileName, setFileName] = useState<string>('');
-  
+  const [isDragging, setIsDragging] = useState(false);
+
   const batchCreate = useBatchCreateLoans();
 
   const downloadTemplate = () => {
@@ -158,9 +159,11 @@ export function BatchUploadDialog() {
     };
   };
 
-  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const processFile = useCallback((file: File) => {
+    if (!file.name.endsWith('.csv')) {
+      setValidationErrors([{ row: 0, field: 'file', message: 'Please upload a CSV file' }]);
+      return;
+    }
 
     setFileName(file.name);
     setResults(null);
@@ -189,10 +192,31 @@ export function BatchUploadDialog() {
         setValidationErrors([{ row: 0, field: 'file', message: `Parse error: ${error.message}` }]);
       }
     });
-
-    // Reset input
-    event.target.value = '';
   }, []);
+
+  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    processFile(file);
+    event.target.value = '';
+  }, [processFile]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processFile(file);
+  }, [processFile]);
 
   const handleUpload = async () => {
     if (parsedLoans.length === 0) return;
@@ -248,8 +272,17 @@ export function BatchUploadDialog() {
             </Button>
           </div>
 
-          {/* File Upload */}
-          <div className="border-2 border-dashed rounded-lg p-6 text-center">
+          {/* File Upload / Drop Zone */}
+          <div
+            className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+              isDragging
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:border-primary/50'
+            }`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <input
               type="file"
               accept=".csv"
@@ -258,8 +291,10 @@ export function BatchUploadDialog() {
               id="csv-upload"
             />
             <label htmlFor="csv-upload" className="cursor-pointer">
-              <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-              <p className="text-sm font-medium">Click to upload CSV file</p>
+              <Upload className={`h-8 w-8 mx-auto mb-2 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
+              <p className="text-sm font-medium">
+                {isDragging ? 'Drop CSV file here' : 'Drag & drop or click to upload CSV'}
+              </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {fileName || 'No file selected'}
               </p>

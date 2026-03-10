@@ -6,7 +6,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Plus, FileUp, Loader2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Plus, FileUp, Loader2, ExternalLink } from 'lucide-react';
 import { useCreateLoan } from '@/hooks/useLoans';
 import { InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
 import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
@@ -44,16 +45,27 @@ interface LoanFormData {
   commitment_fee_basis: CommitmentFeeBasis;
   // Fees
   arrangement_fee: string;
-  // Valuation
+  // Valuation & Asset
   valuation: string;
+  valuation_date: string;
   ltv: string;
   rental_income: string;
+  walt: string;
+  walt_comment: string;
+  occupancy: string;
+  guarantor: string;
+  photo_url: string;
   // Pipeline
   pipeline_stage: string;
   // Payments & Notices
   notice_frequency: string;
   payment_due_rule: string;
   cash_interest_percentage: string;
+  // Notes & Links
+  remarks: string;
+  additional_info: string;
+  google_maps_url: string;
+  kadastrale_kaart_url: string;
 }
 
 const initialFormData: LoanFormData = {
@@ -82,17 +94,30 @@ const initialFormData: LoanFormData = {
   commitment_fee_basis: 'undrawn_only',
   arrangement_fee: '',
   valuation: '',
+  valuation_date: '',
   ltv: '',
   rental_income: '',
+  walt: '',
+  walt_comment: '',
+  occupancy: '',
+  guarantor: '',
+  photo_url: '',
   pipeline_stage: 'prospect',
   notice_frequency: 'monthly',
   payment_due_rule: '',
   cash_interest_percentage: '',
+  remarks: '',
+  additional_info: '',
+  google_maps_url: '',
+  kadastrale_kaart_url: '',
 };
 
-export function CreateLoanDialog() {
+export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [formData, setFormData] = useState<LoanFormData>(initialFormData);
+  const [formData, setFormData] = useState<LoanFormData>({
+    ...initialFormData,
+    vehicle: defaultVehicle || DEFAULT_VEHICLE,
+  });
   const createLoan = useCreateLoan();
 
   // PDF upload state
@@ -102,6 +127,12 @@ export function CreateLoanDialog() {
   const durationMonthsRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsedResult, setParsedResult] = useState<ParsedDocumentResult | null>(null);
+  // Sync vehicle when tab changes (only when dialog is closed / form is pristine)
+  useEffect(() => {
+    if (!isOpen && defaultVehicle) {
+      setFormData(prev => ({ ...prev, vehicle: defaultVehicle }));
+    }
+  }, [defaultVehicle, isOpen]);
 
   // Auto-compute maturity_date when loan_start_date changes and duration was parsed from PDF
   useEffect(() => {
@@ -213,7 +244,8 @@ export function CreateLoanDialog() {
     property_status: 'Property Status', earmarked: 'Earmarked',
     property_address: 'Property Address', notice_frequency: 'Frequency',
     payment_due_rule: 'Due Rule', rental_income: 'Rental Income',
-    valuation: 'Valuation', ltv: 'LTV', additional_info: 'Description',
+    valuation: 'Valuation', ltv: 'LTV', walt: 'WALT', occupancy: 'Occupancy',
+    additional_info: 'Description', remarks: 'Remarks',
   };
 
   const formatParsedValue = (key: string, value: string): string => {
@@ -221,7 +253,8 @@ export function CreateLoanDialog() {
       const num = parseFloat(value);
       if (!isNaN(num)) return `€${num.toLocaleString('nl-NL')}`;
     }
-    if (['interest_rate', 'commitment_fee_rate', 'ltv'].includes(key)) return `${value}%`;
+    if (['interest_rate', 'commitment_fee_rate', 'ltv', 'occupancy'].includes(key)) return `${value}%`;
+    if (key === 'walt') return `${value} yrs`;
     if (key === 'earmarked') return value === 'true' ? 'Yes' : 'No';
     if (key === 'additional_info' && value.length > 80) return value.slice(0, 80) + '…';
     return value;
@@ -260,15 +293,25 @@ export function CreateLoanDialog() {
       property_address: formData.property_address || null,
       arrangement_fee: formData.arrangement_fee ? parseFloat(formData.arrangement_fee) : null,
       valuation: formData.valuation ? parseFloat(formData.valuation) : null,
+      valuation_date: formData.valuation_date || null,
       ltv: formData.ltv ? parseFloat(formData.ltv) / 100 : null,
       rental_income: formData.rental_income ? parseFloat(formData.rental_income) : null,
+      walt: formData.walt ? parseFloat(formData.walt) : null,
+      walt_comment: formData.walt_comment || null,
+      occupancy: formData.occupancy ? parseFloat(formData.occupancy) / 100 : null,
+      guarantor: formData.guarantor || null,
+      photo_url: formData.photo_url || null,
       pipeline_stage: isPipeline ? formData.pipeline_stage : null,
       cash_interest_percentage: formData.cash_interest_percentage ? parseFloat(formData.cash_interest_percentage) : null,
+      remarks: formData.remarks || null,
+      additional_info: formData.additional_info || null,
+      google_maps_url: formData.google_maps_url || null,
+      kadastrale_kaart_url: formData.kadastrale_kaart_url || null,
     };
 
     await createLoan.mutateAsync(payload);
     setIsOpen(false);
-    setFormData(initialFormData);
+    setFormData({ ...initialFormData, vehicle: defaultVehicle || DEFAULT_VEHICLE });
     setPdfFilledFields(new Set());
     setPdfStatus(null);
     setParsedResult(null);
@@ -702,10 +745,10 @@ export function CreateLoanDialog() {
 
           <Separator />
 
-          {/* Valuation Section */}
+          {/* Valuation & Asset Section */}
           <div className="space-y-4">
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Valuation
+              Valuation & Asset
             </h3>
             <div className="grid grid-cols-3 gap-4">
               <div className="space-y-2">
@@ -718,6 +761,15 @@ export function CreateLoanDialog() {
                   onChange={(e) => handleChange('valuation', e.target.value)}
                   placeholder="0"
                   className={pdfFieldClass('valuation')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="valuation_date">Valuation Date</Label>
+                <Input
+                  id="valuation_date"
+                  type="date"
+                  value={formData.valuation_date}
+                  onChange={(e) => handleChange('valuation_date', e.target.value)}
                 />
               </div>
               <div className="space-y-2">
@@ -744,6 +796,61 @@ export function CreateLoanDialog() {
                   className={pdfFieldClass('rental_income')}
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="walt">WALT (years)<PdfPill field="walt" /></Label>
+                <Input
+                  id="walt"
+                  type="number"
+                  step="0.1"
+                  value={formData.walt}
+                  onChange={(e) => handleChange('walt', e.target.value)}
+                  placeholder="e.g., 4.5"
+                  className={pdfFieldClass('walt')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="occupancy">Occupancy (%)<PdfPill field="occupancy" /></Label>
+                <Input
+                  id="occupancy"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="100"
+                  value={formData.occupancy}
+                  onChange={(e) => handleChange('occupancy', e.target.value)}
+                  placeholder="e.g., 95"
+                  className={pdfFieldClass('occupancy')}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="walt_comment">WALT Comment</Label>
+                <Input
+                  id="walt_comment"
+                  value={formData.walt_comment}
+                  onChange={(e) => handleChange('walt_comment', e.target.value)}
+                  placeholder="e.g., HEMA anchor tenant until 2035"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="guarantor">Guarantor</Label>
+                <Input
+                  id="guarantor"
+                  value={formData.guarantor}
+                  onChange={(e) => handleChange('guarantor', e.target.value)}
+                  placeholder="e.g., Personal guarantee from sponsor"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="photo_url">Photo URL</Label>
+              <Input
+                id="photo_url"
+                value={formData.photo_url}
+                onChange={(e) => handleChange('photo_url', e.target.value)}
+                placeholder="Paste image URL"
+              />
             </div>
           </div>
 
@@ -822,6 +929,73 @@ export function CreateLoanDialog() {
                   placeholder="e.g., 5 business days after period end"
                   className={pdfFieldClass('payment_due_rule')}
                 />
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Notes & Links Section */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Notes & Links
+            </h3>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="remarks">Remarks</Label>
+                <Input
+                  id="remarks"
+                  value={formData.remarks}
+                  onChange={(e) => handleChange('remarks', e.target.value)}
+                  placeholder="Short note about this loan..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="additional_info">Description<PdfPill field="additional_info" /></Label>
+                <Textarea
+                  id="additional_info"
+                  value={formData.additional_info}
+                  onChange={(e) => handleChange('additional_info', e.target.value)}
+                  placeholder="Detailed loan description — auto-generated from document upload..."
+                  rows={4}
+                  className={pdfFieldClass('additional_info')}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="google_maps_url">Google Maps</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="google_maps_url"
+                      value={formData.google_maps_url}
+                      onChange={(e) => handleChange('google_maps_url', e.target.value)}
+                      placeholder="Paste Google Maps link"
+                      className="flex-1"
+                    />
+                    {formData.google_maps_url && (
+                      <a href={formData.google_maps_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border hover:bg-muted">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="kadastrale_kaart_url">Kadasterkaart</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="kadastrale_kaart_url"
+                      value={formData.kadastrale_kaart_url}
+                      onChange={(e) => handleChange('kadastrale_kaart_url', e.target.value)}
+                      placeholder="Paste Kadasterkaart link"
+                      className="flex-1"
+                    />
+                    {formData.kadastrale_kaart_url && (
+                      <a href={formData.kadastrale_kaart_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border hover:bg-muted">
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
