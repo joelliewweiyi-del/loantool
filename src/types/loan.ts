@@ -220,6 +220,7 @@ export interface LoanActivityLog {
   activity_type: ActivityType | null;
   activity_date: string | null;
   created_by: string;
+  created_by_email: string | null;
   updated_at: string | null;
   created_at: string;
 }

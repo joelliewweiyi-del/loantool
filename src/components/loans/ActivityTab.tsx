@@ -15,7 +15,8 @@ import {
 import { formatDate, formatDateTime, formatActivityType } from '@/lib/format';
 import { ActivityType } from '@/types/loan';
 import { Plus, Pencil, Trash2, Phone, Mail, Users, MapPin, MessageSquare, X, Check } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { format as fnsFormat, formatDistanceToNow } from 'date-fns';
+import { getCurrentDate } from '@/lib/simulatedDate';
 
 const ACTIVITY_TYPES: { value: ActivityType; label: string; icon: typeof Phone }[] = [
   { value: 'call', label: 'Call', icon: Phone },
@@ -57,7 +58,7 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
   // Add form state
   const [content, setContent] = useState('');
   const [activityType, setActivityType] = useState<string>('');
-  const [activityDate, setActivityDate] = useState('');
+  const [activityDate, setActivityDate] = useState(() => fnsFormat(getCurrentDate(), 'yyyy-MM-dd'));
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -75,7 +76,7 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
     });
     setContent('');
     setActivityType('');
-    setActivityDate('');
+    setActivityDate(fnsFormat(getCurrentDate(), 'yyyy-MM-dd'));
   };
 
   const handleStartEdit = (entry: { id: string; content: string; activity_type: ActivityType | null; activity_date: string | null }) => {
@@ -180,83 +181,116 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
             No activity logged yet
           </div>
         ) : (
-          <div className="space-y-4">
-            {entries.map((entry) => {
+          <div className="space-y-3">
+            {entries.map((entry, index) => {
+              const entryDate = fnsFormat(new Date(entry.created_at), 'yyyy-MM-dd');
+              const prevDate = index > 0 ? fnsFormat(new Date(entries[index - 1].created_at), 'yyyy-MM-dd') : null;
+              const showDateSeparator = entryDate !== prevDate;
               const isAuthor = user?.id === entry.created_by;
               const isEditing = editingId === entry.id;
 
               return (
-                <div key={entry.id} className="group border-l-2 border-border pl-4 py-1">
-                  {isEditing ? (
-                    <div className="space-y-2">
-                      <Textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        rows={3}
-                        autoFocus
-                      />
-                      <div className="flex items-center gap-2">
-                        <Select value={editType} onValueChange={setEditType}>
-                          <SelectTrigger className="h-7 w-[130px] text-xs">
-                            <SelectValue placeholder="Type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ACTIVITY_TYPES.map(t => (
-                              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Input
-                          type="date"
-                          value={editDate}
-                          onChange={(e) => setEditDate(e.target.value)}
-                          className="h-7 w-[150px] text-xs"
-                        />
-                        <div className="flex-1" />
-                        <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditingId(null)}>
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="sm" className="h-7" onClick={handleSaveEdit} disabled={updateLog.isPending}>
-                          <Check className="h-3.5 w-3.5 mr-1" />
-                          Save
-                        </Button>
-                      </div>
+                <div key={entry.id}>
+                  {showDateSeparator && (
+                    <div className="flex justify-center mb-3 mt-1">
+                      <span className="text-[11px] text-foreground-muted bg-muted/60 px-3 py-0.5 rounded-full">
+                        {fnsFormat(new Date(entry.created_at), 'EEEE, d MMM yyyy')}
+                      </span>
                     </div>
-                  ) : (
-                    <>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <ActivityTypeBadge type={entry.activity_type} />
-                          {entry.activity_date && (
-                            <span className="font-mono text-xs text-foreground-secondary">
-                              {formatDate(entry.activity_date)}
-                            </span>
-                          )}
+                  )}
+                <div className="flex items-start gap-2">
+                  {(() => {
+                    const email = entry.created_by_email || (isAuthor ? user?.email : null);
+                    const name = email?.split('@')[0] || '?';
+                    const initial = name.charAt(0).toUpperCase();
+                    const colors = [
+                      'bg-primary/20 text-primary',
+                      'bg-accent-amber/20 text-accent-amber',
+                      'bg-accent-sage/20 text-accent-sage',
+                      'bg-destructive/20 text-destructive',
+                    ];
+                    const colorIdx = name.charCodeAt(0) % colors.length;
+                    return (
+                      <div className={`shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold ${colors[colorIdx]}`}>
+                        {initial}
+                      </div>
+                    );
+                  })()}
+                  <div className="flex flex-col items-start min-w-0 flex-1">
+                    <span className="text-[11px] font-medium text-primary/70 mb-0.5">
+                      {isAuthor ? 'You' : ((entry.created_by_email || user?.email)?.split('@')[0] || 'Team member')}
+                    </span>
+                    <div className="group relative max-w-full bg-white rounded-lg rounded-tl-sm shadow-sm border border-border/40 px-3 py-1.5">
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <Textarea
+                          value={editContent}
+                          onChange={(e) => setEditContent(e.target.value)}
+                          rows={3}
+                          autoFocus
+                          className="text-sm"
+                        />
+                        <div className="flex items-center gap-2">
+                          <Select value={editType} onValueChange={setEditType}>
+                            <SelectTrigger className="h-7 w-[130px] text-xs">
+                              <SelectValue placeholder="Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ACTIVITY_TYPES.map(t => (
+                                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            type="date"
+                            value={editDate}
+                            onChange={(e) => setEditDate(e.target.value)}
+                            className="h-7 w-[150px] text-xs"
+                          />
+                          <div className="flex-1" />
+                          <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditingId(null)}>
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button size="sm" className="h-7" onClick={handleSaveEdit} disabled={updateLog.isPending}>
+                            <Check className="h-3.5 w-3.5 mr-1" />
+                            Save
+                          </Button>
                         </div>
+                      </div>
+                    ) : (
+                      <>
+                        {entry.activity_type && (
+                          <span className="mr-1.5"><ActivityTypeBadge type={entry.activity_type} /></span>
+                        )}
+                        <span className="text-sm whitespace-pre-wrap">{entry.content}</span>
+                        <span className="inline-flex items-center gap-1 ml-2 align-baseline whitespace-nowrap">
+                          {entry.activity_date && (
+                            <span className="font-mono text-[10px] text-foreground-muted">{formatDate(entry.activity_date)}</span>
+                          )}
+                          <span className="text-[10px] text-foreground-muted">{fnsFormat(new Date(entry.created_at), 'HH:mm')}</span>
+                          {entry.updated_at && <span className="text-[10px] text-foreground-muted italic">edited</span>}
+                        </span>
                         {isAuthor && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleStartEdit(entry)}>
-                              <Pencil className="h-3 w-3" />
+                          <div className="absolute -right-14 top-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => handleStartEdit(entry)}>
+                              <Pencil className="h-2.5 w-2.5" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                              className="h-5 w-5 p-0 text-destructive hover:text-destructive"
                               onClick={() => handleDelete(entry.id)}
                               disabled={deleteLog.isPending}
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <Trash2 className="h-2.5 w-2.5" />
                             </Button>
                           </div>
                         )}
-                      </div>
-                      <p className="text-sm mt-1 whitespace-pre-wrap">{entry.content}</p>
-                      <p className="text-xs text-foreground-muted mt-1">
-                        {isAuthor ? 'You' : 'Team member'} · {formatDistanceToNow(new Date(entry.created_at), { addSuffix: true })}
-                        {entry.updated_at && ' · edited'}
-                      </p>
-                    </>
-                  )}
+                      </>
+                    )}
+                    </div>
+                  </div>
+                </div>
                 </div>
               );
             })}

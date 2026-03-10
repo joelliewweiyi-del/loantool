@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, FileUp, Loader2, ExternalLink } from 'lucide-react';
+import { Plus, Minus, FileUp, Loader2, ExternalLink } from 'lucide-react';
 import { useCreateLoan } from '@/hooks/useLoans';
 import { InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
 import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
@@ -127,6 +127,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
   const durationMonthsRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsedResult, setParsedResult] = useState<ParsedDocumentResult | null>(null);
+  const [propertyAddresses, setPropertyAddresses] = useState<string[]>(['']);
   // Sync vehicle when tab changes (only when dialog is closed / form is pristine)
   useEffect(() => {
     if (!isOpen && defaultVehicle) {
@@ -203,6 +204,9 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
       }
 
       setFormData(newFormData);
+      if (newFormData.property_address) {
+        setPropertyAddresses(newFormData.property_address.split('\n').filter(Boolean));
+      }
       setPdfFilledFields(filled);
 
       const docLabel = result.documentType === 'credit_proposal' ? 'credit proposal' : 'kredietbrief';
@@ -290,7 +294,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
       red_iv_start_date: formData.red_iv_start_date || null,
       borrower_email: formData.borrower_email || null,
       borrower_address: formData.borrower_address || null,
-      property_address: formData.property_address || null,
+      property_address: propertyAddresses.filter(a => a.trim()).join('\n') || null,
       arrangement_fee: formData.arrangement_fee ? parseFloat(formData.arrangement_fee) : null,
       valuation: formData.valuation ? parseFloat(formData.valuation) : null,
       valuation_date: formData.valuation_date || null,
@@ -312,6 +316,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
     await createLoan.mutateAsync(payload);
     setIsOpen(false);
     setFormData({ ...initialFormData, vehicle: defaultVehicle || DEFAULT_VEHICLE });
+    setPropertyAddresses(['']);
     setPdfFilledFields(new Set());
     setPdfStatus(null);
     setParsedResult(null);
@@ -592,14 +597,42 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="property_address">Property Address<PdfPill field="property_address" /></Label>
-                <Input
-                  id="property_address"
-                  value={formData.property_address}
-                  onChange={(e) => handleChange('property_address', e.target.value)}
-                  placeholder="e.g., Oudenoord 330-340, Utrecht"
-                  className={pdfFieldClass('property_address')}
-                />
+                <Label>Property Addresses<PdfPill field="property_address" /></Label>
+                {propertyAddresses.map((addr, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      value={addr}
+                      onChange={(e) => {
+                        const updated = [...propertyAddresses];
+                        updated[idx] = e.target.value;
+                        setPropertyAddresses(updated);
+                      }}
+                      placeholder="e.g., Oudenoord 330-340, Utrecht"
+                      className={idx === 0 ? pdfFieldClass('property_address') : ''}
+                    />
+                    {propertyAddresses.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => setPropertyAddresses(propertyAddresses.filter((_, i) => i !== idx))}
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-1"
+                  onClick={() => setPropertyAddresses([...propertyAddresses, ''])}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add Address
+                </Button>
               </div>
               <div className="space-y-2 col-span-2">
                 <Label htmlFor="borrower_email">Borrower Email</Label>
@@ -680,27 +713,31 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
 
           {/* Structure Section */}
           <div className="space-y-4">
-            <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-700 rounded-lg p-3">
-              <h3 className="text-sm font-semibold text-orange-900 dark:text-orange-100 flex items-center gap-2">
-                ⚠️ Opening Balances — As of Start Date Only
-              </h3>
-              <p className="text-xs text-orange-800 dark:text-orange-200 mt-1">
-                <strong>Important:</strong> Only enter amounts effective on <strong>{formData.loan_start_date || 'the loan start date'}</strong>. 
-                Draws, fees, or changes occurring on later dates must be added as separate events after loan creation.
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="outstanding">Outstanding (EUR)</Label>
-                <Input
-                  id="outstanding"
-                  type="number"
-                  step="0.01"
-                  value={formData.outstanding}
-                  onChange={(e) => handleChange('outstanding', e.target.value)}
-                  placeholder="0.00"
-                />
+            {!isPipeline && (
+              <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-700 rounded-lg p-3">
+                <h3 className="text-sm font-semibold text-orange-900 dark:text-orange-100 flex items-center gap-2">
+                  ⚠️ Opening Balances — As of Start Date Only
+                </h3>
+                <p className="text-xs text-orange-800 dark:text-orange-200 mt-1">
+                  <strong>Important:</strong> Only enter amounts effective on <strong>{formData.loan_start_date || 'the loan start date'}</strong>.
+                  Draws, fees, or changes occurring on later dates must be added as separate events after loan creation.
+                </p>
               </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              {!isPipeline && (
+                <div className="space-y-2">
+                  <Label htmlFor="outstanding">Outstanding (EUR)</Label>
+                  <Input
+                    id="outstanding"
+                    type="number"
+                    step="0.01"
+                    value={formData.outstanding}
+                    onChange={(e) => handleChange('outstanding', e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="total_commitment">Total Commitment (EUR)<PdfPill field="total_commitment" /></Label>
                 <Input

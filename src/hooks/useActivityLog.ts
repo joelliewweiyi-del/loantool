@@ -67,6 +67,7 @@ export function useCreateActivityLog() {
           activity_type: input.activity_type || null,
           activity_date: input.activity_date || null,
           created_by: user.user.id,
+          created_by_email: user.user.email || null,
         }])
         .select()
         .single();

@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Pencil } from 'lucide-react';
+import { Pencil, Plus, Minus } from 'lucide-react';
 import { useUpdateLoan } from '@/hooks/useLoans';
 import { Loan, InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
 import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
@@ -58,6 +58,7 @@ interface LoanFormData {
 export function EditLoanDialog({ loan }: EditLoanDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const updateLoan = useUpdateLoan();
+  const [propertyAddresses, setPropertyAddresses] = useState<string[]>(['']);
   
   const [formData, setFormData] = useState<LoanFormData>({
     borrower_name: '',
@@ -102,6 +103,8 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
   // Populate form when dialog opens
   useEffect(() => {
     if (isOpen && loan) {
+      const addrs = loan.property_address ? loan.property_address.split('\n').filter(Boolean) : [''];
+      setPropertyAddresses(addrs.length ? addrs : ['']);
       setFormData({
         borrower_name: loan.borrower_name || '',
         loan_start_date: loan.loan_start_date || '',
@@ -173,7 +176,7 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
       red_iv_start_date: formData.red_iv_start_date || null,
       borrower_email: formData.borrower_email || null,
       borrower_address: formData.borrower_address || null,
-      property_address: formData.property_address || null,
+      property_address: propertyAddresses.filter(a => a.trim()).join('\n') || null,
       guarantor: formData.guarantor || null,
       valuation: formData.valuation ? parseFloat(formData.valuation) : null,
       valuation_date: formData.valuation_date || null,
@@ -634,13 +637,41 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-property_address">Property Address</Label>
-                <Input
-                  id="edit-property_address"
-                  value={formData.property_address}
-                  onChange={(e) => handleChange('property_address', e.target.value)}
-                  placeholder="e.g., Oudenoord 330-340, Utrecht"
-                />
+                <Label>Property Addresses</Label>
+                {propertyAddresses.map((addr, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      value={addr}
+                      onChange={(e) => {
+                        const updated = [...propertyAddresses];
+                        updated[idx] = e.target.value;
+                        setPropertyAddresses(updated);
+                      }}
+                      placeholder="e.g., Oudenoord 330-340, Utrecht"
+                    />
+                    {propertyAddresses.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0"
+                        onClick={() => setPropertyAddresses(propertyAddresses.filter((_, i) => i !== idx))}
+                      >
+                        <Minus className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-1"
+                  onClick={() => setPropertyAddresses([...propertyAddresses, ''])}
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" />
+                  Add Address
+                </Button>
               </div>
               <div className="space-y-2 col-span-2">
                 <Label htmlFor="edit-borrower_email">Borrower Email</Label>
