@@ -32,6 +32,8 @@ interface LoanTapeData {
   ltv: number | null;
   duration: number | null;
   pipelineStage: string | null;
+  walt: number | null;
+  waltComment: string | null;
   // Extra fields for detailed / full exports
   occupancy: number | null;
   googleMapsUrl?: string;
@@ -81,6 +83,8 @@ export function buildLoanTapeData(
       ltv: loan.valuation ? Math.max(effectiveCommitment, outstanding) / loan.valuation : null,
       duration: computeDuration(loan.maturity_date, asOfDate),
       pipelineStage: loan.pipeline_stage || null,
+      walt: loan.walt,
+      waltComment: loan.walt_comment || '',
       occupancy: loan.occupancy,
       googleMapsUrl: loan.google_maps_url || '',
       kadastraleKaartUrl: loan.kadastrale_kaart_url || '',
@@ -178,6 +182,9 @@ const SUMMARY_COLUMNS: ColDef[] = [
   { header: 'Valuation (as-is)', key: 'valuation', width: 18, numFmt: CURRENCY_FMT, isCurrency: true },
   { header: 'LTV', key: 'ltv', width: 10, numFmt: PERCENT_FMT, isPercent: true },
   { header: 'Duration', key: 'duration', width: 10, numFmt: NUMBER_FMT },
+  { header: 'WALT', key: 'walt', width: 10, numFmt: NUMBER_FMT },
+  { header: 'WALT Comment', key: 'waltComment', width: 30 },
+  { header: 'Occupancy', key: 'occupancy', width: 12, numFmt: PERCENT_FMT, isPercent: true },
 ];
 
 // Detailed: current 20 + 4 extra
@@ -335,6 +342,8 @@ export async function downloadSummaryLoanTapeXlsx(
     const rateCol = colLetterOf('interestRate');
     const ltvCol = colLetterOf('ltv');
     const durCol = colLetterOf('duration');
+    const waltCol = colLetterOf('walt');
+    const occCol = colLetterOf('occupancy');
 
     cols.forEach((col, i) => {
       const cell = row.getCell(i + 2);
@@ -362,6 +371,16 @@ export async function downloadSummaryLoanTapeXlsx(
         const durRange = `${durCol}${firstDataRow}:${durCol}${lastDataRow}`;
         const commitRange = `${commitCol}${firstDataRow}:${commitCol}${lastDataRow}`;
         cell.value = { formula: `IFERROR(SUMPRODUCT(${durRange},${commitRange})/SUM(${commitRange}),"")` } as any;
+      } else if (col.key === 'walt') {
+        // Weighted average WALT by commitment
+        const waltRange = `${waltCol}${firstDataRow}:${waltCol}${lastDataRow}`;
+        const commitRange = `${commitCol}${firstDataRow}:${commitCol}${lastDataRow}`;
+        cell.value = { formula: `IFERROR(SUMPRODUCT(${waltRange},${commitRange})/SUM(${commitRange}),"")` } as any;
+      } else if (col.key === 'occupancy') {
+        // Weighted average Occupancy by commitment
+        const occRange = `${occCol}${firstDataRow}:${occCol}${lastDataRow}`;
+        const commitRange = `${commitCol}${firstDataRow}:${commitCol}${lastDataRow}`;
+        cell.value = { formula: `IFERROR(SUMPRODUCT(${occRange},${commitRange})/SUM(${commitRange}),"")` } as any;
       } else {
         cell.value = '';
       }
@@ -407,6 +426,22 @@ export async function downloadSummaryLoanTapeXlsx(
     const rateCol = colLetterOf('interestRate');
     const ltvCol = colLetterOf('ltv');
     const durCol = colLetterOf('duration');
+    const waltCol = colLetterOf('walt');
+    const occCol = colLetterOf('occupancy');
+
+    // Helper to build weighted average formula across IP + NIP ranges
+    const weightedAvgFormula = (valCol: string) => {
+      const groups: { first: number; last: number }[] = [];
+      if (incomeProducing.length > 0) groups.push({ first: ipFirstRow, last: ipLastRow });
+      if (nonIncomeProducing.length > 0) groups.push({ first: nipFirstRow, last: nipLastRow });
+      const commitParts = groups.map(src => ({
+        val: `${valCol}${src.first}:${valCol}${src.last}`,
+        commit: `${commitCol}${src.first}:${commitCol}${src.last}`,
+      }));
+      const sumProd = commitParts.map(p => `SUMPRODUCT(${p.val},${p.commit})`).join('+');
+      const sumCommit = commitParts.map(p => `SUM(${p.commit})`).join('+');
+      return `IFERROR((${sumProd})/(${sumCommit}),"")`;
+    };
 
     cols.forEach((col, i) => {
       const cell = row.getCell(i + 2);
@@ -423,36 +458,15 @@ export async function downloadSummaryLoanTapeXlsx(
       } else if (col.key === 'commitment' || col.key === 'outstanding' || col.key === 'undrawn' || col.key === 'rentalIncome' || col.key === 'valuation') {
         cell.value = { formula: parts.map(r => `SUM(${r})`).join('+') || '0' } as any;
       } else if (col.key === 'interestRate') {
-        // Weighted average Interest Rate by commitment
-        const commitParts = parts.map((_, pi) => {
-          const src = pi === 0 && incomeProducing.length > 0
-            ? { first: ipFirstRow, last: ipLastRow }
-            : { first: nipFirstRow, last: nipLastRow };
-          return { rate: `${rateCol}${src.first}:${rateCol}${src.last}`, commit: `${commitCol}${src.first}:${commitCol}${src.last}` };
-        });
-        const sumProd = commitParts.map(p => `SUMPRODUCT(${p.rate},${p.commit})`).join('+');
-        const sumCommit = commitParts.map(p => `SUM(${p.commit})`).join('+');
-        cell.value = { formula: `IFERROR((${sumProd})/(${sumCommit}),"")` } as any;
+        cell.value = { formula: weightedAvgFormula(rateCol) } as any;
       } else if (col.key === 'ltv') {
-        const commitParts = parts.map((_, pi) => {
-          const src = pi === 0 && incomeProducing.length > 0
-            ? { first: ipFirstRow, last: ipLastRow }
-            : { first: nipFirstRow, last: nipLastRow };
-          return { ltv: `${ltvCol}${src.first}:${ltvCol}${src.last}`, commit: `${commitCol}${src.first}:${commitCol}${src.last}` };
-        });
-        const sumProd = commitParts.map(p => `SUMPRODUCT(${p.ltv},${p.commit})`).join('+');
-        const sumCommit = commitParts.map(p => `SUM(${p.commit})`).join('+');
-        cell.value = { formula: `IFERROR((${sumProd})/(${sumCommit}),"")` } as any;
+        cell.value = { formula: weightedAvgFormula(ltvCol) } as any;
       } else if (col.key === 'duration') {
-        const commitParts = parts.map((_, pi) => {
-          const src = pi === 0 && incomeProducing.length > 0
-            ? { first: ipFirstRow, last: ipLastRow }
-            : { first: nipFirstRow, last: nipLastRow };
-          return { dur: `${durCol}${src.first}:${durCol}${src.last}`, commit: `${commitCol}${src.first}:${commitCol}${src.last}` };
-        });
-        const sumProd = commitParts.map(p => `SUMPRODUCT(${p.dur},${p.commit})`).join('+');
-        const sumCommit = commitParts.map(p => `SUM(${p.commit})`).join('+');
-        cell.value = { formula: `IFERROR((${sumProd})/(${sumCommit}),"")` } as any;
+        cell.value = { formula: weightedAvgFormula(durCol) } as any;
+      } else if (col.key === 'walt') {
+        cell.value = { formula: weightedAvgFormula(waltCol) } as any;
+      } else if (col.key === 'occupancy') {
+        cell.value = { formula: weightedAvgFormula(occCol) } as any;
       } else {
         cell.value = '';
       }

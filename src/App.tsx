@@ -11,6 +11,7 @@ import LoanDetail from "./pages/LoanDetail";
 import Afas from "./pages/Afas";
 import MonthlyApproval from "./pages/MonthlyApproval";
 import Export from "./pages/Export";
+import Activity from "./pages/Activity";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -84,6 +85,14 @@ function AppRoutes() {
       <Route path="/afas-dashboard" element={<Navigate to="/afas" replace />} />
       <Route path="/afas-data" element={<Navigate to="/afas?tab=data" replace />} />
       <Route path="/afas-gl-explorer" element={<Navigate to="/afas" replace />} />
+      <Route
+        path="/activity"
+        element={
+          <ProtectedRoute>
+            <Activity />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/export"
         element={

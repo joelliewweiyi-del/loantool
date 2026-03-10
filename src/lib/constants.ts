@@ -4,7 +4,7 @@ export const VEHICLES = [
   { value: 'Pipeline', label: 'Pipeline' },
 ] as const;
 
-export const DEFAULT_VEHICLE = 'TLF';
+export const DEFAULT_VEHICLE = 'Pipeline';
 
 export type Vehicle = (typeof VEHICLES)[number]['value'];
 

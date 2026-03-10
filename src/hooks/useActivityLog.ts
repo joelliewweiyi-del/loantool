@@ -20,6 +20,43 @@ export function useLoanActivityLog(loanId: string | undefined) {
   });
 }
 
+export interface ActivityLogWithLoan extends LoanActivityLog {
+  borrower_name: string;
+  loan_display_id: string;
+  vehicle: string | null;
+}
+
+export function useAllActivityLog() {
+  return useQuery({
+    queryKey: ['all-activity-log'],
+    queryFn: async () => {
+      const [activityRes, loansRes] = await Promise.all([
+        supabase
+          .from('loan_activity_log' as any)
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('loans')
+          .select('id, borrower_name, loan_id, vehicle'),
+      ]);
+      if (activityRes.error) throw activityRes.error;
+      if (loansRes.error) throw loansRes.error;
+
+      const loansMap: Record<string, { borrower_name: string; loan_id: string; vehicle: string | null }> = {};
+      for (const l of loansRes.data || []) {
+        loansMap[l.id] = { borrower_name: l.borrower_name, loan_id: l.loan_id, vehicle: l.vehicle };
+      }
+
+      return ((activityRes.data || []) as unknown as LoanActivityLog[]).map(a => ({
+        ...a,
+        borrower_name: loansMap[a.loan_id]?.borrower_name || 'Unknown',
+        loan_display_id: loansMap[a.loan_id]?.loan_id || '',
+        vehicle: loansMap[a.loan_id]?.vehicle || null,
+      })) as ActivityLogWithLoan[];
+    },
+  });
+}
+
 export function useLatestActivityPerLoan() {
   return useQuery({
     queryKey: ['latest-activity-per-loan'],

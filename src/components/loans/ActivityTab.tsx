@@ -218,7 +218,7 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
                   })()}
                   <div className="flex flex-col items-start min-w-0 flex-1">
                     <span className="text-[11px] font-medium text-primary/70 mb-0.5">
-                      {isAuthor ? 'You' : ((entry.created_by_email || user?.email)?.split('@')[0] || 'Team member')}
+                      {isAuthor ? 'You' : (entry.created_by_email?.split('@')[0] || 'Team member')}
                     </span>
                     <div className="group relative max-w-full bg-white rounded-lg rounded-tl-sm shadow-sm border border-border/40 px-3 py-1.5">
                     {isEditing ? (

@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Download,
   LayoutDashboard,
+  MessageSquare,
   type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -34,6 +35,7 @@ const navigation: NavGroup[] = [
     label: 'Portfolio',
     items: [
       { name: 'Loans', href: '/loans', icon: FileText },
+      { name: 'Activity', href: '/activity', icon: MessageSquare },
       { name: 'Export', href: '/export', icon: Download },
     ],
   },
