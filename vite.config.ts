@@ -51,11 +51,12 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         runtimeCaching: [
           {
-            // Cache Supabase API calls (stale-while-revalidate)
-            urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/v1\/.*/i,
-            handler: "StaleWhileRevalidate",
+            // Supabase API: network-first so mutations are immediately visible
+            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            handler: "NetworkFirst",
             options: {
               cacheName: "supabase-api",
+              networkTimeoutSeconds: 5,
               expiration: {
                 maxEntries: 100,
                 maxAgeSeconds: 60 * 60, // 1 hour
