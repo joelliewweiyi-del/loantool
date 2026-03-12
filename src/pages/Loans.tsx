@@ -304,28 +304,34 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
           ))}
         </div>
       ) : isMobile ? (
-        /* Mobile Portfolio: compact table rows */
-        <div className="border rounded-xl overflow-hidden bg-card divide-y divide-border">
-          {filteredLoans.map(loan => (
+        /* Mobile Portfolio: dense table view */
+        <div className="-mx-4">
+          {/* Table header */}
+          <div className="flex items-center px-4 py-1.5 text-[10px] uppercase tracking-wider text-foreground-muted font-medium border-b border-border/60">
+            <span className="flex-1 min-w-0">Loan</span>
+            <span className="text-right shrink-0 w-[120px]">Outstanding</span>
+          </div>
+          {/* Table rows */}
+          {filteredLoans.map((loan, i) => (
             <div
               key={loan.id}
-              className="flex items-center px-4 py-3 active:bg-muted/40 transition-colors cursor-pointer"
+              className={`flex items-center px-4 py-2.5 active:bg-muted/40 transition-colors cursor-pointer ${
+                i < filteredLoans.length - 1 ? 'border-b border-border/20' : ''
+              }`}
               onClick={() => navigate(`/loans/${loan.id}`)}
             >
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-semibold text-primary">{(loan as any).loan_id}</span>
-                  <span className="text-sm font-medium truncate">{loan.borrower_name}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono text-[11px] font-bold text-primary shrink-0">{(loan as any).loan_id}</span>
+                  <span className="text-[13px] font-medium truncate">{loan.borrower_name}</span>
                 </div>
-                <div className="flex items-center gap-3 mt-0.5 text-[11px] text-foreground-tertiary font-mono">
+                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-foreground-muted font-mono">
                   <span>{formatPercent(loan.interest_rate, 2)}</span>
-                  <span className="text-foreground-muted">·</span>
+                  <span className="opacity-40">|</span>
                   <span>{formatDate(loan.maturity_date)}</span>
                 </div>
               </div>
-              <div className="text-right shrink-0 pl-3">
-                <div className="font-mono text-sm font-semibold">{formatCurrency(loan.outstanding)}</div>
-              </div>
+              <span className="text-right shrink-0 pl-3 font-mono text-[13px] font-semibold w-[120px]">{formatCurrency(loan.outstanding)}</span>
             </div>
           ))}
         </div>
