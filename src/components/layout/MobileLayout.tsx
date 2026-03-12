@@ -23,9 +23,12 @@ export function MobileLayout({ children }: MobileLayoutProps) {
         {children}
       </main>
 
-      {/* Bottom tab bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-sidebar-border mobile-tab-bar">
-        <div className="flex items-center justify-around h-[3.75rem] px-2 pb-[env(safe-area-inset-bottom)]">
+      {/* Bottom tab bar — safe area padding on the outer nav element */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-sidebar-border mobile-tab-bar"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <div className="flex items-center justify-around h-[3.75rem] px-2">
           {tabs.map((tab) => {
             const isActive = tab.matchExact
               ? location.pathname === tab.matchExact

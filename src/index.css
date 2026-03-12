@@ -252,13 +252,6 @@
   background: hsl(var(--sidebar-background) / 0.92);
 }
 
-/* Safe area padding for notched devices */
-@supports (padding-bottom: env(safe-area-inset-bottom)) {
-  .mobile-tab-bar {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-}
-
 /* On mobile, make tables scroll horizontally */
 @media (max-width: 767px) {
   /* Horizontal scroll for data tables */
