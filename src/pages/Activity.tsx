@@ -14,6 +14,7 @@ import { ActivityType } from '@/types/loan';
 import { Phone, Mail, Users, MapPin, MessageSquare, Search, ExternalLink } from 'lucide-react';
 import { format as fnsFormat, formatDistanceToNow, startOfDay, subDays, startOfWeek, startOfMonth } from 'date-fns';
 import { AttachmentGallery } from '@/components/activity/PhotoAttach';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const ACTIVITY_TYPES: { value: ActivityType; label: string; icon: typeof Phone }[] = [
   { value: 'call', label: 'Call', icon: Phone },
@@ -55,6 +56,7 @@ function getTimeFilterStart(filter: TimeFilter): Date | null {
 
 export default function Activity() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const { data: entries, isLoading } = useAllActivityLog();
 
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('week');
@@ -132,7 +134,12 @@ export default function Activity() {
         <p className="text-sm text-foreground-secondary mt-1 max-md:hidden">All activity across loans</p>
       </div>
 
-      <FinancialStrip items={[
+      <FinancialStrip items={isMobile ? [
+        { label: 'Notes', value: String(stats.total), accent: 'primary' },
+        { label: 'Loans', value: String(stats.uniqueLoans), accent: 'amber' },
+        { label: 'Calls', value: String(stats.calls) },
+        { label: 'Meetings', value: String(stats.meetings), accent: 'sage' },
+      ] : [
         { label: 'Notes', value: String(stats.total), accent: 'primary' },
         { label: 'Loans Touched', value: String(stats.uniqueLoans), accent: 'amber' },
         { label: 'Team Members', value: String(stats.uniquePeople) },
