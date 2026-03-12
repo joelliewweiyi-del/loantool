@@ -212,10 +212,10 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
         <Skeleton className="h-96" />
       </div>;
   }
-  return <div className={isMobile ? "px-4 py-3 space-y-4" : "p-6 space-y-6"}>
+  return <div className={isMobile ? "px-4 pt-5 pb-4 space-y-5" : "p-6 space-y-6"}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">
+          <h1 className={isMobile ? "text-2xl font-bold text-primary" : "text-xl font-semibold"}>
             {mobilePortfolio ? 'Portfolio' : isPipelineVehicle(activeVehicle) ? 'Pipeline' : 'Loans'}
           </h1>
           {!isMobile && (
@@ -224,7 +224,7 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
             </p>
           )}
         </div>
-        
+
         <div className="flex items-center gap-2">
           {canCreate && !mobilePortfolio && <CreateLoanDialog defaultVehicle={activeVehicle} />}
         </div>
@@ -257,7 +257,13 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
         const avgLtv = loansWithLtv.length > 0
           ? loansWithLtv.reduce((s, l) => s + ((l as any).ltv || 0), 0) / loansWithLtv.length
           : 0;
-        return <FinancialStrip items={[
+        return <FinancialStrip items={isMobile ? [
+          { label: 'Deals', value: String(vehicleLoans.length), mono: false },
+          { label: 'Prospect', value: String(prospectCount + noStageCount), mono: false },
+          { label: 'Soft', value: String(softCount), mono: false, accent: 'amber' as const },
+          { label: 'Hard', value: String(hardCount), mono: false, accent: 'sage' as const },
+          { label: 'Commitment', value: formatCurrency(totalCommitmentPipeline) },
+        ] : [
           { label: 'Deals', value: String(vehicleLoans.length), mono: false },
           { label: 'Prospect', value: String(prospectCount + noStageCount), mono: false },
           { label: 'Soft · KB Sent', value: String(softCount), mono: false, accent: 'amber' as const },
@@ -288,7 +294,7 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
         </div>
       ) : isMobile ? (
         /* Mobile card layout */
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           {filteredLoans.map(loan => (
             isPipelineVehicle(activeVehicle)
               ? <PipelineCard key={loan.id} loan={loan} />

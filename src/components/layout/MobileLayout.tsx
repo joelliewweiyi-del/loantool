@@ -25,7 +25,7 @@ export function MobileLayout({ children }: MobileLayoutProps) {
 
       {/* Bottom tab bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 bg-sidebar border-t border-sidebar-border mobile-tab-bar">
-        <div className="flex items-center justify-around h-16 px-2 pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-center justify-around h-[3.75rem] px-2 pb-[env(safe-area-inset-bottom)]">
           {tabs.map((tab) => {
             const isActive = tab.matchExact
               ? location.pathname === tab.matchExact
@@ -37,15 +37,15 @@ export function MobileLayout({ children }: MobileLayoutProps) {
                 key={tab.name}
                 to={tab.href}
                 className={cn(
-                  'flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-lg transition-colors min-w-[4.5rem]',
+                  'flex flex-col items-center gap-1 px-5 py-2 rounded-xl transition-colors min-w-[5rem]',
                   isActive
                     ? 'text-primary'
-                    : 'text-sidebar-foreground/50 active:text-sidebar-foreground/70'
+                    : 'text-sidebar-foreground/45 active:text-sidebar-foreground/70'
                 )}
               >
-                <tab.icon className={cn('h-5 w-5', isActive && 'stroke-[2.5]')} />
+                <tab.icon className={cn('h-[22px] w-[22px]', isActive && 'stroke-[2.5]')} />
                 <span className={cn(
-                  'text-[10px] leading-tight',
+                  'text-[11px] leading-tight',
                   isActive ? 'font-semibold' : 'font-medium'
                 )}>
                   {tab.name}

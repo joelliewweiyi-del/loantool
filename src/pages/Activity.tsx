@@ -126,9 +126,9 @@ export default function Activity() {
   }, [filtered]);
 
   return (
-    <div className="p-6 max-md:px-4 max-md:py-3 space-y-6 max-md:space-y-4 max-w-5xl">
+    <div className="p-6 max-md:px-4 max-md:pt-5 max-md:pb-4 space-y-6 max-md:space-y-5 max-w-5xl">
       <div>
-        <h1 className="text-2xl max-md:text-xl font-bold text-primary">Activity</h1>
+        <h1 className="text-2xl font-bold text-primary">Activity</h1>
         <p className="text-sm text-foreground-secondary mt-1 max-md:hidden">All activity across loans</p>
       </div>
 
@@ -141,60 +141,62 @@ export default function Activity() {
       ]} />
 
       {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
+      <div className="space-y-3">
+        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 max-md:w-full">
           {(['today', 'week', 'month', 'all'] as TimeFilter[]).map(f => (
             <Button
               key={f}
               variant={timeFilter === f ? 'default' : 'ghost'}
               size="sm"
-              className="h-7 text-xs capitalize"
+              className="h-8 max-md:flex-1 text-xs capitalize"
               onClick={() => setTimeFilter(f)}
             >
-              {f === 'week' ? 'This Week' : f === 'month' ? 'This Month' : f === 'today' ? 'Today' : 'All Time'}
+              {f === 'week' ? 'This Week' : f === 'month' ? 'This Month' : f === 'today' ? 'Today' : 'All'}
             </Button>
           ))}
         </div>
 
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="h-8 w-[130px] text-xs">
-            <SelectValue placeholder="All types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            {ACTIVITY_TYPES.map(t => (
-              <SelectItem key={t.value} value={t.value}>
-                <span className="flex items-center gap-1.5">
-                  <t.icon className="h-3 w-3" />
-                  {t.label}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={typeFilter} onValueChange={setTypeFilter}>
+            <SelectTrigger className="h-9 max-md:flex-1 w-[130px] text-xs">
+              <SelectValue placeholder="All types" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All types</SelectItem>
+              {ACTIVITY_TYPES.map(t => (
+                <SelectItem key={t.value} value={t.value}>
+                  <span className="flex items-center gap-1.5">
+                    <t.icon className="h-3 w-3" />
+                    {t.label}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        <Select value={personFilter} onValueChange={setPersonFilter}>
-          <SelectTrigger className="h-8 w-[130px] text-xs">
-            <SelectValue placeholder="Everyone" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Everyone</SelectItem>
-            {teamMembers.map(m => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.id === user?.id ? 'You' : m.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          <Select value={personFilter} onValueChange={setPersonFilter}>
+            <SelectTrigger className="h-9 max-md:flex-1 w-[130px] text-xs">
+              <SelectValue placeholder="Everyone" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Everyone</SelectItem>
+              {teamMembers.map(m => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.id === user?.id ? 'You' : m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground-muted" />
-          <Input
-            placeholder="Search notes or borrower..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="h-8 pl-8 text-xs"
-          />
+          <div className="relative flex-1 min-w-[140px] max-w-xs">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-foreground-muted" />
+            <Input
+              placeholder="Search notes..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="h-9 pl-8 text-xs"
+            />
+          </div>
         </div>
       </div>
 
@@ -221,7 +223,7 @@ export default function Activity() {
                 </span>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {group.entries.map(entry => {
                   const isAuthor = user?.id === entry.created_by;
                   const email = entry.created_by_email || (isAuthor ? user?.email : null);
@@ -236,30 +238,30 @@ export default function Activity() {
                   const colorIdx = name.charCodeAt(0) % colors.length;
 
                   return (
-                    <div key={entry.id} className="flex items-start gap-2.5">
-                      <div className={`shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold mt-5 ${colors[colorIdx]}`}>
+                    <div key={entry.id} className="flex items-start gap-3">
+                      <div className={`shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold mt-5 ${colors[colorIdx]}`}>
                         {initial}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[11px] font-medium text-primary/70">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-xs font-medium text-primary/70">
                             {isAuthor ? 'You' : name}
                           </span>
                           <Link
                             to={`/loans/${entry.loan_id}`}
-                            className="inline-flex items-center gap-1 text-[11px] font-medium text-foreground-secondary hover:text-primary transition-colors"
+                            className="inline-flex items-center gap-1 text-xs font-medium text-foreground-secondary hover:text-primary transition-colors"
                           >
                             <span className="font-mono">{entry.loan_display_id}</span>
-                            <span className="text-foreground-muted">-</span>
-                            <span>{entry.borrower_name}</span>
-                            <ExternalLink className="h-2.5 w-2.5 opacity-50" />
+                            <span className="text-foreground-muted">·</span>
+                            <span className="truncate max-w-[120px]">{entry.borrower_name}</span>
+                            <ExternalLink className="h-2.5 w-2.5 opacity-50 shrink-0" />
                           </Link>
                         </div>
-                        <div className="bg-white rounded-lg rounded-tl-sm shadow-sm border border-border/40 px-3 py-1.5">
+                        <div className="bg-white rounded-xl rounded-tl-sm shadow-sm border border-border/40 px-4 py-2.5">
                           {entry.activity_type && (
                             <span className="mr-1.5"><ActivityTypeBadge type={entry.activity_type} /></span>
                           )}
-                          <span className="text-sm whitespace-pre-wrap">{entry.content}</span>
+                          <span className="text-[15px] max-md:text-sm whitespace-pre-wrap">{entry.content}</span>
                           <AttachmentGallery attachments={entry.attachments} />
                           <span className="inline-flex items-center gap-1 ml-2 align-baseline whitespace-nowrap">
                             {entry.activity_date && (

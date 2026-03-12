@@ -34,51 +34,51 @@ export function PipelineCard({ loan }: PipelineCardProps) {
 
   return (
     <div
-      className="bg-white rounded-xl border border-border/60 shadow-sm overflow-hidden active:bg-muted/30 transition-colors"
+      className="bg-white rounded-2xl border border-border/50 shadow-sm overflow-hidden active:bg-muted/30 transition-colors"
     >
       {/* Tappable header → navigates to detail */}
       <div
-        className="px-4 pt-3 pb-2 cursor-pointer"
+        className="px-5 pt-4 pb-3 cursor-pointer"
         onClick={() => navigate(`/loans/${loan.id}`)}
       >
         <div className="flex items-center justify-between">
           <span className="font-mono text-sm font-semibold text-primary">{loan.loan_id || '—'}</span>
-          <span className="text-xs px-2 py-0.5 rounded bg-muted font-medium">{loan.category || '—'}</span>
+          <span className="text-[11px] px-2.5 py-1 rounded-full bg-muted font-medium">{loan.category || '—'}</span>
         </div>
-        <h3 className="text-base font-semibold mt-0.5 truncate">{loan.borrower_name}</h3>
+        <h3 className="text-[17px] font-semibold mt-1 truncate">{loan.borrower_name}</h3>
         {loan.city && (
-          <div className="flex items-center gap-1 text-xs text-foreground-tertiary mt-0.5">
-            <MapPin className="h-3 w-3" />
+          <div className="flex items-center gap-1.5 text-xs text-foreground-tertiary mt-1">
+            <MapPin className="h-3.5 w-3.5" />
             {loan.city}
           </div>
         )}
       </div>
 
       {/* Metrics row */}
-      <div className="px-4 py-2 flex items-center gap-4 text-xs border-t border-border/30">
-        <div>
-          <span className="text-foreground-muted">Commit</span>
-          <span className="font-mono font-medium ml-1">{formatCurrency(loan.total_commitment || 0)}</span>
+      <div className="px-5 py-3 flex items-center gap-5 text-xs border-t border-border/30">
+        <div className="flex flex-col">
+          <span className="text-[10px] text-foreground-muted uppercase tracking-wide">Commit</span>
+          <span className="font-mono font-medium mt-0.5">{formatCurrency(loan.total_commitment || 0)}</span>
         </div>
-        <div>
-          <span className="text-foreground-muted">Rate</span>
-          <span className="font-mono font-medium ml-1">{loan.interest_rate ? formatPercent(loan.interest_rate, 2) : '—'}</span>
+        <div className="flex flex-col">
+          <span className="text-[10px] text-foreground-muted uppercase tracking-wide">Rate</span>
+          <span className="font-mono font-medium mt-0.5">{loan.interest_rate ? formatPercent(loan.interest_rate, 2) : '—'}</span>
         </div>
         {loan.ltv > 0 && (
-          <div>
-            <span className="text-foreground-muted">LTV</span>
-            <span className="font-mono font-medium ml-1">{formatPercent(loan.ltv, 1)}</span>
+          <div className="flex flex-col">
+            <span className="text-[10px] text-foreground-muted uppercase tracking-wide">LTV</span>
+            <span className="font-mono font-medium mt-0.5">{formatPercent(loan.ltv, 1)}</span>
           </div>
         )}
       </div>
 
       {/* Stage selector + quick note (non-navigating) */}
-      <div className="px-4 py-2.5 border-t border-border/30 flex items-center gap-2">
+      <div className="px-5 py-3 border-t border-border/30 flex items-center gap-3">
         <Select
           value={loan.pipeline_stage || ''}
           onValueChange={(v) => updateLoan.mutate({ id: loan.id, updates: { pipeline_stage: v } as any })}
         >
-          <SelectTrigger className="h-8 flex-1 text-xs">
+          <SelectTrigger className="h-9 flex-1 text-xs rounded-lg">
             <SelectValue placeholder="Stage..." />
           </SelectTrigger>
           <SelectContent>
@@ -93,10 +93,10 @@ export function PipelineCard({ loan }: PipelineCardProps) {
 
         <Popover open={noteOpen} onOpenChange={setNoteOpen}>
           <PopoverTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-8 px-2 shrink-0 relative">
-              <MessageSquare className="h-3.5 w-3.5" />
+            <Button variant="ghost" size="sm" className="h-9 w-9 p-0 shrink-0 relative rounded-lg">
+              <MessageSquare className="h-4 w-4" />
               {latest && (
-                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-accent-amber" />
+                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-accent-amber ring-2 ring-white" />
               )}
             </Button>
           </PopoverTrigger>
@@ -140,8 +140,8 @@ export function PipelineCard({ loan }: PipelineCardProps) {
 
       {/* Last note preview */}
       {latest && (
-        <div className="px-4 py-2 bg-muted/30 border-t border-border/20">
-          <p className="text-[11px] text-foreground-secondary line-clamp-1">
+        <div className="px-5 py-2.5 bg-muted/30 border-t border-border/20">
+          <p className="text-xs text-foreground-secondary line-clamp-1">
             <span className="text-foreground-muted">
               {formatDistanceToNow(new Date(latest.created_at), { addSuffix: false })}:
             </span>{' '}

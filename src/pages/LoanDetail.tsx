@@ -159,9 +159,9 @@ export default function LoanDetail() {
   }
 
   return (
-    <div className={isMobile ? "px-4 py-3 space-y-4" : "p-6 space-y-6"}>
+    <div className={isMobile ? "px-4 pt-4 pb-4 space-y-5" : "p-6 space-y-6"}>
       {/* Header */}
-      <div className={isMobile ? "space-y-2" : "flex items-start justify-between"}>
+      <div className={isMobile ? "space-y-3" : "flex items-start justify-between"}>
         <div className={isMobile ? "" : "flex items-center gap-3"}>
           {!isMobile && (
             <Link to="/loans">
@@ -171,22 +171,31 @@ export default function LoanDetail() {
             </Link>
           )}
           <div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className={isMobile ? "flex items-center gap-2 mb-1.5" : "flex items-center gap-2 flex-wrap"}>
               {isMobile && (
                 <Link to="/loans">
-                  <Button variant="ghost" size="icon" className="h-7 w-7 -ml-1">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2">
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
                 </Link>
               )}
-              <span className="font-mono text-base font-semibold text-primary">{(loan as any).loan_id}</span>
-              <span className="text-foreground-secondary">—</span>
-              <h1 className={isMobile ? "text-base font-semibold" : "text-lg font-semibold"}>{loan.borrower_name}</h1>
-              <StatusBadge status={loan.status} />
-              {isPipelineVehicle(loan.vehicle || '') && (
+              <span className="font-mono text-sm font-semibold text-primary">{(loan as any).loan_id}</span>
+              {!isMobile && <span className="text-foreground-secondary">—</span>}
+              {!isMobile && <h1 className="text-lg font-semibold">{loan.borrower_name}</h1>}
+              {!isMobile && <StatusBadge status={loan.status} />}
+              {!isMobile && isPipelineVehicle(loan.vehicle || '') && (
                 <PipelineStageBadge stage={(loan as any).pipeline_stage} />
               )}
             </div>
+            {isMobile && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-xl font-bold">{loan.borrower_name}</h1>
+                <StatusBadge status={loan.status} />
+                {isPipelineVehicle(loan.vehicle || '') && (
+                  <PipelineStageBadge stage={(loan as any).pipeline_stage} />
+                )}
+              </div>
+            )}
             {!isMobile && (
             <div className="flex items-center gap-2 mt-0.5">
               <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${

@@ -19,6 +19,7 @@ import { format as fnsFormat, formatDistanceToNow } from 'date-fns';
 import { getCurrentDate } from '@/lib/simulatedDate';
 import { PhotoAttach, AttachmentGallery, type PhotoPreview } from '@/components/activity/PhotoAttach';
 import { uploadActivityPhotos } from '@/lib/uploadPhoto';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const ACTIVITY_TYPES: { value: ActivityType; label: string; icon: typeof Phone }[] = [
   { value: 'call', label: 'Call', icon: Phone },
@@ -52,6 +53,7 @@ interface ActivityTabProps {
 
 export function ActivityTab({ loanId }: ActivityTabProps) {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const { data: entries, isLoading } = useLoanActivityLog(loanId);
   const createLog = useCreateActivityLog();
   const updateLog = useUpdateActivityLog();
@@ -122,19 +124,22 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Activity Log</CardTitle>
-        <CardDescription>Conversation notes and deal tracking</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
+    <Card className={isMobile ? "border-0 shadow-none bg-transparent" : ""}>
+      {!isMobile && (
+        <CardHeader>
+          <CardTitle>Activity Log</CardTitle>
+          <CardDescription>Conversation notes and deal tracking</CardDescription>
+        </CardHeader>
+      )}
+      <CardContent className={isMobile ? "px-0 space-y-5" : "space-y-6"}>
         {/* Add note form */}
-        <div className="space-y-3 border-b pb-6">
+        <div className={isMobile ? "space-y-3 border-b border-border/50 pb-5" : "space-y-3 border-b pb-6"}>
           <Textarea
             placeholder="Log a note, call, or meeting..."
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            rows={3}
+            rows={isMobile ? 2 : 3}
+            className={isMobile ? "text-[15px] rounded-xl" : ""}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
@@ -142,52 +147,105 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
               }
             }}
           />
-          <div className="flex items-center gap-3">
-            <Select value={activityType} onValueChange={setActivityType}>
-              <SelectTrigger className="h-8 w-[140px] text-xs">
-                <SelectValue placeholder="Type (optional)" />
-              </SelectTrigger>
-              <SelectContent>
-                {ACTIVITY_TYPES.map(t => (
-                  <SelectItem key={t.value} value={t.value}>
-                    <span className="flex items-center gap-1.5">
-                      <t.icon className="h-3 w-3" />
-                      {t.label}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              type="date"
-              value={activityDate}
-              onChange={(e) => setActivityDate(e.target.value)}
-              className="h-8 w-[160px] text-xs"
-              placeholder="Date (optional)"
-            />
-            {(activityType || activityDate) && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-xs text-muted-foreground"
-                onClick={() => { setActivityType(''); setActivityDate(''); }}
-              >
-                Clear
-              </Button>
-            )}
-            <PhotoAttach previews={photoPreviews} onChange={setPhotoPreviews} compact />
-            <div className="flex-1" />
-            <Button
-              size="sm"
-              className="h-8"
-              onClick={handleSubmit}
-              disabled={(!content.trim() && !photoPreviews.length) || createLog.isPending || uploading}
-            >
-              {uploading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-              {uploading ? 'Uploading...' : createLog.isPending ? 'Adding...' : 'Add Note'}
-            </Button>
-          </div>
-          <p className="text-xs text-foreground-muted">Ctrl+Enter to submit</p>
+          {isMobile ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Select value={activityType} onValueChange={setActivityType}>
+                  <SelectTrigger className="h-9 flex-1 text-xs rounded-lg">
+                    <SelectValue placeholder="Type (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACTIVITY_TYPES.map(t => (
+                      <SelectItem key={t.value} value={t.value}>
+                        <span className="flex items-center gap-1.5">
+                          <t.icon className="h-3 w-3" />
+                          {t.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="date"
+                  value={activityDate}
+                  onChange={(e) => setActivityDate(e.target.value)}
+                  className="h-9 flex-1 text-xs rounded-lg"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <PhotoAttach previews={photoPreviews} onChange={setPhotoPreviews} compact />
+                {(activityType || activityDate) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 text-xs text-muted-foreground"
+                    onClick={() => { setActivityType(''); setActivityDate(''); }}
+                  >
+                    Clear
+                  </Button>
+                )}
+                <div className="flex-1" />
+                <Button
+                  size="sm"
+                  className="h-9 px-4 rounded-lg"
+                  onClick={handleSubmit}
+                  disabled={(!content.trim() && !photoPreviews.length) || createLog.isPending || uploading}
+                >
+                  {uploading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                  {uploading ? 'Uploading...' : createLog.isPending ? 'Adding...' : 'Add'}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-3">
+                <Select value={activityType} onValueChange={setActivityType}>
+                  <SelectTrigger className="h-8 w-[140px] text-xs">
+                    <SelectValue placeholder="Type (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACTIVITY_TYPES.map(t => (
+                      <SelectItem key={t.value} value={t.value}>
+                        <span className="flex items-center gap-1.5">
+                          <t.icon className="h-3 w-3" />
+                          {t.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="date"
+                  value={activityDate}
+                  onChange={(e) => setActivityDate(e.target.value)}
+                  className="h-8 w-[160px] text-xs"
+                  placeholder="Date (optional)"
+                />
+                {(activityType || activityDate) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs text-muted-foreground"
+                    onClick={() => { setActivityType(''); setActivityDate(''); }}
+                  >
+                    Clear
+                  </Button>
+                )}
+                <PhotoAttach previews={photoPreviews} onChange={setPhotoPreviews} compact />
+                <div className="flex-1" />
+                <Button
+                  size="sm"
+                  className="h-8"
+                  onClick={handleSubmit}
+                  disabled={(!content.trim() && !photoPreviews.length) || createLog.isPending || uploading}
+                >
+                  {uploading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                  {uploading ? 'Uploading...' : createLog.isPending ? 'Adding...' : 'Add Note'}
+                </Button>
+              </div>
+              <p className="text-xs text-foreground-muted">Ctrl+Enter to submit</p>
+            </>
+          )}
         </div>
 
         {/* Timeline */}
@@ -201,7 +259,7 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
             No activity logged yet
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             {entries.map((entry, index) => {
               const entryDate = fnsFormat(new Date(entry.created_at), 'yyyy-MM-dd');
               const prevDate = index > 0 ? fnsFormat(new Date(entries[index - 1].created_at), 'yyyy-MM-dd') : null;
@@ -212,13 +270,13 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
               return (
                 <div key={entry.id}>
                   {showDateSeparator && (
-                    <div className="flex justify-center mb-3 mt-1">
+                    <div className="flex justify-center mb-4 mt-2">
                       <span className="text-[11px] text-foreground-muted bg-muted/60 px-3 py-0.5 rounded-full">
                         {fnsFormat(new Date(entry.created_at), 'EEEE, d MMM yyyy')}
                       </span>
                     </div>
                   )}
-                <div className="flex items-start gap-2">
+                <div className="flex items-start gap-3">
                   {(() => {
                     const email = entry.created_by_email || (isAuthor ? user?.email : null);
                     const name = email?.split('@')[0] || '?';
@@ -231,16 +289,16 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
                     ];
                     const colorIdx = name.charCodeAt(0) % colors.length;
                     return (
-                      <div className={`shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold ${colors[colorIdx]}`}>
+                      <div className={`shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold ${colors[colorIdx]}`}>
                         {initial}
                       </div>
                     );
                   })()}
                   <div className="flex flex-col items-start min-w-0 flex-1">
-                    <span className="text-[11px] font-medium text-primary/70 mb-0.5">
+                    <span className="text-xs font-medium text-primary/70 mb-1">
                       {isAuthor ? 'You' : (entry.created_by_email?.split('@')[0] || 'Team member')}
                     </span>
-                    <div className="group relative max-w-full bg-white rounded-lg rounded-tl-sm shadow-sm border border-border/40 px-3 py-1.5">
+                    <div className="group relative max-w-full bg-white rounded-xl rounded-tl-sm shadow-sm border border-border/40 px-4 py-2.5">
                     {isEditing ? (
                       <div className="space-y-2">
                         <Textarea

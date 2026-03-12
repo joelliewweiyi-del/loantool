@@ -259,12 +259,8 @@
   }
 }
 
-/* On mobile, reduce page padding and make tables scroll horizontally */
+/* On mobile, make tables scroll horizontally */
 @media (max-width: 767px) {
-  .p-6 {
-    padding: 1rem !important;
-  }
-
   /* Horizontal scroll for data tables */
   .data-table {
     display: block;

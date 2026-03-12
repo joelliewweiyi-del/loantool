@@ -12,32 +12,32 @@ export function MobileLoanCard({ loan }: MobileLoanCardProps) {
 
   return (
     <div
-      className="bg-white rounded-xl border border-border/60 shadow-sm px-4 py-3 active:bg-muted/30 transition-colors cursor-pointer"
+      className="bg-white rounded-2xl border border-border/50 shadow-sm px-5 py-4 active:bg-muted/30 transition-colors cursor-pointer"
       onClick={() => navigate(`/loans/${loan.id}`)}
     >
       <div className="flex items-center justify-between">
         <span className="font-mono text-sm font-semibold text-primary">{loan.loan_id || '—'}</span>
         <StatusBadge status={loan.status} />
       </div>
-      <h3 className="text-base font-semibold mt-0.5 truncate">{loan.borrower_name}</h3>
+      <h3 className="text-[17px] font-semibold mt-1 truncate">{loan.borrower_name}</h3>
       {loan.city && (
-        <div className="flex items-center gap-1 text-xs text-foreground-tertiary mt-0.5">
-          <MapPin className="h-3 w-3" />
+        <div className="flex items-center gap-1.5 text-xs text-foreground-tertiary mt-1">
+          <MapPin className="h-3.5 w-3.5" />
           {loan.city}
         </div>
       )}
-      <div className="flex items-center gap-4 text-xs mt-2 pt-2 border-t border-border/30">
-        <div>
-          <span className="text-foreground-muted">Outstanding</span>
-          <span className="font-mono font-medium ml-1">{formatCurrency(loan.outstanding)}</span>
+      <div className="flex items-center gap-5 text-xs mt-3 pt-3 border-t border-border/30">
+        <div className="flex flex-col">
+          <span className="text-[10px] text-foreground-muted uppercase tracking-wide">Outstanding</span>
+          <span className="font-mono font-medium mt-0.5">{formatCurrency(loan.outstanding)}</span>
         </div>
-        <div>
-          <span className="text-foreground-muted">Rate</span>
-          <span className="font-mono font-medium ml-1">{formatPercent(loan.interest_rate, 2)}</span>
+        <div className="flex flex-col">
+          <span className="text-[10px] text-foreground-muted uppercase tracking-wide">Rate</span>
+          <span className="font-mono font-medium mt-0.5">{formatPercent(loan.interest_rate, 2)}</span>
         </div>
-        <div>
-          <span className="text-foreground-muted">Maturity</span>
-          <span className="font-mono font-medium ml-1">{formatDate(loan.maturity_date)}</span>
+        <div className="flex flex-col">
+          <span className="text-[10px] text-foreground-muted uppercase tracking-wide">Maturity</span>
+          <span className="font-mono font-medium mt-0.5">{formatDate(loan.maturity_date)}</span>
         </div>
       </div>
     </div>
