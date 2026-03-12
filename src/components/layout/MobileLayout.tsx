@@ -19,7 +19,7 @@ export function MobileLayout({ children }: MobileLayoutProps) {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Main content — fills available space above tab bar */}
-      <main className="flex-1 overflow-auto pb-[calc(env(safe-area-inset-bottom)+4rem)]">
+      <main className="flex-1 overflow-auto pt-[env(safe-area-inset-top)] pb-[calc(env(safe-area-inset-bottom)+4rem)]">
         {children}
       </main>
 
@@ -37,15 +37,15 @@ export function MobileLayout({ children }: MobileLayoutProps) {
                 key={tab.name}
                 to={tab.href}
                 className={cn(
-                  'flex flex-col items-center gap-1 px-5 py-2 rounded-xl transition-colors min-w-[5rem]',
+                  'flex flex-col items-center justify-center gap-0.5 flex-1 py-2 transition-colors',
                   isActive
                     ? 'text-primary'
                     : 'text-sidebar-foreground/45 active:text-sidebar-foreground/70'
                 )}
               >
-                <tab.icon className={cn('h-[22px] w-[22px]', isActive && 'stroke-[2.5]')} />
+                <tab.icon className={cn('h-[22px] w-[22px] shrink-0', isActive && 'stroke-[2.5]')} />
                 <span className={cn(
-                  'text-[11px] leading-tight',
+                  'text-[10px] leading-none',
                   isActive ? 'font-semibold' : 'font-medium'
                 )}>
                   {tab.name}

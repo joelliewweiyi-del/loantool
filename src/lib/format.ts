@@ -33,6 +33,16 @@ export function formatDate(date: string | Date | null | undefined): string {
   }).format(d);
 }
 
+/** Short date for mobile: "01 Nov" (no year) */
+export function formatDateShort(date: string | Date | null | undefined): string {
+  if (!date) return '—';
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+  }).format(d);
+}
+
 /**
  * Format a datetime for display
  */

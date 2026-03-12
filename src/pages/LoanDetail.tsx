@@ -260,8 +260,8 @@ export default function LoanDetail() {
         )}
       </div>
 
-      {/* Pipeline Banner */}
-      {isPipelineVehicle((loan as any).vehicle || '') && (
+      {/* Pipeline Banner — desktop only (mobile users cannot activate loans) */}
+      {!isMobile && isPipelineVehicle((loan as any).vehicle || '') && (
         <div className="flex items-center justify-between rounded-lg border border-accent-amber/40 bg-accent-amber/5 px-4 py-3">
           <p className="text-sm text-foreground-secondary">
             This is a <span className="font-semibold text-accent-amber">pipeline</span> loan. Activate it when the deal closes to start tracking interest.
@@ -289,9 +289,9 @@ export default function LoanDetail() {
       {/* Depot Balance Strip — only for loans with a depot reserve event */}
       {depotReserve > 0 && (
         <FinancialStrip items={[
-          { label: 'Depot Reserve', value: formatCurrency(depotReserve) },
-          { label: 'Depot Used', value: formatCurrency(depotUsed), accent: 'amber' },
-          { label: 'Depot Remaining', value: formatCurrency(depotRemaining), accent: depotRemaining > 0 ? 'sage' : 'destructive' },
+          { label: isMobile ? 'Reserve' : 'Depot Reserve', value: formatCurrency(depotReserve) },
+          { label: isMobile ? 'Used' : 'Depot Used', value: formatCurrency(depotUsed), accent: 'amber' },
+          { label: isMobile ? 'Remaining' : 'Depot Remaining', value: formatCurrency(depotRemaining), accent: depotRemaining > 0 ? 'sage' : 'destructive' },
         ]} />
       )}
 
@@ -316,13 +316,15 @@ export default function LoanDetail() {
 
         {/* Events Tab */}
         <TabsContent value="events">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
+          <Card className={isMobile ? 'border-0 shadow-none bg-transparent' : ''}>
+            <CardHeader className={isMobile ? 'px-0 pt-0 pb-3' : 'flex flex-row items-center justify-between'}>
+              {!isMobile && (
               <div>
                 <CardTitle>Event Ledger</CardTitle>
                 <CardDescription>Append-only record of all economic events</CardDescription>
               </div>
-              {canCreateEvents && (
+              )}
+              {!isMobile && canCreateEvents && (
                 <Dialog open={isEventOpen} onOpenChange={setIsEventOpen}>
                   <DialogTrigger asChild>
                     <Button size="sm">
@@ -465,121 +467,146 @@ export default function LoanDetail() {
                 </Dialog>
               )}
             </CardHeader>
-            <CardContent>
+            <CardContent className={isMobile ? 'px-0' : ''}>
               {eventsLoading ? (
                 <Skeleton className="h-48" />
-              ) : events?.filter(e => e.event_type !== 'pik_capitalization_posted')?.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No events recorded yet
-                </div>
-              ) : (
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Type</th>
-                      <th>Description</th>
-                      <th className="text-right">Amount</th>
-                      <th className="text-right">Rate</th>
-                      <th>Status</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(() => {
-                      // Build a set of event IDs that have been reversed
-                      const reversedEventIds = new Set<string>();
-                      (events || []).forEach(event => {
-                        const meta = event.metadata as Record<string, unknown> | null;
-                        if (meta?.reverses_event_id) {
-                          reversedEventIds.add(meta.reverses_event_id as string);
-                        }
-                      });
-                      
-                      // Filter out system events and correction pairs
-                      const filtered = [...events || []]
-                        .filter(event => {
-                          // Show PIK capitalizations (interest charges) for approval
-                          // Hide cash received (accounting entries, not economic events)
-                          if (event.event_type === 'cash_received') return false;
-                          // Hide correction/reversal entries
-                          const meta = event.metadata as Record<string, unknown> | null;
-                          if (meta?.correction === true) return false;
-                          // Hide fee_split adjustment repayments (the reversing entry - keep the fee_invoice)
-                          if (event.event_type === 'principal_repayment' && meta?.adjustment_type === 'fee_split') return false;
-                          // Hide entries that have been reversed by another event
-                          if (reversedEventIds.has(event.id)) return false;
-                          // Hide auto-generated system events that are already approved
-                          if (event.event_type === 'pik_capitalization_posted' && 
-                              event.status === 'approved' && 
-                              meta?.auto_generated === true) return false;
-                          return true;
-                        })
-                        .sort((a, b) => 
-                          new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime()
-                        );
-                      
-                      return filtered.map(event => {
-                        const meta = event.metadata as Record<string, unknown> | null;
-                        const description = meta?.description as string | undefined;
-                        
-                        // Special description for fee invoices
-                        const getEventDescription = () => {
-                          // For arrangement fees, ALWAYS use standardized labels based on payment_type
-                          // This ensures consistency regardless of stored description
-                          if (event.event_type === 'fee_invoice') {
-                            const feeType = meta?.fee_type as string | undefined;
-                            const paymentType = meta?.payment_type as string | undefined;
-                            
-                            // Arrangement fees: standardized labels
-                            if (feeType?.includes('arrangement') || meta?.adjustment_type === 'fee_split') {
-                              // PIK: Fee is capitalised (added to principal, accrues interest)
-                              // Cash: Fee is withheld from borrower (deducted from draw, no principal impact)
-                              return paymentType === 'pik' 
-                                ? 'Arrangement fee (capitalised)'
-                                : 'Arrangement fee (withheld from borrower)';
-                            }
-                            
-                            // Other fee types: use stored description or generate from fee_type
-                            if (description) return description;
-                            if (feeType) return `${feeType} fee`;
-                          }
-                          
-                          // Non-fee events: use stored description if available
-                          if (description) return description;
-                          return '—';
-                        };
-                        
-                        return (
-                          <tr key={event.id}>
-                            <td className="font-mono">{formatDate(event.effective_date)}</td>
-                            <td>{formatEventType(event.event_type)}</td>
-                            <td className="text-muted-foreground text-sm max-w-[200px] truncate">
-                              {getEventDescription()}
-                            </td>
-                            <td className="numeric">{formatCurrency(event.amount)}</td>
-                            <td className="numeric">{formatPercent(event.rate)}</td>
-                            <td><StatusBadge status={event.status} /></td>
-                            <td className="text-right">
-                              {event.status === 'draft' && canApproveEvents && (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleApproveEvent(event.id)}
-                                  disabled={approveEvent.isPending}
-                                >
-                                  <Check className="h-4 w-4 mr-1" />
-                                  Approve
-                                </Button>
+              ) : (() => {
+                // Build a set of event IDs that have been reversed
+                const reversedEventIds = new Set<string>();
+                (events || []).forEach(event => {
+                  const meta = event.metadata as Record<string, unknown> | null;
+                  if (meta?.reverses_event_id) {
+                    reversedEventIds.add(meta.reverses_event_id as string);
+                  }
+                });
+
+                // Filter out system events and correction pairs
+                const filtered = [...events || []]
+                  .filter(event => {
+                    if (event.event_type === 'cash_received') return false;
+                    const meta = event.metadata as Record<string, unknown> | null;
+                    if (meta?.correction === true) return false;
+                    if (event.event_type === 'principal_repayment' && meta?.adjustment_type === 'fee_split') return false;
+                    if (reversedEventIds.has(event.id)) return false;
+                    if (event.event_type === 'pik_capitalization_posted' &&
+                        event.status === 'approved' &&
+                        meta?.auto_generated === true) return false;
+                    return true;
+                  })
+                  .sort((a, b) =>
+                    new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime()
+                  );
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="text-center py-8 text-muted-foreground">
+                      No events recorded yet
+                    </div>
+                  );
+                }
+
+                const getEventDescription = (event: typeof filtered[0]) => {
+                  const meta = event.metadata as Record<string, unknown> | null;
+                  const description = meta?.description as string | undefined;
+                  if (event.event_type === 'fee_invoice') {
+                    const feeType = meta?.fee_type as string | undefined;
+                    const paymentType = meta?.payment_type as string | undefined;
+                    if (feeType?.includes('arrangement') || meta?.adjustment_type === 'fee_split') {
+                      return paymentType === 'pik'
+                        ? 'Arrangement fee (capitalised)'
+                        : 'Arrangement fee (withheld)';
+                    }
+                    if (description) return description;
+                    if (feeType) return `${feeType} fee`;
+                  }
+                  if (description) return description;
+                  return null;
+                };
+
+                // Mobile: card list
+                if (isMobile) {
+                  return (
+                    <div className="space-y-2">
+                      {filtered.map(event => (
+                        <div key={event.id} className="rounded-xl border bg-card px-4 py-3">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-xs font-medium text-foreground-secondary">
+                              {formatEventType(event.event_type)}
+                            </span>
+                            <StatusBadge status={event.status} />
+                          </div>
+                          <div className="flex items-baseline justify-between">
+                            <span className="font-mono text-xs text-foreground-tertiary">
+                              {formatDate(event.effective_date)}
+                            </span>
+                            <div className="text-right">
+                              {event.amount != null && event.amount !== 0 && (
+                                <span className="font-mono text-sm font-semibold">
+                                  {formatCurrency(event.amount)}
+                                </span>
                               )}
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()}
-                  </tbody>
-                </table>
-              )}
+                              {event.rate != null && event.rate !== 0 && (
+                                <span className="font-mono text-sm font-semibold ml-2">
+                                  {formatPercent(event.rate)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {getEventDescription(event) && (
+                            <div className="text-xs text-muted-foreground mt-1 truncate">
+                              {getEventDescription(event)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+
+                // Desktop: table
+                return (
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th className="text-right">Amount</th>
+                        <th className="text-right">Rate</th>
+                        <th>Status</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map(event => (
+                        <tr key={event.id}>
+                          <td className="font-mono">{formatDate(event.effective_date)}</td>
+                          <td>{formatEventType(event.event_type)}</td>
+                          <td className="text-muted-foreground text-sm max-w-[200px] truncate">
+                            {getEventDescription(event) || '—'}
+                          </td>
+                          <td className="numeric">{formatCurrency(event.amount)}</td>
+                          <td className="numeric">{formatPercent(event.rate)}</td>
+                          <td><StatusBadge status={event.status} /></td>
+                          <td className="text-right">
+                            {event.status === 'draft' && canApproveEvents && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleApproveEvent(event.id)}
+                                disabled={approveEvent.isPending}
+                              >
+                                <Check className="h-4 w-4 mr-1" />
+                                Approve
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

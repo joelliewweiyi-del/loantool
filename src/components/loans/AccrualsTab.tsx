@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
-import { formatCurrency, formatDate, formatPercent } from '@/lib/format';
+import { formatCurrency, formatDate, formatDateShort, formatPercent } from '@/lib/format';
 import { LoanEvent, PeriodStatus, InterestType } from '@/types/loan';
 import { PeriodAccrual, AccrualsSummary, InterestSegment, DailyAccrual } from '@/lib/loanCalculations';
 import { StatusBadge } from './LoanStatusBadge';
@@ -26,6 +26,7 @@ import {
   Banknote,
   Landmark,
 } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   Tooltip,
   TooltipContent,
@@ -51,6 +52,7 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
   const createInterestCharge = useCreateInterestChargeEvent();
   const triggerAccruals = useTriggerDailyAccruals();
   const { isController, isPM } = useAuth();
+  const isMobile = useIsMobile();
 
   const isPik = interestType === 'pik';
   const isCashPay = !isPik;
@@ -188,6 +190,198 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
       )[0]
     : null;
 
+  // Sorted periods (shared between mobile and desktop)
+  const sortedPeriods = useMemo(() =>
+    [...periodAccruals].sort((a, b) =>
+      new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
+    ),
+    [periodAccruals]
+  );
+
+  if (isMobile) {
+    return (
+      <div className="space-y-4">
+        {/* Mobile: current period summary card */}
+        {latestPeriod && (
+          <div className="rounded-xl border bg-card px-4 py-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] uppercase tracking-wide text-foreground-tertiary font-medium">Current Period</div>
+              <PeriodPipeline current={latestPeriod.status as PeriodStatus} />
+            </div>
+            <div className="font-mono text-sm font-medium">
+              {formatDate(latestPeriod.periodStart)} – {formatDate(latestPeriod.periodEnd)}
+            </div>
+            <div className="grid grid-cols-3 gap-3 pt-2 border-t">
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-foreground-tertiary">Principal</div>
+                <div className="font-mono text-sm font-semibold">{formatCurrency(latestPeriod.openingPrincipal)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-foreground-tertiary">Rate</div>
+                <div className="font-mono text-sm font-semibold">{formatPercent(latestPeriod.openingRate, 2)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wide text-foreground-tertiary">
+                  {isPik ? 'Charge' : 'Due'}
+                </div>
+                <div className="font-mono text-sm font-bold text-primary">
+                  {cashPct < 1 && !isPik
+                    ? formatCurrency(latestPeriod.interestAccrued * cashPct + latestPeriod.commitmentFeeAccrued)
+                    : formatCurrency(latestPeriod.interestAccrued + latestPeriod.commitmentFeeAccrued)}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile: period cards */}
+        {periodAccruals.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">No periods yet</div>
+        ) : (
+          <div className="space-y-2.5">
+            {sortedPeriods.map((period) => {
+              const chargeStatus = getInterestChargeStatus(period.periodId);
+              const isExpanded = expandedPeriods.has(period.periodId);
+              const totalInterestDue = period.interestAccrued + period.commitmentFeeAccrued;
+              const expectedCashDue = period.interestAccrued * cashPct + period.commitmentFeeAccrued + period.feesInvoiced;
+
+              return (
+                <div
+                  key={period.periodId}
+                  className="rounded-xl border bg-card overflow-hidden"
+                  onClick={() => togglePeriod(period.periodId)}
+                >
+                  {/* Card header */}
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <div className="font-mono text-[13px] font-medium">
+                          {formatDateShort(period.periodStart)} – {formatDate(period.periodEnd)}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <StatusBadge status={period.status as PeriodStatus} />
+                          <span className="text-[11px] text-foreground-tertiary font-mono">{period.days}d</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 pl-3">
+                      <div className="font-mono text-[15px] font-bold text-primary">
+                        {hasDepotSplit ? formatCurrency(expectedCashDue) : formatCurrency(totalInterestDue)}
+                      </div>
+                      <div className="text-[10px] text-foreground-tertiary">
+                        {formatCurrency(period.openingPrincipal)} @ {formatPercent(period.openingRate, 2)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expanded content */}
+                  {isExpanded && (
+                    <div className="border-t bg-muted/20 px-4 py-3 space-y-3 text-xs" onClick={(e) => e.stopPropagation()}>
+                      {/* Key figures grid */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <div className="text-foreground-tertiary uppercase tracking-wide text-[10px]">Opening</div>
+                          <div className="font-mono">{formatCurrency(period.openingPrincipal)}</div>
+                        </div>
+                        <div>
+                          <div className="text-foreground-tertiary uppercase tracking-wide text-[10px]">Closing</div>
+                          <div className="font-mono font-semibold">{formatCurrency(period.closingPrincipal)}</div>
+                        </div>
+                        <div>
+                          <div className="text-foreground-tertiary uppercase tracking-wide text-[10px]">Interest</div>
+                          <div className="font-mono text-primary">{formatCurrency(period.interestAccrued)}</div>
+                        </div>
+                        {period.commitmentFeeAccrued > 0 && (
+                          <div>
+                            <div className="text-foreground-tertiary uppercase tracking-wide text-[10px]">Commit. Fee</div>
+                            <div className="font-mono">{formatCurrency(period.commitmentFeeAccrued)}</div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Principal movements */}
+                      {(period.principalDrawn > 0 || period.principalRepaid > 0 || period.pikCapitalized > 0) && (
+                        <div className="flex flex-wrap gap-3 pt-2 border-t">
+                          {period.principalDrawn > 0 && (
+                            <div>
+                              <span className="text-foreground-tertiary">Drawn: </span>
+                              <span className="font-mono text-accent-sage">+{formatCurrency(period.principalDrawn)}</span>
+                            </div>
+                          )}
+                          {period.principalRepaid > 0 && (
+                            <div>
+                              <span className="text-foreground-tertiary">Repaid: </span>
+                              <span className="font-mono text-destructive">-{formatCurrency(period.principalRepaid)}</span>
+                            </div>
+                          )}
+                          {period.pikCapitalized > 0 && (
+                            <div>
+                              <span className="text-foreground-tertiary">PIK: </span>
+                              <span className="font-mono text-accent-amber">+{formatCurrency(period.pikCapitalized)}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Interest segments */}
+                      {period.interestSegments.length > 1 && (
+                        <div className="pt-2 border-t space-y-1.5">
+                          <div className="text-foreground-tertiary uppercase tracking-wide text-[10px]">Segments</div>
+                          {period.interestSegments.map((seg, idx) => (
+                            <div key={idx} className="flex justify-between font-mono">
+                              <span className="text-foreground-tertiary">
+                                {formatDate(seg.startDate)} – {formatDate(seg.endDate)}
+                              </span>
+                              <span>{formatCurrency(seg.interest)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* PIK roll-up action */}
+                      {isPik && canCreateInterestCharge && chargeStatus === 'none' && totalInterestDue > 0 && (
+                        <div className="pt-2 border-t">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleCreateInterestCharge(period)}
+                            disabled={createInterestCharge.isPending}
+                            className="h-8 text-xs w-full"
+                          >
+                            <ArrowUpRight className="h-3.5 w-3.5 mr-1.5" />
+                            Roll Up Interest
+                          </Button>
+                        </div>
+                      )}
+                      {isPik && chargeStatus === 'draft' && (
+                        <div className="flex items-center gap-1.5 text-accent-amber pt-1">
+                          <Clock className="h-3.5 w-3.5" />
+                          <span>Roll-up pending approval</span>
+                        </div>
+                      )}
+                      {isPik && chargeStatus === 'approved' && (
+                        <div className="flex items-center gap-1.5 text-accent-sage pt-1">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          <span>Interest rolled up</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Desktop layout
   return (
     <div className="space-y-6">
       {/* Latest Period Header */}
@@ -304,9 +498,7 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {[...periodAccruals].sort((a, b) =>
-                    new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
-                  ).map((period, index) => {
+                  {sortedPeriods.map((period, index) => {
                     const chargeStatus = getInterestChargeStatus(period.periodId);
                     const periodDrawEvents = events?.filter(e =>
                       (e.event_type === 'principal_draw' || e.event_type === 'principal_repayment') &&
@@ -334,8 +526,6 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
                         matchedPayment={paymentMatches.get(period.periodId)}
                         matchedDepot={depotMatches.get(period.periodId)}
                         onConfirmPayment={(payment) => {
-                          // payment.amount is already the net cash amount
-                          // (1751 depot debits subtracted in useAfasCashPayments)
                           confirmPayment.mutate({
                             periodId: period.periodId,
                             paymentDate: payment.date,
