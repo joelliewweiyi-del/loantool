@@ -31,8 +31,11 @@ interface LoansProps {
 
 export default function Loans({ mobilePortfolio }: LoansProps = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const isMobile = useIsMobile();
+  // On mobile /loans route (not portfolio): force Pipeline vehicle, no tabs
+  const mobilePipeline = isMobile && !mobilePortfolio;
   const defaultVehicle = mobilePortfolio ? 'RED IV' : DEFAULT_VEHICLE;
-  const activeVehicle = searchParams.get('vehicle') as Vehicle || defaultVehicle;
+  const activeVehicle = mobilePipeline ? 'Pipeline' : (searchParams.get('vehicle') as Vehicle || defaultVehicle);
   const {
     data: loans,
     isLoading
@@ -49,7 +52,6 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
     roles
   } = useAuth();
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -230,17 +232,19 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
         </div>
       </div>
 
-      {/* Vehicle Tabs */}
-      <Tabs value={activeVehicle} onValueChange={handleVehicleChange} className="w-full">
-        <TabsList className={`grid w-full max-w-md ${vehicleCounts.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-          {vehicleCounts.map(v => (
-            <TabsTrigger key={v.value} value={v.value} className="flex items-center gap-2">
-              {v.label}
-              <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{v.count}</span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      {/* Vehicle Tabs — hidden on mobile pipeline (only Pipeline shown) */}
+      {!mobilePipeline && (
+        <Tabs value={activeVehicle} onValueChange={handleVehicleChange} className="w-full">
+          <TabsList className={`grid w-full max-w-md ${vehicleCounts.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+            {vehicleCounts.map(v => (
+              <TabsTrigger key={v.value} value={v.value} className="flex items-center gap-2">
+                {v.label}
+                <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{v.count}</span>
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
 
       {/* Portfolio Metrics Strip */}
       {isPipelineVehicle(activeVehicle) ? (() => {
