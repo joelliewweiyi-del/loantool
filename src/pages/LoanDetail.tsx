@@ -37,6 +37,7 @@ import {
   Trash2,
   MessageSquare
 } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const eventTypes: EventType[] = [
   'principal_draw',
@@ -68,6 +69,7 @@ export default function LoanDetail() {
   const depotUsed = (depotPayments ?? []).filter(p => p.amount > 0).reduce((sum, p) => sum + p.amount, 0);
   const depotRemaining = depotReserve - depotUsed;
   const { user, isController, isPM, isAdmin } = useAuth();
+  const isMobile = useIsMobile();
   const createEvent = useCreateLoanEvent();
   const approveEvent = useApproveEvent();
   const deleteLoan = useDeleteLoan();
@@ -157,25 +159,35 @@ export default function LoanDetail() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className={isMobile ? "px-4 py-3 space-y-4" : "p-6 space-y-6"}>
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <Link to="/loans">
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+      <div className={isMobile ? "space-y-2" : "flex items-start justify-between"}>
+        <div className={isMobile ? "" : "flex items-center gap-3"}>
+          {!isMobile && (
+            <Link to="/loans">
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+          )}
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {isMobile && (
+                <Link to="/loans">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 -ml-1">
+                    <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                </Link>
+              )}
               <span className="font-mono text-base font-semibold text-primary">{(loan as any).loan_id}</span>
               <span className="text-foreground-secondary">—</span>
-              <h1 className="text-lg font-semibold">{loan.borrower_name}</h1>
+              <h1 className={isMobile ? "text-base font-semibold" : "text-lg font-semibold"}>{loan.borrower_name}</h1>
               <StatusBadge status={loan.status} />
               {isPipelineVehicle(loan.vehicle || '') && (
                 <PipelineStageBadge stage={(loan as any).pipeline_stage} />
               )}
             </div>
+            {!isMobile && (
             <div className="flex items-center gap-2 mt-0.5">
               <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
                 (loan as any).interest_payment_type === 'pik'
@@ -195,8 +207,10 @@ export default function LoanDetail() {
                 Created {formatDate(loan.created_at)} · {loan.notice_frequency} notices
               </span>
             </div>
+            )}
           </div>
         </div>
+        {!isMobile && (
         <div className="flex items-center gap-2">
           <EditLoanDialog loan={loan} />
           {isAdmin && (
@@ -234,6 +248,7 @@ export default function LoanDetail() {
             </AlertDialog>
           )}
         </div>
+        )}
       </div>
 
       {/* Pipeline Banner */}
@@ -247,7 +262,11 @@ export default function LoanDetail() {
       )}
 
       {/* Key Loan Metrics Strip */}
-      <FinancialStrip items={[
+      <FinancialStrip items={isMobile ? [
+        { label: 'Outstanding', value: formatCurrency(accrualsSummary.currentPrincipal), accent: 'primary' },
+        { label: 'Rate', value: formatPercent(accrualsSummary.currentRate, 2) },
+        { label: 'Commitment', value: formatCurrency(accrualsSummary.totalCommitment) },
+      ] : [
         { label: 'Outstanding', value: formatCurrency(accrualsSummary.currentPrincipal), accent: 'primary' },
         { label: 'Commitment', value: formatCurrency(accrualsSummary.totalCommitment) },
         { label: 'Rate', value: formatPercent(accrualsSummary.currentRate, 2) },
@@ -268,18 +287,22 @@ export default function LoanDetail() {
       )}
 
       {/* Tabs */}
-      <Tabs defaultValue="accruals" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="accruals">Interest Periods</TabsTrigger>
-          <TabsTrigger value="notices">
-            <Mail className="h-4 w-4 mr-1.5" />
-            Notices
-          </TabsTrigger>
-          <TabsTrigger value="events">Event Ledger</TabsTrigger>
+      <Tabs defaultValue={isMobile ? "activity" : "accruals"} className="space-y-4">
+        <TabsList className={isMobile ? "w-full overflow-x-auto flex" : ""}>
+          {!isMobile && <TabsTrigger value="accruals">Interest Periods</TabsTrigger>}
+          {!isMobile && (
+            <TabsTrigger value="notices">
+              <Mail className="h-4 w-4 mr-1.5" />
+              Notices
+            </TabsTrigger>
+          )}
+          {!isMobile && <TabsTrigger value="events">Event Ledger</TabsTrigger>}
           <TabsTrigger value="activity">
             <MessageSquare className="h-4 w-4 mr-1.5" />
             Activity
           </TabsTrigger>
+          {isMobile && <TabsTrigger value="accruals">Periods</TabsTrigger>}
+          {isMobile && <TabsTrigger value="events">Events</TabsTrigger>}
         </TabsList>
 
         {/* Events Tab */}

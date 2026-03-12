@@ -19,11 +19,20 @@ import { Search, ArrowUpDown, ArrowUp, ArrowDown, Plus, MessageSquare } from 'lu
 import { formatDistanceToNow } from 'date-fns';
 import { FinancialStrip } from '@/components/loans/FinancialStrip';
 import { VEHICLES, DEFAULT_VEHICLE, type Vehicle, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { PipelineCard } from '@/components/mobile/PipelineCard';
+import { MobileLoanCard } from '@/components/mobile/MobileLoanCard';
 type SortField = 'loan_id' | 'city' | 'category' | 'initial_facility' | 'outstanding' | 'total_commitment' | 'interest_rate' | 'loan_start_date' | 'maturity_date' | 'last_interest' | 'last_cf';
 type SortDir = 'asc' | 'desc';
-export default function Loans() {
+interface LoansProps {
+  /** When true, shows only RED IV + TLF (read-only portfolio mode for mobile) */
+  mobilePortfolio?: boolean;
+}
+
+export default function Loans({ mobilePortfolio }: LoansProps = {}) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeVehicle = searchParams.get('vehicle') as Vehicle || DEFAULT_VEHICLE;
+  const defaultVehicle = mobilePortfolio ? 'RED IV' : DEFAULT_VEHICLE;
+  const activeVehicle = searchParams.get('vehicle') as Vehicle || defaultVehicle;
   const {
     data: loans,
     isLoading
@@ -40,6 +49,7 @@ export default function Loans() {
     roles
   } = useAuth();
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -186,8 +196,13 @@ export default function Loans() {
   }, 0);
   const avgRate = totalPrincipal > 0 ? weightedRateSum / totalPrincipal : 0;
 
+  // Filter vehicles based on mode: mobilePortfolio shows RED IV + TLF only, otherwise show all
+  const availableVehicles = mobilePortfolio
+    ? VEHICLES.filter(v => !isPipelineVehicle(v.value))
+    : VEHICLES;
+
   // Count loans per vehicle for tabs
-  const vehicleCounts = VEHICLES.map(v => ({
+  const vehicleCounts = availableVehicles.map(v => ({
     ...v,
     count: loans?.filter(l => (l as any).vehicle === v.value).length || 0,
   }));
@@ -197,23 +212,27 @@ export default function Loans() {
         <Skeleton className="h-96" />
       </div>;
   }
-  return <div className="p-6 space-y-6">
+  return <div className={isMobile ? "px-4 py-3 space-y-4" : "p-6 space-y-6"}>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Loans</h1>
-          <p className="text-sm text-foreground-secondary">
-            Manage loan portfolio by vehicle
-          </p>
+          <h1 className="text-xl font-semibold">
+            {mobilePortfolio ? 'Portfolio' : isPipelineVehicle(activeVehicle) ? 'Pipeline' : 'Loans'}
+          </h1>
+          {!isMobile && (
+            <p className="text-sm text-foreground-secondary">
+              Manage loan portfolio by vehicle
+            </p>
+          )}
         </div>
         
         <div className="flex items-center gap-2">
-          {canCreate && <CreateLoanDialog defaultVehicle={activeVehicle} />}
+          {canCreate && !mobilePortfolio && <CreateLoanDialog defaultVehicle={activeVehicle} />}
         </div>
       </div>
 
       {/* Vehicle Tabs */}
       <Tabs value={activeVehicle} onValueChange={handleVehicleChange} className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
+        <TabsList className={`grid w-full max-w-md ${vehicleCounts.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
           {vehicleCounts.map(v => (
             <TabsTrigger key={v.value} value={v.value} className="flex items-center gap-2">
               {v.label}
@@ -257,17 +276,29 @@ export default function Loans() {
         ]} />
       )}
 
+      {/* Search */}
+      <div className="relative flex-1 max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input placeholder={`Search ${activeVehicle} loans...`} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-9" />
+      </div>
+
+      {filteredLoans.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          {searchQuery ? 'No loans match your search.' : `No loans in ${activeVehicle} yet.`}
+        </div>
+      ) : isMobile ? (
+        /* Mobile card layout */
+        <div className="space-y-3">
+          {filteredLoans.map(loan => (
+            isPipelineVehicle(activeVehicle)
+              ? <PipelineCard key={loan.id} loan={loan} />
+              : <MobileLoanCard key={loan.id} loan={loan} />
+          ))}
+        </div>
+      ) : (
       <Card>
-        <CardHeader>
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input placeholder={`Search ${activeVehicle} loans...`} value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-9" />
-          </div>
-        </CardHeader>
-        <CardContent>
-          {filteredLoans.length === 0 ? <div className="text-center py-12 text-muted-foreground">
-              {searchQuery ? 'No loans match your search.' : `No loans in ${activeVehicle} yet.`}
-            </div> : <table className="data-table">
+        <CardContent className="pt-4">
+          <table className="data-table">
               <thead>
                 <tr>
                   <SortTh field="loan_id">Loan_ID</SortTh>
@@ -335,8 +366,9 @@ export default function Loans() {
                     </td>
                   </tr>)}
               </tbody>
-            </table>}
+            </table>
         </CardContent>
       </Card>
+      )}
     </div>;
 }

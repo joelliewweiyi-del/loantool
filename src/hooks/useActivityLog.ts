@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { LoanActivityLog, ActivityType } from '@/types/loan';
+import { LoanActivityLog, ActivityType, ActivityAttachment } from '@/types/loan';
 import { useToast } from '@/hooks/use-toast';
 
 export function useLoanActivityLog(loanId: string | undefined) {
@@ -92,6 +92,7 @@ export function useCreateActivityLog() {
       content: string;
       activity_type?: ActivityType | null;
       activity_date?: string | null;
+      attachments?: ActivityAttachment[] | null;
     }) => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error('Not authenticated');
@@ -103,6 +104,7 @@ export function useCreateActivityLog() {
           content: input.content,
           activity_type: input.activity_type || null,
           activity_date: input.activity_date || null,
+          attachments: input.attachments?.length ? input.attachments : null,
           created_by: user.user.id,
           created_by_email: user.user.email || null,
         }])
@@ -114,6 +116,7 @@ export function useCreateActivityLog() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['loan-activity-log', variables.loan_id] });
       queryClient.invalidateQueries({ queryKey: ['latest-activity-per-loan'] });
+      queryClient.invalidateQueries({ queryKey: ['all-activity-log'] });
       toast({ title: 'Note added' });
     },
     onError: (error: Error) => {

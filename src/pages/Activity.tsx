@@ -13,6 +13,7 @@ import { getCurrentDate } from '@/lib/simulatedDate';
 import { ActivityType } from '@/types/loan';
 import { Phone, Mail, Users, MapPin, MessageSquare, Search, ExternalLink } from 'lucide-react';
 import { format as fnsFormat, formatDistanceToNow, startOfDay, subDays, startOfWeek, startOfMonth } from 'date-fns';
+import { AttachmentGallery } from '@/components/activity/PhotoAttach';
 
 const ACTIVITY_TYPES: { value: ActivityType; label: string; icon: typeof Phone }[] = [
   { value: 'call', label: 'Call', icon: Phone },
@@ -125,10 +126,10 @@ export default function Activity() {
   }, [filtered]);
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl">
+    <div className="p-6 max-md:px-4 max-md:py-3 space-y-6 max-md:space-y-4 max-w-5xl">
       <div>
-        <h1 className="text-2xl font-bold text-primary">Activity Feed</h1>
-        <p className="text-sm text-foreground-secondary mt-1">All activity across loans</p>
+        <h1 className="text-2xl max-md:text-xl font-bold text-primary">Activity</h1>
+        <p className="text-sm text-foreground-secondary mt-1 max-md:hidden">All activity across loans</p>
       </div>
 
       <FinancialStrip items={[
@@ -259,6 +260,7 @@ export default function Activity() {
                             <span className="mr-1.5"><ActivityTypeBadge type={entry.activity_type} /></span>
                           )}
                           <span className="text-sm whitespace-pre-wrap">{entry.content}</span>
+                          <AttachmentGallery attachments={entry.attachments} />
                           <span className="inline-flex items-center gap-1 ml-2 align-baseline whitespace-nowrap">
                             {entry.activity_date && (
                               <span className="font-mono text-[10px] text-foreground-muted">{formatDate(entry.activity_date)}</span>

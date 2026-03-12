@@ -213,12 +213,20 @@ export interface AuditLog {
 
 export type ActivityType = 'call' | 'email' | 'meeting' | 'site_visit' | 'other';
 
+export interface ActivityAttachment {
+  url: string;
+  filename: string;
+  type: string;
+  size: number;
+}
+
 export interface LoanActivityLog {
   id: string;
   loan_id: string;
   content: string;
   activity_type: ActivityType | null;
   activity_date: string | null;
+  attachments: ActivityAttachment[] | null;
   created_by: string;
   created_by_email: string | null;
   updated_at: string | null;

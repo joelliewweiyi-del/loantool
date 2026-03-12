@@ -12,6 +12,7 @@ import Afas from "./pages/Afas";
 import MonthlyApproval from "./pages/MonthlyApproval";
 import Export from "./pages/Export";
 import Activity from "./pages/Activity";
+import Portfolio from "./pages/Portfolio";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -98,6 +99,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Export />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/portfolio"
+        element={
+          <ProtectedRoute>
+            <Portfolio />
           </ProtectedRoute>
         }
       />

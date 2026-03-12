@@ -1,6 +1,8 @@
 import { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { MobileLayout } from './MobileLayout';
 import { Button } from '@/components/ui/button';
 import {
   FileText,
@@ -56,6 +58,11 @@ const navigation: NavGroup[] = [
 export function AppLayout({ children }: AppLayoutProps) {
   const { user, roles, signOut } = useAuth();
   const location = useLocation();
+  const isMobile = useIsMobile();
+
+  if (isMobile) {
+    return <MobileLayout>{children}</MobileLayout>;
+  }
 
   return (
     <div className="min-h-screen bg-background flex">

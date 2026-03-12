@@ -14,9 +14,11 @@ import {
 } from '@/hooks/useActivityLog';
 import { formatDate, formatDateTime, formatActivityType } from '@/lib/format';
 import { ActivityType } from '@/types/loan';
-import { Plus, Pencil, Trash2, Phone, Mail, Users, MapPin, MessageSquare, X, Check } from 'lucide-react';
+import { Plus, Pencil, Trash2, Phone, Mail, Users, MapPin, MessageSquare, X, Check, Loader2 } from 'lucide-react';
 import { format as fnsFormat, formatDistanceToNow } from 'date-fns';
 import { getCurrentDate } from '@/lib/simulatedDate';
+import { PhotoAttach, AttachmentGallery, type PhotoPreview } from '@/components/activity/PhotoAttach';
+import { uploadActivityPhotos } from '@/lib/uploadPhoto';
 
 const ACTIVITY_TYPES: { value: ActivityType; label: string; icon: typeof Phone }[] = [
   { value: 'call', label: 'Call', icon: Phone },
@@ -59,6 +61,8 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
   const [content, setContent] = useState('');
   const [activityType, setActivityType] = useState<string>('');
   const [activityDate, setActivityDate] = useState(() => fnsFormat(getCurrentDate(), 'yyyy-MM-dd'));
+  const [photoPreviews, setPhotoPreviews] = useState<PhotoPreview[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   // Edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -67,16 +71,31 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
   const [editDate, setEditDate] = useState('');
 
   const handleSubmit = async () => {
-    if (!content.trim()) return;
-    await createLog.mutateAsync({
-      loan_id: loanId,
-      content: content.trim(),
-      activity_type: (activityType || null) as ActivityType | null,
-      activity_date: activityDate || null,
-    });
-    setContent('');
-    setActivityType('');
-    setActivityDate(fnsFormat(getCurrentDate(), 'yyyy-MM-dd'));
+    if (!content.trim() && !photoPreviews.length) return;
+    setUploading(true);
+    try {
+      let attachments = null;
+      if (photoPreviews.length && user) {
+        attachments = await uploadActivityPhotos(
+          photoPreviews.map((p) => p.file),
+          user.id
+        );
+      }
+      await createLog.mutateAsync({
+        loan_id: loanId,
+        content: content.trim() || (photoPreviews.length ? '📷' : ''),
+        activity_type: (activityType || null) as ActivityType | null,
+        activity_date: activityDate || null,
+        attachments,
+      });
+      setContent('');
+      setActivityType('');
+      setActivityDate(fnsFormat(getCurrentDate(), 'yyyy-MM-dd'));
+      photoPreviews.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      setPhotoPreviews([]);
+    } finally {
+      setUploading(false);
+    }
   };
 
   const handleStartEdit = (entry: { id: string; content: string; activity_type: ActivityType | null; activity_date: string | null }) => {
@@ -156,15 +175,16 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
                 Clear
               </Button>
             )}
+            <PhotoAttach previews={photoPreviews} onChange={setPhotoPreviews} compact />
             <div className="flex-1" />
             <Button
               size="sm"
               className="h-8"
               onClick={handleSubmit}
-              disabled={!content.trim() || createLog.isPending}
+              disabled={(!content.trim() && !photoPreviews.length) || createLog.isPending || uploading}
             >
-              <Plus className="h-3.5 w-3.5 mr-1" />
-              {createLog.isPending ? 'Adding...' : 'Add Note'}
+              {uploading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+              {uploading ? 'Uploading...' : createLog.isPending ? 'Adding...' : 'Add Note'}
             </Button>
           </div>
           <p className="text-xs text-foreground-muted">Ctrl+Enter to submit</p>
@@ -263,6 +283,7 @@ export function ActivityTab({ loanId }: ActivityTabProps) {
                           <span className="mr-1.5"><ActivityTypeBadge type={entry.activity_type} /></span>
                         )}
                         <span className="text-sm whitespace-pre-wrap">{entry.content}</span>
+                        <AttachmentGallery attachments={entry.attachments} />
                         <span className="inline-flex items-center gap-1 ml-2 align-baseline whitespace-nowrap">
                           {entry.activity_date && (
                             <span className="font-mono text-[10px] text-foreground-muted">{formatDate(entry.activity_date)}</span>
