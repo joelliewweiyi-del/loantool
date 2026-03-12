@@ -296,13 +296,37 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
         <div className="text-center py-12 text-muted-foreground">
           {searchQuery ? 'No loans match your search.' : `No loans in ${activeVehicle} yet.`}
         </div>
-      ) : isMobile ? (
-        /* Mobile card layout */
+      ) : isMobile && isPipelineVehicle(activeVehicle) ? (
+        /* Mobile Pipeline: rich cards */
         <div className="space-y-3.5">
           {filteredLoans.map(loan => (
-            isPipelineVehicle(activeVehicle)
-              ? <PipelineCard key={loan.id} loan={loan} />
-              : <MobileLoanCard key={loan.id} loan={loan} />
+            <PipelineCard key={loan.id} loan={loan} />
+          ))}
+        </div>
+      ) : isMobile ? (
+        /* Mobile Portfolio: compact table rows */
+        <div className="border rounded-xl overflow-hidden bg-card divide-y divide-border">
+          {filteredLoans.map(loan => (
+            <div
+              key={loan.id}
+              className="flex items-center px-4 py-3 active:bg-muted/40 transition-colors cursor-pointer"
+              onClick={() => navigate(`/loans/${loan.id}`)}
+            >
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-semibold text-primary">{(loan as any).loan_id}</span>
+                  <span className="text-sm font-medium truncate">{loan.borrower_name}</span>
+                </div>
+                <div className="flex items-center gap-3 mt-0.5 text-[11px] text-foreground-tertiary font-mono">
+                  <span>{formatPercent(loan.interest_rate, 2)}</span>
+                  <span className="text-foreground-muted">·</span>
+                  <span>{formatDate(loan.maturity_date)}</span>
+                </div>
+              </div>
+              <div className="text-right shrink-0 pl-3">
+                <div className="font-mono text-sm font-semibold">{formatCurrency(loan.outstanding)}</div>
+              </div>
+            </div>
           ))}
         </div>
       ) : (
