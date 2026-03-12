@@ -13,6 +13,20 @@ export function formatCurrency(amount: number | null | undefined): string {
 }
 
 /**
+ * Format currency without decimal places (for mobile / compact views)
+ */
+export function formatCurrencyShort(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined) return '—';
+  return new Intl.NumberFormat('nl-NL', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+    currencyDisplay: 'symbol',
+  }).format(amount);
+}
+
+/**
  * Format a number as a percentage
  */
 export function formatPercent(rate: number | null | undefined, decimals = 2): string {

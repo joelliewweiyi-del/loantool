@@ -12,7 +12,7 @@ import { CreateLoanDialog } from '@/components/loans/CreateLoanDialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
-import { formatDate, formatCurrency, formatPercent } from '@/lib/format';
+import { formatDate, formatCurrency, formatCurrencyShort, formatPercent } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Search, ArrowUpDown, ArrowUp, ArrowDown, Plus, MessageSquare } from 'lucide-react';
@@ -266,7 +266,7 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
           { label: 'Prospect', value: String(prospectCount + noStageCount), mono: false },
           { label: 'Soft', value: String(softCount), mono: false, accent: 'amber' as const },
           { label: 'Hard', value: String(hardCount), mono: false, accent: 'sage' as const },
-          { label: 'Commitment', value: formatCurrency(totalCommitmentPipeline) },
+          { label: 'Commitment', value: formatCurrencyShort(totalCommitmentPipeline) },
         ] : [
           { label: 'Deals', value: String(vehicleLoans.length), mono: false },
           { label: 'Prospect', value: String(prospectCount + noStageCount), mono: false },
@@ -277,7 +277,13 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
           { label: 'Avg LTV', value: avgLtv > 0 ? formatPercent(avgLtv, 1) : '—' },
         ]} />;
       })() : (
-        <FinancialStrip items={[
+        <FinancialStrip items={isMobile ? [
+          { label: 'Outstanding', value: formatCurrencyShort(totalPrincipal), accent: 'primary' },
+          { label: 'Commitment', value: formatCurrencyShort(totalCommitment) },
+          { label: 'Undrawn', value: formatCurrencyShort(totalUndrawn), accent: 'sage' },
+          { label: 'Avg Rate', value: formatPercent(avgRate, 2) },
+          { label: 'Active', value: String(activeLoans.length), mono: false },
+        ] : [
           { label: 'Outstanding', value: formatCurrency(totalPrincipal), accent: 'primary' },
           { label: 'Commitment', value: formatCurrency(totalCommitment) },
           { label: 'Undrawn', value: formatCurrency(totalUndrawn), accent: 'sage' },
@@ -297,21 +303,49 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
           {searchQuery ? 'No loans match your search.' : `No loans in ${activeVehicle} yet.`}
         </div>
       ) : isMobile && isPipelineVehicle(activeVehicle) ? (
-        /* Mobile Pipeline: rich cards */
-        <div className="space-y-3.5">
-          {filteredLoans.map(loan => (
-            <PipelineCard key={loan.id} loan={loan} />
-          ))}
+        /* Mobile Pipeline: dense table view */
+        <div className="-mx-4">
+          <div className="flex items-center px-4 py-1.5 text-[10px] uppercase tracking-wider text-foreground-muted font-medium border-b border-border/60">
+            <span className="flex-1 min-w-0">Deal</span>
+            <span className="text-right shrink-0 w-[56px]">Stage</span>
+            <span className="text-right shrink-0 w-[100px]">Commitment</span>
+          </div>
+          {filteredLoans.map((loan, i) => {
+            const stage = (loan as any).pipeline_stage;
+            const stageLabel = stage === 'hard' ? 'Hard' : stage === 'soft' ? 'Soft' : 'Prospect';
+            const stageColor = stage === 'hard' ? 'text-accent-sage' : stage === 'soft' ? 'text-accent-amber' : 'text-foreground-muted';
+            return (
+              <div
+                key={loan.id}
+                className={`flex items-center px-4 py-2.5 active:bg-muted/40 transition-colors cursor-pointer ${
+                  i < filteredLoans.length - 1 ? 'border-b border-border/20' : ''
+                }`}
+                onClick={() => navigate(`/loans/${loan.id}`)}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono text-[11px] font-bold text-primary shrink-0">{(loan as any).loan_id}</span>
+                    <span className="text-[13px] font-medium truncate">{loan.borrower_name}</span>
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5 text-[11px] text-foreground-muted">
+                    {(loan as any).city && <span>{(loan as any).city}</span>}
+                    {(loan as any).city && loan.interest_rate ? <span className="opacity-40">|</span> : null}
+                    {loan.interest_rate ? <span className="font-mono">{formatPercent(loan.interest_rate, 2)}</span> : null}
+                  </div>
+                </div>
+                <span className={`text-right shrink-0 w-[56px] text-[11px] font-medium ${stageColor}`}>{stageLabel}</span>
+                <span className="text-right shrink-0 pl-2 font-mono text-[13px] font-semibold w-[100px]">{formatCurrencyShort(loan.total_commitment || 0)}</span>
+              </div>
+            );
+          })}
         </div>
       ) : isMobile ? (
         /* Mobile Portfolio: dense table view */
         <div className="-mx-4">
-          {/* Table header */}
           <div className="flex items-center px-4 py-1.5 text-[10px] uppercase tracking-wider text-foreground-muted font-medium border-b border-border/60">
             <span className="flex-1 min-w-0">Loan</span>
-            <span className="text-right shrink-0 w-[120px]">Outstanding</span>
+            <span className="text-right shrink-0 w-[110px]">Outstanding</span>
           </div>
-          {/* Table rows */}
           {filteredLoans.map((loan, i) => (
             <div
               key={loan.id}
@@ -331,7 +365,7 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
                   <span>{formatDate(loan.maturity_date)}</span>
                 </div>
               </div>
-              <span className="text-right shrink-0 pl-3 font-mono text-[13px] font-semibold w-[120px]">{formatCurrency(loan.outstanding)}</span>
+              <span className="text-right shrink-0 pl-3 font-mono text-[13px] font-semibold w-[110px]">{formatCurrencyShort(loan.outstanding)}</span>
             </div>
           ))}
         </div>

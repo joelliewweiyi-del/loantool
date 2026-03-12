@@ -21,7 +21,7 @@ import { AccrualsTab } from '@/components/loans/AccrualsTab';
 import { NoticePreviewTab } from '@/components/loans/NoticePreviewTab';
 import { ActivityTab } from '@/components/loans/ActivityTab';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { formatCurrency, formatDate, formatDateTime, formatPercent, formatEventType } from '@/lib/format';
+import { formatCurrency, formatCurrencyShort, formatDate, formatDateTime, formatPercent, formatEventType } from '@/lib/format';
 import { FinancialStrip } from '@/components/loans/FinancialStrip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EventType } from '@/types/loan';
@@ -272,9 +272,9 @@ export default function LoanDetail() {
 
       {/* Key Loan Metrics Strip */}
       <FinancialStrip items={isMobile ? [
-        { label: 'Outstanding', value: formatCurrency(accrualsSummary.currentPrincipal), accent: 'primary' },
+        { label: 'Outstanding', value: formatCurrencyShort(accrualsSummary.currentPrincipal), accent: 'primary' },
         { label: 'Rate', value: formatPercent(accrualsSummary.currentRate, 2) },
-        { label: 'Commitment', value: formatCurrency(accrualsSummary.totalCommitment) },
+        { label: 'Commitment', value: formatCurrencyShort(accrualsSummary.totalCommitment) },
       ] : [
         { label: 'Outstanding', value: formatCurrency(accrualsSummary.currentPrincipal), accent: 'primary' },
         { label: 'Commitment', value: formatCurrency(accrualsSummary.totalCommitment) },
@@ -288,10 +288,14 @@ export default function LoanDetail() {
 
       {/* Depot Balance Strip — only for loans with a depot reserve event */}
       {depotReserve > 0 && (
-        <FinancialStrip items={[
-          { label: isMobile ? 'Reserve' : 'Depot Reserve', value: formatCurrency(depotReserve) },
-          { label: isMobile ? 'Used' : 'Depot Used', value: formatCurrency(depotUsed), accent: 'amber' },
-          { label: isMobile ? 'Remaining' : 'Depot Remaining', value: formatCurrency(depotRemaining), accent: depotRemaining > 0 ? 'sage' : 'destructive' },
+        <FinancialStrip items={isMobile ? [
+          { label: 'Reserve', value: formatCurrencyShort(depotReserve) },
+          { label: 'Used', value: formatCurrencyShort(depotUsed), accent: 'amber' },
+          { label: 'Remaining', value: formatCurrencyShort(depotRemaining), accent: depotRemaining > 0 ? 'sage' : 'destructive' },
+        ] : [
+          { label: 'Depot Reserve', value: formatCurrency(depotReserve) },
+          { label: 'Depot Used', value: formatCurrency(depotUsed), accent: 'amber' },
+          { label: 'Depot Remaining', value: formatCurrency(depotRemaining), accent: depotRemaining > 0 ? 'sage' : 'destructive' },
         ]} />
       )}
 
