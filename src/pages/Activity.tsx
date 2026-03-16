@@ -9,10 +9,9 @@ import { FinancialStrip } from '@/components/loans/FinancialStrip';
 import { useAllActivityLog, type ActivityLogWithLoan } from '@/hooks/useActivityLog';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDate } from '@/lib/format';
-import { getCurrentDate } from '@/lib/simulatedDate';
 import { ActivityType } from '@/types/loan';
 import { Phone, Mail, Users, MapPin, MessageSquare, Search, ExternalLink } from 'lucide-react';
-import { format as fnsFormat, formatDistanceToNow, startOfDay, subDays, startOfWeek, startOfMonth } from 'date-fns';
+import { format as fnsFormat } from 'date-fns';
 import { AttachmentGallery } from '@/components/activity/PhotoAttach';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -42,24 +41,11 @@ function ActivityTypeBadge({ type }: { type: ActivityType | null }) {
   );
 }
 
-type TimeFilter = 'today' | 'week' | 'month' | 'all';
-
-function getTimeFilterStart(filter: TimeFilter): Date | null {
-  const now = getCurrentDate();
-  switch (filter) {
-    case 'today': return startOfDay(now);
-    case 'week': return startOfWeek(now, { weekStartsOn: 1 });
-    case 'month': return startOfMonth(now);
-    case 'all': return null;
-  }
-}
-
 export default function Activity() {
   const { user } = useAuth();
   const isMobile = useIsMobile();
   const { data: entries, isLoading } = useAllActivityLog();
 
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [personFilter, setPersonFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
@@ -79,10 +65,8 @@ export default function Activity() {
   // Filter entries
   const filtered = useMemo(() => {
     if (!entries) return [];
-    const start = getTimeFilterStart(timeFilter);
 
     return entries.filter(e => {
-      if (start && new Date(e.created_at) < start) return false;
       if (typeFilter !== 'all' && e.activity_type !== typeFilter) return false;
       if (personFilter !== 'all' && e.created_by !== personFilter) return false;
       if (search) {
@@ -95,7 +79,7 @@ export default function Activity() {
       }
       return true;
     });
-  }, [entries, timeFilter, typeFilter, personFilter, search]);
+  }, [entries, typeFilter, personFilter, search]);
 
   // Group by date for display
   const grouped = useMemo(() => {
@@ -148,22 +132,7 @@ export default function Activity() {
       ]} />
 
       {/* Filters */}
-      <div className="space-y-3">
-        <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5 max-md:w-full">
-          {(['today', 'week', 'month', 'all'] as TimeFilter[]).map(f => (
-            <Button
-              key={f}
-              variant={timeFilter === f ? 'default' : 'ghost'}
-              size="sm"
-              className="h-8 max-md:flex-1 text-xs capitalize"
-              onClick={() => setTimeFilter(f)}
-            >
-              {f === 'week' ? 'This Week' : f === 'month' ? 'This Month' : f === 'today' ? 'Today' : 'All'}
-            </Button>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap">
           <Select value={typeFilter} onValueChange={setTypeFilter}>
             <SelectTrigger className="h-9 max-md:flex-1 w-[130px] text-xs">
               <SelectValue placeholder="All types" />
@@ -204,7 +173,6 @@ export default function Activity() {
               className="h-9 pl-8 text-xs"
             />
           </div>
-        </div>
       </div>
 
       {/* Feed */}
