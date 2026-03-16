@@ -49,9 +49,9 @@ export function useAllActivityLog() {
 
       return ((activityRes.data || []) as unknown as LoanActivityLog[]).map(a => ({
         ...a,
-        borrower_name: loansMap[a.loan_id]?.borrower_name || 'Unknown',
-        loan_display_id: loansMap[a.loan_id]?.loan_id || '',
-        vehicle: loansMap[a.loan_id]?.vehicle || null,
+        borrower_name: a.loan_id ? loansMap[a.loan_id]?.borrower_name || 'Unknown' : '',
+        loan_display_id: a.loan_id ? loansMap[a.loan_id]?.loan_id || '' : '',
+        vehicle: a.loan_id ? loansMap[a.loan_id]?.vehicle || null : null,
       })) as ActivityLogWithLoan[];
     },
   });
@@ -88,7 +88,7 @@ export function useCreateActivityLog() {
 
   return useMutation({
     mutationFn: async (input: {
-      loan_id: string;
+      loan_id?: string | null;
       content: string;
       activity_type?: ActivityType | null;
       activity_date?: string | null;
@@ -100,7 +100,7 @@ export function useCreateActivityLog() {
       const { data, error } = await supabase
         .from('loan_activity_log' as any)
         .insert([{
-          loan_id: input.loan_id,
+          loan_id: input.loan_id || null,
           content: input.content,
           activity_type: input.activity_type || null,
           activity_date: input.activity_date || null,
@@ -114,8 +114,10 @@ export function useCreateActivityLog() {
       return data as unknown as LoanActivityLog;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['loan-activity-log', variables.loan_id] });
-      queryClient.invalidateQueries({ queryKey: ['latest-activity-per-loan'] });
+      if (variables.loan_id) {
+        queryClient.invalidateQueries({ queryKey: ['loan-activity-log', variables.loan_id] });
+        queryClient.invalidateQueries({ queryKey: ['latest-activity-per-loan'] });
+      }
       queryClient.invalidateQueries({ queryKey: ['all-activity-log'] });
       toast({ title: 'Note added' });
     },
@@ -132,7 +134,7 @@ export function useUpdateActivityLog() {
   return useMutation({
     mutationFn: async (input: {
       id: string;
-      loan_id: string;
+      loan_id?: string | null;
       content: string;
       activity_type?: ActivityType | null;
       activity_date?: string | null;
@@ -152,8 +154,11 @@ export function useUpdateActivityLog() {
       return data as unknown as LoanActivityLog;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['loan-activity-log', variables.loan_id] });
-      queryClient.invalidateQueries({ queryKey: ['latest-activity-per-loan'] });
+      if (variables.loan_id) {
+        queryClient.invalidateQueries({ queryKey: ['loan-activity-log', variables.loan_id] });
+        queryClient.invalidateQueries({ queryKey: ['latest-activity-per-loan'] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['all-activity-log'] });
       toast({ title: 'Note updated' });
     },
     onError: (error: Error) => {
@@ -167,7 +172,7 @@ export function useDeleteActivityLog() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, loanId }: { id: string; loanId: string }) => {
+    mutationFn: async ({ id, loanId }: { id: string; loanId: string | null }) => {
       const { error } = await supabase
         .from('loan_activity_log' as any)
         .delete()
@@ -175,8 +180,11 @@ export function useDeleteActivityLog() {
       if (error) throw error;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['loan-activity-log', variables.loanId] });
-      queryClient.invalidateQueries({ queryKey: ['latest-activity-per-loan'] });
+      if (variables.loanId) {
+        queryClient.invalidateQueries({ queryKey: ['loan-activity-log', variables.loanId] });
+        queryClient.invalidateQueries({ queryKey: ['latest-activity-per-loan'] });
+      }
+      queryClient.invalidateQueries({ queryKey: ['all-activity-log'] });
       toast({ title: 'Note deleted' });
     },
     onError: (error: Error) => {

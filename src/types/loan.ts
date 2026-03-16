@@ -222,7 +222,7 @@ export interface ActivityAttachment {
 
 export interface LoanActivityLog {
   id: string;
-  loan_id: string;
+  loan_id: string | null;
   content: string;
   activity_type: ActivityType | null;
   activity_date: string | null;
@@ -230,6 +230,17 @@ export interface LoanActivityLog {
   created_by: string;
   created_by_email: string | null;
   updated_at: string | null;
+  created_at: string;
+}
+
+export interface LoanDocument {
+  id: string;
+  loan_id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number;
+  content_type: string | null;
+  uploaded_by: string;
   created_at: string;
 }
 

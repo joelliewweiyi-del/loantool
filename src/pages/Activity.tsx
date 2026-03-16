@@ -3,16 +3,19 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { FinancialStrip } from '@/components/loans/FinancialStrip';
-import { useAllActivityLog, type ActivityLogWithLoan } from '@/hooks/useActivityLog';
+import { useAllActivityLog, useCreateActivityLog, useUpdateActivityLog, useDeleteActivityLog, type ActivityLogWithLoan } from '@/hooks/useActivityLog';
 import { useAuth } from '@/hooks/useAuth';
 import { formatDate } from '@/lib/format';
+import { getCurrentDate } from '@/lib/simulatedDate';
 import { ActivityType } from '@/types/loan';
-import { Phone, Mail, Users, MapPin, MessageSquare, Search, ExternalLink } from 'lucide-react';
+import { Phone, Mail, Users, MapPin, MessageSquare, Search, ExternalLink, Plus, Pencil, Trash2, X, Check, Loader2 } from 'lucide-react';
 import { format as fnsFormat } from 'date-fns';
-import { AttachmentGallery } from '@/components/activity/PhotoAttach';
+import { AttachmentGallery, PhotoAttach, type PhotoPreview } from '@/components/activity/PhotoAttach';
+import { uploadActivityPhotos } from '@/lib/uploadPhoto';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 const ACTIVITY_TYPES: { value: ActivityType; label: string; icon: typeof Phone }[] = [
@@ -45,10 +48,79 @@ export default function Activity() {
   const { user } = useAuth();
   const isMobile = useIsMobile();
   const { data: entries, isLoading } = useAllActivityLog();
+  const createLog = useCreateActivityLog();
+  const updateLog = useUpdateActivityLog();
+  const deleteLog = useDeleteActivityLog();
 
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [personFilter, setPersonFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+
+  // Compose form state
+  const [showCompose, setShowCompose] = useState(false);
+  const [content, setContent] = useState('');
+  const [activityType, setActivityType] = useState<string>('');
+  const [activityDate, setActivityDate] = useState(() => fnsFormat(getCurrentDate(), 'yyyy-MM-dd'));
+  const [photoPreviews, setPhotoPreviews] = useState<PhotoPreview[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [editType, setEditType] = useState<string>('');
+  const [editDate, setEditDate] = useState('');
+
+  const handleStartEdit = (entry: ActivityLogWithLoan) => {
+    setEditingId(entry.id);
+    setEditContent(entry.content);
+    setEditType(entry.activity_type || '');
+    setEditDate(entry.activity_date || '');
+  };
+
+  const handleSaveEdit = async (entry: ActivityLogWithLoan) => {
+    if (!editingId || !editContent.trim()) return;
+    await updateLog.mutateAsync({
+      id: editingId,
+      loan_id: entry.loan_id,
+      content: editContent.trim(),
+      activity_type: (editType || null) as ActivityType | null,
+      activity_date: editDate || null,
+    });
+    setEditingId(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!content.trim() && !photoPreviews.length) return;
+    setUploading(true);
+    try {
+      let attachments = null;
+      if (photoPreviews.length && user) {
+        attachments = await uploadActivityPhotos(
+          photoPreviews.map((p) => p.file),
+          user.id
+        );
+      }
+      await createLog.mutateAsync({
+        loan_id: null,
+        content: content.trim() || (photoPreviews.length ? '📷' : ''),
+        activity_type: (activityType || null) as ActivityType | null,
+        activity_date: activityDate || null,
+        attachments,
+      });
+      setContent('');
+      setActivityType('');
+      setActivityDate(fnsFormat(getCurrentDate(), 'yyyy-MM-dd'));
+      photoPreviews.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+      setPhotoPreviews([]);
+      setShowCompose(false);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (entry: ActivityLogWithLoan) => {
+    await deleteLog.mutateAsync({ id: entry.id, loanId: entry.loan_id });
+  };
 
   // Get unique team members for filter
   const teamMembers = useMemo(() => {
@@ -104,19 +176,92 @@ export default function Activity() {
   // Stats for financial strip
   const stats = useMemo(() => {
     const total = filtered.length;
-    const uniqueLoans = new Set(filtered.map(e => e.loan_id)).size;
+    const uniqueLoans = new Set(filtered.filter(e => e.loan_id).map(e => e.loan_id)).size;
+    const general = filtered.filter(e => !e.loan_id).length;
     const uniquePeople = new Set(filtered.map(e => e.created_by)).size;
     const calls = filtered.filter(e => e.activity_type === 'call').length;
     const meetings = filtered.filter(e => e.activity_type === 'meeting' || e.activity_type === 'site_visit').length;
-    return { total, uniqueLoans, uniquePeople, calls, meetings };
+    return { total, uniqueLoans, general, uniquePeople, calls, meetings };
   }, [filtered]);
 
   return (
     <div className="p-6 max-md:px-4 max-md:pt-5 max-md:pb-4 space-y-6 max-md:space-y-5 max-w-5xl">
-      <div>
-        <h1 className="text-2xl font-bold text-primary">Activity</h1>
-        <p className="text-sm text-foreground-secondary mt-1 max-md:hidden">All activity across loans</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-primary">Activity</h1>
+          <p className="text-sm text-foreground-secondary mt-1 max-md:hidden">All activity across loans</p>
+        </div>
+        <Button
+          size="sm"
+          className="h-8"
+          onClick={() => setShowCompose(!showCompose)}
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          General Note
+        </Button>
       </div>
+
+      {/* Compose form for general notes */}
+      {showCompose && (
+        <div className="space-y-3 border rounded-lg p-4 bg-white">
+          <Textarea
+            placeholder="Write a general note (not tied to any loan)..."
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            rows={isMobile ? 2 : 3}
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
+          />
+          <div className="flex items-center gap-3 flex-wrap">
+            <Select value={activityType} onValueChange={setActivityType}>
+              <SelectTrigger className="h-8 w-[140px] text-xs">
+                <SelectValue placeholder="Type (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {ACTIVITY_TYPES.map(t => (
+                  <SelectItem key={t.value} value={t.value}>
+                    <span className="flex items-center gap-1.5">
+                      <t.icon className="h-3 w-3" />
+                      {t.label}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              type="date"
+              value={activityDate}
+              onChange={(e) => setActivityDate(e.target.value)}
+              className="h-8 w-[160px] text-xs"
+            />
+            <PhotoAttach previews={photoPreviews} onChange={setPhotoPreviews} compact />
+            <div className="flex-1" />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => { setShowCompose(false); setContent(''); setActivityType(''); setPhotoPreviews([]); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="h-8"
+              onClick={handleSubmit}
+              disabled={(!content.trim() && !photoPreviews.length) || createLog.isPending || uploading}
+            >
+              {uploading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+              {uploading ? 'Uploading...' : createLog.isPending ? 'Adding...' : 'Add Note'}
+            </Button>
+          </div>
+          {!isMobile && <p className="text-xs text-foreground-muted">Ctrl+Enter to submit</p>}
+        </div>
+      )}
 
       <FinancialStrip items={isMobile ? [
         { label: 'Notes', value: String(stats.total), accent: 'primary' },
@@ -126,6 +271,7 @@ export default function Activity() {
       ] : [
         { label: 'Notes', value: String(stats.total), accent: 'primary' },
         { label: 'Loans Touched', value: String(stats.uniqueLoans), accent: 'amber' },
+        { label: 'General', value: String(stats.general) },
         { label: 'Team Members', value: String(stats.uniquePeople) },
         { label: 'Calls', value: String(stats.calls) },
         { label: 'Meetings / Visits', value: String(stats.meetings), accent: 'sage' },
@@ -222,30 +368,91 @@ export default function Activity() {
                           <span className="text-xs font-medium text-primary/70">
                             {isAuthor ? 'You' : name}
                           </span>
-                          <Link
-                            to={`/loans/${entry.loan_id}`}
-                            className="inline-flex items-center gap-1 text-xs font-medium text-foreground-secondary hover:text-primary transition-colors"
-                          >
-                            <span className="font-mono">{entry.loan_display_id}</span>
-                            <span className="text-foreground-muted">·</span>
-                            <span className="truncate max-w-[120px]">{entry.borrower_name}</span>
-                            <ExternalLink className="h-2.5 w-2.5 opacity-50 shrink-0" />
-                          </Link>
-                        </div>
-                        <div className="bg-white rounded-xl rounded-tl-sm shadow-sm border border-border/40 px-4 py-2.5">
-                          {entry.activity_type && (
-                            <span className="mr-1.5"><ActivityTypeBadge type={entry.activity_type} /></span>
+                          {entry.loan_id ? (
+                            <Link
+                              to={`/loans/${entry.loan_id}`}
+                              className="inline-flex items-center gap-1 text-xs font-medium text-foreground-secondary hover:text-primary transition-colors"
+                            >
+                              <span className="font-mono">{entry.loan_display_id}</span>
+                              <span className="text-foreground-muted">·</span>
+                              <span className="truncate max-w-[120px]">{entry.borrower_name}</span>
+                              <ExternalLink className="h-2.5 w-2.5 opacity-50 shrink-0" />
+                            </Link>
+                          ) : (
+                            <span className="text-xs text-foreground-muted">General</span>
                           )}
-                          <span className="text-[15px] max-md:text-sm whitespace-pre-wrap">{entry.content}</span>
-                          <AttachmentGallery attachments={entry.attachments} />
-                          <span className="inline-flex items-center gap-1 ml-2 align-baseline whitespace-nowrap">
-                            {entry.activity_date && (
-                              <span className="font-mono text-[10px] text-foreground-muted">{formatDate(entry.activity_date)}</span>
-                            )}
-                            <span className="text-[10px] text-foreground-muted">
-                              {fnsFormat(new Date(entry.created_at), 'HH:mm')}
-                            </span>
-                          </span>
+                        </div>
+                        <div className="group relative max-w-full bg-white rounded-xl rounded-tl-sm shadow-sm border border-border/40 px-4 py-2.5">
+                          {editingId === entry.id ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={editContent}
+                                onChange={(e) => setEditContent(e.target.value)}
+                                rows={3}
+                                autoFocus
+                                className="text-sm"
+                              />
+                              <div className="flex items-center gap-2">
+                                <Select value={editType} onValueChange={setEditType}>
+                                  <SelectTrigger className="h-7 w-[130px] text-xs">
+                                    <SelectValue placeholder="Type" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {ACTIVITY_TYPES.map(t => (
+                                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <Input
+                                  type="date"
+                                  value={editDate}
+                                  onChange={(e) => setEditDate(e.target.value)}
+                                  className="h-7 w-[150px] text-xs"
+                                />
+                                <div className="flex-1" />
+                                <Button size="sm" variant="ghost" className="h-7" onClick={() => setEditingId(null)}>
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button size="sm" className="h-7" onClick={() => handleSaveEdit(entry)} disabled={updateLog.isPending}>
+                                  <Check className="h-3.5 w-3.5 mr-1" />
+                                  Save
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              {entry.activity_type && (
+                                <span className="mr-1.5"><ActivityTypeBadge type={entry.activity_type} /></span>
+                              )}
+                              <span className="text-[15px] max-md:text-sm whitespace-pre-wrap">{entry.content}</span>
+                              <AttachmentGallery attachments={entry.attachments} />
+                              <span className="inline-flex items-center gap-1 ml-2 align-baseline whitespace-nowrap">
+                                {entry.activity_date && (
+                                  <span className="font-mono text-[10px] text-foreground-muted">{formatDate(entry.activity_date)}</span>
+                                )}
+                                <span className="text-[10px] text-foreground-muted">
+                                  {fnsFormat(new Date(entry.created_at), 'HH:mm')}
+                                </span>
+                                {entry.updated_at && <span className="text-[10px] text-foreground-muted italic">edited</span>}
+                              </span>
+                              {isAuthor && (
+                                <div className="absolute -right-14 top-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => handleStartEdit(entry)}>
+                                    <Pencil className="h-2.5 w-2.5" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                                    onClick={() => handleDelete(entry)}
+                                    disabled={deleteLog.isPending}
+                                  >
+                                    <Trash2 className="h-2.5 w-2.5" />
+                                  </Button>
+                                </div>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>

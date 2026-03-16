@@ -174,6 +174,14 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
     setExpandedPeriods(newExpanded);
   };
 
+  // Sorted periods (shared between mobile and desktop) — must be before any early return
+  const sortedPeriods = useMemo(() =>
+    [...periodAccruals].sort((a, b) =>
+      new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
+    ),
+    [periodAccruals]
+  );
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -184,19 +192,11 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
   }
 
   // Get the latest period (most recent by end date)
-  const latestPeriod = periodAccruals.length > 0 
-    ? [...periodAccruals].sort((a, b) => 
+  const latestPeriod = periodAccruals.length > 0
+    ? [...periodAccruals].sort((a, b) =>
         new Date(b.periodEnd).getTime() - new Date(a.periodEnd).getTime()
       )[0]
     : null;
-
-  // Sorted periods (shared between mobile and desktop)
-  const sortedPeriods = useMemo(() =>
-    [...periodAccruals].sort((a, b) =>
-      new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
-    ),
-    [periodAccruals]
-  );
 
   if (isMobile) {
     return (

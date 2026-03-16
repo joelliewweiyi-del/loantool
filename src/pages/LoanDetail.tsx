@@ -20,6 +20,7 @@ import { PipelineStageBadge } from '@/components/loans/PipelineStageBadge';
 import { AccrualsTab } from '@/components/loans/AccrualsTab';
 import { NoticePreviewTab } from '@/components/loans/NoticePreviewTab';
 import { ActivityTab } from '@/components/loans/ActivityTab';
+import { DocumentsTab } from '@/components/loans/DocumentsTab';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { formatCurrency, formatCurrencyShort, formatDate, formatDateTime, formatPercent, formatEventType } from '@/lib/format';
 import { FinancialStrip } from '@/components/loans/FinancialStrip';
@@ -35,7 +36,8 @@ import {
   TrendingUp,
   Mail,
   Trash2,
-  MessageSquare
+  MessageSquare,
+  FolderOpen
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -313,6 +315,10 @@ export default function LoanDetail() {
           <TabsTrigger value="activity">
             <MessageSquare className="h-4 w-4 mr-1.5" />
             Activity
+          </TabsTrigger>
+          <TabsTrigger value="documents">
+            <FolderOpen className="h-4 w-4 mr-1.5" />
+            {isMobile ? 'Docs' : 'Documents'}
           </TabsTrigger>
           {isMobile && <TabsTrigger value="accruals">Periods</TabsTrigger>}
           {isMobile && <TabsTrigger value="events">Events</TabsTrigger>}
@@ -651,6 +657,13 @@ export default function LoanDetail() {
         <TabsContent value="activity">
           <ErrorBoundary fallbackTitle="Activity tab crashed">
             <ActivityTab loanId={id!} />
+          </ErrorBoundary>
+        </TabsContent>
+
+        {/* Documents Tab */}
+        <TabsContent value="documents">
+          <ErrorBoundary fallbackTitle="Documents tab crashed">
+            <DocumentsTab loanId={id!} />
           </ErrorBoundary>
         </TabsContent>
 

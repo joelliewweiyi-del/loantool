@@ -3,7 +3,7 @@ import { useLoans } from '@/hooks/useLoans';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, FileSpreadsheet, Loader2, Table2, DatabaseZap, FileText } from 'lucide-react';
+import { Download, FileSpreadsheet, Loader2, Table2, DatabaseZap, FileText, PackageOpen } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import {
   downloadSummaryLoanTapeXlsx,
@@ -15,6 +15,8 @@ import {
 import { getCurrentDateString } from '@/lib/simulatedDate';
 import { LoanEvent } from '@/types/loan';
 import { VEHICLES, DEFAULT_VEHICLE, type Vehicle } from '@/lib/constants';
+import { generateInfoPack } from '@/lib/infoPack';
+import { toast } from 'sonner';
 
 type ExportType = 'summary' | 'detailed' | 'csv' | 'full';
 
@@ -22,6 +24,41 @@ export default function Export() {
   const [activeVehicle, setActiveVehicle] = useState<Vehicle | 'all'>('all');
   const { data: loans, isLoading } = useLoans();
   const [exporting, setExporting] = useState<ExportType | null>(null);
+  const [infoPackLoading, setInfoPackLoading] = useState(false);
+
+  const handleInfoPack = async () => {
+    const earmarked = (loans || []).filter(l => (l as any).earmarked);
+    if (earmarked.length === 0) {
+      toast.error('No earmarked loans found');
+      return;
+    }
+    setInfoPackLoading(true);
+    try {
+      const loanIds = earmarked.map(l => l.id);
+      const loanDisplayIds: Record<string, string> = {};
+      for (const l of earmarked) {
+        loanDisplayIds[l.id] = (l as any).loan_id || l.id;
+      }
+      const blob = await generateInfoPack({
+        loanIds,
+        loanDisplayIds,
+        onProgress: (current, total) => {
+          toast.loading(`Downloading files... ${current}/${total}`, { id: 'info-pack' });
+        },
+      });
+      toast.success(`Info pack ready (${earmarked.length} loans)`, { id: 'info-pack' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `info-pack-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate info pack', { id: 'info-pack' });
+    } finally {
+      setInfoPackLoading(false);
+    }
+  };
 
   const vehicleLoans = (loans || []).filter(
     (l) => activeVehicle === 'all' || l.vehicle === activeVehicle
@@ -175,6 +212,39 @@ export default function Export() {
             </Card>
           );
         })}
+
+        {/* Info Pack — earmarked loans document bundle */}
+        <Card>
+          <CardHeader className="flex flex-row items-start gap-4 space-y-0 pb-3">
+            <div className="rounded-md border p-2">
+              <PackageOpen className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="flex-1">
+              <CardTitle className="text-base">Info Pack</CardTitle>
+              <CardDescription className="mt-1">
+                Download all uploaded documents for earmarked loans as a single zip file.
+                Folder structure: Loan ID / filename.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between pt-0">
+            <span className="text-xs text-muted-foreground">
+              {(loans || []).filter(l => (l as any).earmarked).length} earmarked loans
+            </span>
+            <Button
+              size="sm"
+              onClick={handleInfoPack}
+              disabled={infoPackLoading || isLoading}
+            >
+              {infoPackLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              {infoPackLoading ? 'Packing...' : 'Download'}
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
