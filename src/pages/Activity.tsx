@@ -59,7 +59,7 @@ export default function Activity() {
   const isMobile = useIsMobile();
   const { data: entries, isLoading } = useAllActivityLog();
 
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>('week');
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [personFilter, setPersonFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
