@@ -21,6 +21,7 @@ import { AccrualsTab } from '@/components/loans/AccrualsTab';
 import { NoticePreviewTab } from '@/components/loans/NoticePreviewTab';
 import { ActivityTab } from '@/components/loans/ActivityTab';
 import { DocumentsTab } from '@/components/loans/DocumentsTab';
+import { CollateralTab } from '@/components/loans/CollateralTab';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { formatCurrency, formatCurrencyShort, formatDate, formatDateTime, formatPercent, formatEventType } from '@/lib/format';
 import { FinancialStrip } from '@/components/loans/FinancialStrip';
@@ -319,6 +320,10 @@ export default function LoanDetail() {
           <TabsTrigger value="documents">
             <FolderOpen className="h-4 w-4 mr-1.5" />
             {isMobile ? 'Docs' : 'Documents'}
+          </TabsTrigger>
+          <TabsTrigger value="collateral">
+            <Landmark className="h-4 w-4 mr-1.5" />
+            {isMobile ? 'Security' : 'Collateral'}
           </TabsTrigger>
           {isMobile && <TabsTrigger value="accruals">Periods</TabsTrigger>}
           {isMobile && <TabsTrigger value="events">Events</TabsTrigger>}
@@ -664,6 +669,12 @@ export default function LoanDetail() {
         <TabsContent value="documents">
           <ErrorBoundary fallbackTitle="Documents tab crashed">
             <DocumentsTab loanId={id!} />
+          </ErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="collateral">
+          <ErrorBoundary fallbackTitle="Collateral tab crashed">
+            <CollateralTab loanId={id!} combinedGuaranteeCap={loan?.combined_guarantee_cap ?? null} />
           </ErrorBoundary>
         </TabsContent>
 

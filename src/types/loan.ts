@@ -66,6 +66,7 @@ export interface Loan {
   photo_url: string | null;
   additional_info: string | null;
   guarantor: string | null;
+  combined_guarantee_cap: number | null;
   pipeline_stage: string | null;
   walt: number | null;
   walt_comment: string | null;
@@ -242,6 +243,46 @@ export interface LoanDocument {
   content_type: string | null;
   uploaded_by: string;
   created_at: string;
+}
+
+export type OwnershipType = 'eigendom' | 'erfpacht' | 'appartementsrecht' | 'recht_van_opstal';
+export type CollateralStatus = 'active' | 'released' | 'sold';
+export type GuarantorStatus = 'active' | 'released';
+
+export interface CollateralItem {
+  id: string;
+  loan_id: string;
+  gemeente: string | null;
+  sectie: string | null;
+  perceelnummer: string | null;
+  kadastrale_grootte: string | null;
+  ownership_type: OwnershipType;
+  registration_date: string | null;
+  registration_amount: number | null;
+  city: string | null;
+  address: string | null;
+  security_provider: string | null;
+  status: CollateralStatus;
+  status_changed_at: string | null;
+  status_changed_by: string | null;
+  status_notes: string | null;
+  notes: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoanGuarantor {
+  id: string;
+  loan_id: string;
+  guarantor_name: string;
+  guarantee_cap: number | null;
+  status: GuarantorStatus;
+  status_changed_at: string | null;
+  status_notes: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AfasDrawTransaction {

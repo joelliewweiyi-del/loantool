@@ -12,6 +12,7 @@ import {
   Download,
   LayoutDashboard,
   MessageSquare,
+  Landmark,
   type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -37,6 +38,7 @@ const navigation: NavGroup[] = [
     label: 'Portfolio',
     items: [
       { name: 'Loans', href: '/loans', icon: FileText },
+      { name: 'Collateral', href: '/collateral', icon: Landmark },
       { name: 'Activity', href: '/activity', icon: MessageSquare },
       { name: 'Export', href: '/export', icon: Download },
     ],

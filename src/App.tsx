@@ -13,6 +13,7 @@ import MonthlyApproval from "./pages/MonthlyApproval";
 import Export from "./pages/Export";
 import Activity from "./pages/Activity";
 import Portfolio from "./pages/Portfolio";
+import Collateral from "./pages/Collateral";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -99,6 +100,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Export />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/collateral"
+        element={
+          <ProtectedRoute>
+            <Collateral />
           </ProtectedRoute>
         }
       />

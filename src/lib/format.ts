@@ -191,3 +191,29 @@ export function dayCountFraction(days: number): number {
 export function dayCountFraction30360(days: number): number {
   return days / 360;
 }
+
+/**
+ * Format ownership type for display (Dutch cadastral terms)
+ */
+export function formatOwnershipType(type: string): string {
+  const labels: Record<string, string> = {
+    eigendom: 'Eigendom',
+    erfpacht: 'Erfpacht',
+    appartementsrecht: 'App.recht',
+    recht_van_opstal: 'Opstal',
+  };
+  return labels[type] || type;
+}
+
+/**
+ * Short ownership type label for badges
+ */
+export function formatOwnershipTypeShort(type: string): string {
+  const labels: Record<string, string> = {
+    eigendom: 'Eig',
+    erfpacht: 'Erfp',
+    appartementsrecht: 'App',
+    recht_van_opstal: 'Opstal',
+  };
+  return labels[type] || type;
+}
