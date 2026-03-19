@@ -77,7 +77,7 @@ export default function Funding() {
               <CounterpartyPanel
                 key={cp.id}
                 counterparty={cp}
-                defaultExpanded={i === 0}
+                defaultExpanded
               />
             ))}
           </div>

@@ -24,13 +24,15 @@ export interface ActivityLogWithLoan extends LoanActivityLog {
   borrower_name: string;
   loan_display_id: string;
   vehicle: string | null;
+  source?: 'loan' | 'general' | 'funding';
+  counterparty_name?: string | null;
 }
 
 export function useAllActivityLog() {
   return useQuery({
     queryKey: ['all-activity-log'],
     queryFn: async () => {
-      const [activityRes, loansRes] = await Promise.all([
+      const [activityRes, loansRes, fundingNotesRes, counterpartiesRes] = await Promise.all([
         supabase
           .from('loan_activity_log' as any)
           .select('*')
@@ -38,21 +40,61 @@ export function useAllActivityLog() {
         supabase
           .from('loans')
           .select('id, borrower_name, loan_id, vehicle'),
+        supabase
+          .from('funding_notes' as any)
+          .select('*')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('funding_counterparties' as any)
+          .select('id, name'),
       ]);
       if (activityRes.error) throw activityRes.error;
       if (loansRes.error) throw loansRes.error;
+      // Funding queries may fail if tables don't exist yet — treat as empty
+      const fundingNotes = fundingNotesRes.error ? [] : (fundingNotesRes.data || []);
+      const counterparties = counterpartiesRes.error ? [] : (counterpartiesRes.data || []);
 
       const loansMap: Record<string, { borrower_name: string; loan_id: string; vehicle: string | null }> = {};
       for (const l of loansRes.data || []) {
         loansMap[l.id] = { borrower_name: l.borrower_name, loan_id: l.loan_id, vehicle: l.vehicle };
       }
 
-      return ((activityRes.data || []) as unknown as LoanActivityLog[]).map(a => ({
+      const cpMap: Record<string, string> = {};
+      for (const cp of counterparties as any[]) {
+        cpMap[cp.id] = cp.name;
+      }
+
+      const loanEntries: ActivityLogWithLoan[] = ((activityRes.data || []) as unknown as LoanActivityLog[]).map(a => ({
         ...a,
         borrower_name: a.loan_id ? loansMap[a.loan_id]?.borrower_name || 'Unknown' : '',
         loan_display_id: a.loan_id ? loansMap[a.loan_id]?.loan_id || '' : '',
         vehicle: a.loan_id ? loansMap[a.loan_id]?.vehicle || null : null,
-      })) as ActivityLogWithLoan[];
+        source: (a.loan_id ? 'loan' : 'general') as 'loan' | 'general',
+      }));
+
+      // Map funding notes into the same shape
+      const fundingEntries: ActivityLogWithLoan[] = (fundingNotes as any[]).map(fn => ({
+        id: fn.id,
+        loan_id: null,
+        content: fn.content,
+        activity_type: fn.activity_type as ActivityType | null,
+        activity_date: fn.activity_date || null,
+        attachments: fn.attachments || null,
+        created_by: fn.created_by,
+        created_by_email: fn.created_by_email || null,
+        created_at: fn.created_at,
+        updated_at: fn.updated_at || null,
+        borrower_name: '',
+        loan_display_id: '',
+        vehicle: null,
+        source: 'funding' as const,
+        counterparty_name: cpMap[fn.counterparty_id] || 'Unknown',
+      }));
+
+      // Merge and sort by created_at descending
+      return [...loanEntries, ...fundingEntries].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
     },
   });
 }

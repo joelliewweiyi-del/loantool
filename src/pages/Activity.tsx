@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { formatDate } from '@/lib/format';
 import { getCurrentDate } from '@/lib/simulatedDate';
 import { ActivityType } from '@/types/loan';
-import { Phone, Mail, Users, MapPin, MessageSquare, Search, ExternalLink, Plus, Pencil, Trash2, X, Check, Loader2 } from 'lucide-react';
+import { Phone, Mail, Users, MapPin, MessageSquare, Search, ExternalLink, Plus, Pencil, Trash2, X, Check, Loader2, Handshake } from 'lucide-react';
 import { format as fnsFormat } from 'date-fns';
 import { AttachmentGallery, PhotoAttach, type PhotoPreview } from '@/components/activity/PhotoAttach';
 import { uploadActivityPhotos } from '@/lib/uploadPhoto';
@@ -146,7 +146,8 @@ export default function Activity() {
         if (
           !e.content.toLowerCase().includes(q) &&
           !e.borrower_name.toLowerCase().includes(q) &&
-          !e.loan_display_id.toLowerCase().includes(q)
+          !e.loan_display_id.toLowerCase().includes(q) &&
+          !(e.counterparty_name || '').toLowerCase().includes(q)
         ) return false;
       }
       return true;
@@ -368,7 +369,16 @@ export default function Activity() {
                           <span className="text-xs font-medium text-primary/70">
                             {isAuthor ? 'You' : name}
                           </span>
-                          {entry.loan_id ? (
+                          {entry.source === 'funding' && entry.counterparty_name ? (
+                            <Link
+                              to="/funding"
+                              className="inline-flex items-center gap-1 text-xs font-medium text-foreground-secondary hover:text-primary transition-colors"
+                            >
+                              <Handshake className="h-3 w-3 opacity-60 shrink-0" />
+                              <span>{entry.counterparty_name}</span>
+                              <ExternalLink className="h-2.5 w-2.5 opacity-50 shrink-0" />
+                            </Link>
+                          ) : entry.loan_id ? (
                             <Link
                               to={`/loans/${entry.loan_id}`}
                               className="inline-flex items-center gap-1 text-xs font-medium text-foreground-secondary hover:text-primary transition-colors"
@@ -433,7 +443,7 @@ export default function Activity() {
                                 </span>
                                 {entry.updated_at && <span className="text-[10px] text-foreground-muted italic">edited</span>}
                               </span>
-                              {isAuthor && (
+                              {isAuthor && entry.source !== 'funding' && (
                                 <div className="absolute -right-14 top-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                   <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => handleStartEdit(entry)}>
                                     <Pencil className="h-2.5 w-2.5" />
