@@ -355,6 +355,8 @@ export interface RentRollEntry {
 
 // ── Funding / Back Leverage Tracking ──
 
+export type PartyType = 'sponsor' | 'leverage_provider' | 'legal_counsel' | 'advisor';
+
 export type FundingStage =
   | 'initial_contact'
   | 'nda_signed'
@@ -367,6 +369,7 @@ export type FundingStage =
 export interface FundingCounterparty {
   id: string;
   name: string;
+  party_type: PartyType | null;
   stage: FundingStage;
   key_terms: Record<string, any>;
   next_followup: string | null;

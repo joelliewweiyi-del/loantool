@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FundingCounterparty, FundingNote, FundingStage, ActivityType } from '@/types/loan';
+import { FundingCounterparty, FundingNote, FundingStage, PartyType, ActivityType } from '@/types/loan';
 import { FundingStagePipeline, fundingStages, fundingStageLabels } from './FundingStagePipeline';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +40,20 @@ const ACTIVITY_TYPES: { value: ActivityType; label: string; icon: typeof Phone }
   { value: 'other', label: 'Other', icon: MessageSquare },
 ];
 
+const PARTY_TYPES: { value: PartyType; label: string }[] = [
+  { value: 'leverage_provider', label: 'Leverage Provider' },
+  { value: 'sponsor', label: 'Sponsor' },
+  { value: 'legal_counsel', label: 'Legal Counsel' },
+  { value: 'advisor', label: 'Advisor' },
+];
+
+const partyTypeLabels: Record<PartyType, string> = {
+  leverage_provider: 'Leverage Provider',
+  sponsor: 'Sponsor',
+  legal_counsel: 'Legal Counsel',
+  advisor: 'Advisor',
+};
+
 function ActivityTypeBadge({ type }: { type: ActivityType | null }) {
   if (!type) return null;
   const config = ACTIVITY_TYPES.find(t => t.value === type);
@@ -68,6 +82,7 @@ export function CounterpartyPanel({ counterparty, defaultExpanded = false }: Cou
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [showCompose, setShowCompose] = useState(false);
   const [editingStage, setEditingStage] = useState(false);
+  const [editingPartyType, setEditingPartyType] = useState(false);
   const [editingFollowup, setEditingFollowup] = useState(false);
   const [editingContact, setEditingContact] = useState(false);
   const [followupDate, setFollowupDate] = useState(counterparty.next_followup || '');
@@ -94,6 +109,11 @@ export function CounterpartyPanel({ counterparty, defaultExpanded = false }: Cou
   const handleStageChange = (stage: string) => {
     updateCounterparty.mutate({ id: counterparty.id, stage: stage as FundingStage });
     setEditingStage(false);
+  };
+
+  const handlePartyTypeChange = (val: string) => {
+    updateCounterparty.mutate({ id: counterparty.id, party_type: (val === '_none' ? null : val) as PartyType | null });
+    setEditingPartyType(false);
   };
 
   const handleFollowupSave = () => {
@@ -163,8 +183,34 @@ export function CounterpartyPanel({ counterparty, defaultExpanded = false }: Cou
           <span className="text-sm font-semibold text-primary">{counterparty.name.charAt(0)}</span>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-primary">{counterparty.name}</span>
+            {editingPartyType ? (
+              <div onClick={e => e.stopPropagation()}>
+                <Select value={counterparty.party_type || '_none'} onValueChange={handlePartyTypeChange}>
+                  <SelectTrigger className="h-6 w-[150px] text-[10px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none" className="text-xs text-foreground-muted">None</SelectItem>
+                    {PARTY_TYPES.map(p => (
+                      <SelectItem key={p.value} value={p.value} className="text-xs">
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <span
+                className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-foreground-tertiary font-medium cursor-pointer hover:text-primary hover:bg-primary/10 transition-colors"
+                onClick={e => { e.stopPropagation(); setEditingPartyType(true); }}
+                title="Click to change party type"
+              >
+                {counterparty.party_type ? partyTypeLabels[counterparty.party_type] : 'Set type'}
+              </span>
+            )}
+            <span className="text-foreground-muted/40">·</span>
             {editingStage ? (
               <div onClick={e => e.stopPropagation()}>
                 <Select value={counterparty.stage} onValueChange={handleStageChange}>

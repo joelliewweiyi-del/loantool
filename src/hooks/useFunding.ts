@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { FundingCounterparty, FundingNote, FundingStage, ActivityType, ActivityAttachment } from '@/types/loan';
+import { FundingCounterparty, FundingNote, FundingStage, PartyType, ActivityType, ActivityAttachment } from '@/types/loan';
 import { useToast } from '@/hooks/use-toast';
 
 // ── Queries ──
@@ -59,6 +59,7 @@ export function useCreateCounterparty() {
   return useMutation({
     mutationFn: async (input: {
       name: string;
+      party_type?: PartyType;
       stage?: FundingStage;
       contact_name?: string;
       contact_email?: string;
@@ -71,6 +72,7 @@ export function useCreateCounterparty() {
         .from('funding_counterparties' as any)
         .insert([{
           name: input.name,
+          party_type: input.party_type || null,
           stage: input.stage || 'initial_contact',
           contact_name: input.contact_name || null,
           contact_email: input.contact_email || null,
@@ -100,6 +102,7 @@ export function useUpdateCounterparty() {
     mutationFn: async (input: {
       id: string;
       name?: string;
+      party_type?: PartyType | null;
       stage?: FundingStage;
       key_terms?: Record<string, any>;
       next_followup?: string | null;

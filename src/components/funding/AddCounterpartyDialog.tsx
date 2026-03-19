@@ -5,13 +5,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useCreateCounterparty } from '@/hooks/useFunding';
-import { FundingStage } from '@/types/loan';
+import { FundingStage, PartyType } from '@/types/loan';
 import { fundingStages, fundingStageLabels } from './FundingStagePipeline';
 import { Plus } from 'lucide-react';
 
 export function AddCounterpartyDialog() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
+  const [partyType, setPartyType] = useState<string>('');
   const [stage, setStage] = useState<FundingStage>('initial_contact');
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -23,12 +24,14 @@ export function AddCounterpartyDialog() {
     if (!name.trim()) return;
     await createCounterparty.mutateAsync({
       name: name.trim(),
+      party_type: (partyType || undefined) as PartyType | undefined,
       stage,
       contact_name: contactName.trim() || undefined,
       contact_email: contactEmail.trim() || undefined,
       notes: notes.trim() || undefined,
     });
     setName('');
+    setPartyType('');
     setStage('initial_contact');
     setContactName('');
     setContactEmail('');
@@ -58,18 +61,34 @@ export function AddCounterpartyDialog() {
               autoFocus
             />
           </div>
-          <div>
-            <label className="ledger-label mb-1 block">Stage</label>
-            <Select value={stage} onValueChange={v => setStage(v as FundingStage)}>
-              <SelectTrigger className="text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {fundingStages.map(s => (
-                  <SelectItem key={s} value={s}>{fundingStageLabels[s]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="ledger-label mb-1 block">Type</label>
+              <Select value={partyType} onValueChange={setPartyType}>
+                <SelectTrigger className="text-sm">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="leverage_provider">Leverage Provider</SelectItem>
+                  <SelectItem value="sponsor">Sponsor</SelectItem>
+                  <SelectItem value="legal_counsel">Legal Counsel</SelectItem>
+                  <SelectItem value="advisor">Advisor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="ledger-label mb-1 block">Stage</label>
+              <Select value={stage} onValueChange={v => setStage(v as FundingStage)}>
+                <SelectTrigger className="text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {fundingStages.map(s => (
+                    <SelectItem key={s} value={s}>{fundingStageLabels[s]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
