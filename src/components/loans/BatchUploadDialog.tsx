@@ -346,7 +346,6 @@ export function BatchUploadDialog() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Loan ID</TableHead>
-                      <TableHead>Borrower</TableHead>
                       <TableHead>Start Date</TableHead>
                       <TableHead>Vehicle</TableHead>
                       <TableHead>Outstanding</TableHead>
@@ -358,7 +357,6 @@ export function BatchUploadDialog() {
                     {parsedLoans.slice(0, 10).map((loan, i) => (
                       <TableRow key={i}>
                         <TableCell className="font-medium">{loan.loan_id}</TableCell>
-                        <TableCell>{loan.borrower_name}</TableCell>
                         <TableCell>{loan.loan_start_date}</TableCell>
                         <TableCell>{loan.vehicle}</TableCell>
                         <TableCell>{loan.outstanding?.toLocaleString() || '-'}</TableCell>

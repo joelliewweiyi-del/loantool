@@ -374,8 +374,6 @@ export default function Activity() {
                               className="inline-flex items-center gap-1 text-xs font-medium text-foreground-secondary hover:text-primary transition-colors"
                             >
                               <span className="font-mono">{entry.loan_display_id}</span>
-                              <span className="text-foreground-muted">·</span>
-                              <span className="truncate max-w-[120px]">{entry.borrower_name}</span>
                               <ExternalLink className="h-2.5 w-2.5 opacity-50 shrink-0" />
                             </Link>
                           ) : (

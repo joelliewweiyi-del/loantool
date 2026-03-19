@@ -60,12 +60,24 @@ IBM Plex Sans (body) + IBM Plex Mono (numbers, loan IDs, amounts). No Barlow.
 
 ### Status Color Mapping
 
+**Period / Loan statuses:**
+
 | Category | CSS Class | Color | Statuses |
 |---|---|---|---|
 | Action needed | `.status-action` | amber | `draft`, `open`, `submitted` |
 | Completed | `.status-done` | sage | `approved`, `sent`, `paid`, `active`, `repaid` |
 | Problem | `.status-problem` | destructive | `defaulted` |
 | Neutral | `.status-neutral` | muted | fallback |
+
+**Covenant submission statuses:**
+
+| Category | CSS Class | Color | Statuses |
+|---|---|---|---|
+| Action needed | `.status-pending`, `.status-requested` | amber | `pending`, `requested` |
+| Intermediate | `.status-reminder-sent` | primary/70 | `reminder_sent` |
+| Completed | `.status-received`, `.status-reviewed` | sage | `received`, `reviewed` |
+| Problem | `.status-breached`, `.status-overdue` | destructive | `breached`, `overdue` |
+| Neutral | `.status-not-applicable` | muted | `not_applicable` |
 
 ---
 
@@ -258,6 +270,25 @@ Three roles stored in `user_roles` table:
 
 Role checks via `useAuth()` hook which exposes `isPM`, `isController`, `isAdmin` booleans.
 
+### Covenant / Compliance Tracking
+
+Loan covenants (valuations, rent rolls, annual accounts, insurance, KYC checks, financial covenants) are tracked per loan per year. Replaces the manual Excel workbook "Afspraken Kredietbrief.xlsx".
+
+**Database tables:**
+- `loan_covenants` — Covenant definitions per loan per tracking year. Has `covenant_type` enum (6 values), frequency, threshold (value/operator/metric), `notification_days`.
+- `covenant_submissions` — Individual delivery instances (e.g., "Q1 2026 rent roll for loan X"). Tracks `due_date`, `status` (8-value enum), `received_at`, `file_url`, `notes`.
+- `rent_roll_entries` — Parsed tenant rows from submitted rent rolls.
+
+**Status lifecycle:** `pending → reminder_sent → requested → received → reviewed`. Also: `not_applicable`, `breached`, `overdue` (auto-set when past due_date).
+
+**Key files:**
+- `src/pages/Compliance.tsx` — Portfolio-wide covenant dashboard with expandable loan rows, action buttons (send reminder, mark received), auto-overdue detection
+- `src/components/loans/CovenantTab.tsx` — Single-loan covenant view (tab in LoanDetail)
+- `src/components/loans/CovenantStatusBadge.tsx` — Status badges for covenant statuses
+- `src/hooks/useCovenants.ts` — Data layer: `useLoanCovenants`, `useCovenantSubmissions`, `useAllCovenants`, mutations for status/notes updates
+- `src/lib/covenantUtils.ts` — `inferDueDate(periodLabel)` derives end-of-period dates from labels like "Q1 2026" → "2026-03-31"
+- `scripts/generate-covenant-sql.mjs` — Parses the Excel workbook into migration SQL
+
 ### Simulated Date
 
 `src/lib/simulatedDate.ts` provides `getCurrentDate()` for development/demo purposes. Currently hardcoded to `2026-06-15` — **this will need to be set to `null` before going live**.
@@ -280,12 +311,13 @@ Role checks via `useAuth()` hook which exposes `isPM`, `isController`, `isAdmin`
 | [src/lib/loanCalculations.ts](src/lib/loanCalculations.ts) | All interest/accrual math: `getLoanStateAtDate`, `calculateInterestSegments`, `calculatePeriodAccruals`, `calculateAccrualsSummary` |
 | [src/lib/format.ts](src/lib/format.ts) | `daysBetween30360` (30E/360 implementation), `formatCurrency`, `formatPercent`, `formatDate`, `formatEventType` |
 | [src/lib/simulatedDate.ts](src/lib/simulatedDate.ts) | Dev-only date simulation — **must be nulled before production** |
+| [src/lib/covenantUtils.ts](src/lib/covenantUtils.ts) | `inferDueDate(periodLabel)`, `effectiveDueDate()` — derives due dates from period labels like "Q1 2026" |
 
 ### Types
 
 | File | Purpose |
 |---|---|
-| [src/types/loan.ts](src/types/loan.ts) | All TypeScript interfaces: `Loan`, `LoanEvent`, `Period`, `MonthlyApproval`, `AccrualEntry`, `NoticeSnapshot`, `UserRole`, etc. Key union types: `EventType` (11 values), `LoanStatus`, `PeriodStatus`, `AppRole`, `InterestType` |
+| [src/types/loan.ts](src/types/loan.ts) | All TypeScript interfaces: `Loan`, `LoanEvent`, `Period`, `MonthlyApproval`, `AccrualEntry`, `NoticeSnapshot`, `UserRole`, `LoanCovenant`, `CovenantSubmission`, `RentRollEntry`, etc. Key union types: `EventType` (11 values), `LoanStatus`, `PeriodStatus`, `AppRole`, `InterestType`, `CovenantType` (6 values), `CovenantStatus` (8 values) |
 | [src/integrations/supabase/types.ts](src/integrations/supabase/types.ts) | Auto-generated Supabase DB types — do not hand-edit |
 
 ### Hooks (Data Layer)
@@ -295,6 +327,7 @@ Role checks via `useAuth()` hook which exposes `isPM`, `isController`, `isAdmin`
 | [src/hooks/useLoans.ts](src/hooks/useLoans.ts) | `useLoans`, `useLoan`, `useLoanEvents`, `useLoanPeriods`, `useCreateLoan`, `useApproveEvent`, `useDeleteLoan`, `useLatestChargesPerLoan`. Also contains `generateMonthlyPeriods` |
 | [src/hooks/useAccruals.ts](src/hooks/useAccruals.ts) | `useAccruals(loanId)` — orchestrates loan + events + periods, runs `calculateAllPeriodAccruals` |
 | [src/hooks/useMonthlyApproval.ts](src/hooks/useMonthlyApproval.ts) | `useMonthlyApprovals`, `useMonthlyApprovalDetails`, `useApproveMonth`, `useTriggerDailyAccruals` |
+| [src/hooks/useCovenants.ts](src/hooks/useCovenants.ts) | `useLoanCovenants`, `useCovenantSubmissions`, `useLoanCovenantsWithSubmissions`, `useAllCovenants`, `useUpdateSubmissionStatus`, `useUpdateSubmissionNotes` |
 | [src/hooks/useAuth.tsx](src/hooks/useAuth.tsx) | Auth context with Supabase; exposes `user`, `roles`, `isPM`, `isController`, `isAdmin`, `signIn`, `signOut` |
 
 ### Pages
@@ -302,8 +335,13 @@ Role checks via `useAuth()` hook which exposes `isPM`, `isController`, `isAdmin`
 | File | Purpose |
 |---|---|
 | [src/pages/Loans.tsx](src/pages/Loans.tsx) | Loan portfolio list with vehicle tabs (RED IV / TLF), FinancialStrip metrics, sortable table, search. Single-click rows navigate to detail. |
-| [src/pages/LoanDetail.tsx](src/pages/LoanDetail.tsx) | Single loan view: FinancialStrip, tabs: Interest Periods → Notices → Event Ledger |
+| [src/pages/LoanDetail.tsx](src/pages/LoanDetail.tsx) | Single loan view: FinancialStrip, tabs: Interest Periods → Notices → Covenants → Event Ledger |
 | [src/pages/MonthlyApproval.tsx](src/pages/MonthlyApproval.tsx) | Month-by-month batch approval for controller. Tabs: Cash Payments / Draws & Repayments. FinancialStrip summaries. |
+| [src/pages/Compliance.tsx](src/pages/Compliance.tsx) | Portfolio-wide covenant compliance dashboard. Expandable loan rows, auto-overdue detection, action buttons. Route: `/compliance`. |
+| [src/pages/Collateral.tsx](src/pages/Collateral.tsx) | Collateral management. Route: `/collateral`. |
+| [src/pages/Activity.tsx](src/pages/Activity.tsx) | Activity tracking. Route: `/activity`. |
+| [src/pages/Export.tsx](src/pages/Export.tsx) | Data export. Route: `/export`. |
+| [src/pages/Portfolio.tsx](src/pages/Portfolio.tsx) | Portfolio analytics. Route: `/portfolio`. |
 | [src/pages/Afas.tsx](src/pages/Afas.tsx) | Consolidated AFAS page with 2 tabs: Dashboard + Data Explorer. Route: `/afas`. |
 | [src/pages/AfasDashboard.tsx](src/pages/AfasDashboard.tsx) | AFAS connector status, cash payments, draws. Embedded inside Afas.tsx via `embedded` prop. |
 | [src/pages/AfasData.tsx](src/pages/AfasData.tsx) | AFAS data explorer (connectors, raw data, reconciliation). Embedded inside Afas.tsx via `embedded` prop. |
@@ -318,10 +356,12 @@ Role checks via `useAuth()` hook which exposes `isPM`, `isController`, `isAdmin`
 | [src/components/loans/LoanStatusBadge.tsx](src/components/loans/LoanStatusBadge.tsx) | Status badges with 3 semantic color categories. |
 | [src/components/loans/AccrualsTab.tsx](src/components/loans/AccrualsTab.tsx) | Main accruals UI: period table with PeriodPipeline, expandable segments, PIK "Roll Up" button, daily breakdown |
 | [src/components/loans/NoticePreviewTab.tsx](src/components/loans/NoticePreviewTab.tsx) | Interest notice preview — renders the full PDF-style notice document per period, vertical PeriodPipeline for workflow |
+| [src/components/loans/CovenantTab.tsx](src/components/loans/CovenantTab.tsx) | Single-loan covenant view: submission history, thresholds, remind/received actions |
+| [src/components/loans/CovenantStatusBadge.tsx](src/components/loans/CovenantStatusBadge.tsx) | Status badges for 8 covenant submission statuses |
 | [src/components/loans/CreateLoanDialog.tsx](src/components/loans/CreateLoanDialog.tsx) | New loan creation form |
 | [src/components/loans/BatchUploadDialog.tsx](src/components/loans/BatchUploadDialog.tsx) | CSV batch loan import |
 | [src/components/loans/EditLoanDialog.tsx](src/components/loans/EditLoanDialog.tsx) | Edit loan metadata (borrower name, dates, rates, etc.) |
-| [src/components/layout/AppLayout.tsx](src/components/layout/AppLayout.tsx) | Sidebar layout with grouped navigation: Portfolio, Workflow, Integration |
+| [src/components/layout/AppLayout.tsx](src/components/layout/AppLayout.tsx) | Sidebar layout with grouped navigation: Portfolio (Loans, Collateral, Activity, Export), Workflow (Monthly Approval, Compliance), Integration (AFAS) |
 
 ### Edge Functions (Supabase / Deno)
 
@@ -332,6 +372,12 @@ Role checks via `useAuth()` hook which exposes `isPM`, `isController`, `isAdmin`
 | [supabase/functions/correct-event-amount/index.ts](supabase/functions/correct-event-amount/index.ts) | Admin correction: creates a reversal + new event pair to fix an event amount |
 | [supabase/functions/get-afas-debtors/index.ts](supabase/functions/get-afas-debtors/index.ts) | Fetches debtor list from AFAS for the data explorer |
 | [supabase/functions/test-afas-connection/index.ts](supabase/functions/test-afas-connection/index.ts) | AFAS connectivity test |
+
+### Data Import Scripts
+
+| File | Purpose |
+|---|---|
+| [scripts/generate-covenant-sql.mjs](scripts/generate-covenant-sql.mjs) | Parses "Afspraken Kredietbrief.xlsx" (7 sheets) into migration SQL for covenant data import |
 
 ### Database
 
@@ -349,6 +395,9 @@ Migrations are in `supabase/migrations/`. Key tables:
 | `processing_jobs` | Log of Edge Function runs |
 | `loan_facilities` | TLF-specific sub-facility tracking |
 | `audit_logs` | Change audit trail |
+| `loan_covenants` | Covenant definitions per loan per tracking year (type, frequency, threshold, notification_days) |
+| `covenant_submissions` | Individual submission instances with status lifecycle, due dates, file URLs |
+| `rent_roll_entries` | Parsed tenant rows from submitted rent rolls |
 
 Key DB functions: `calculate_principal_balance`, `get_loan_balances`, `determine_period_processing_mode`, `period_has_economic_events`, `create_founding_event`, `admin_delete_loan`, `admin_correct_event_amount`.
 
@@ -455,6 +504,17 @@ Events are hidden from the UI's event ledger view: `cash_received`, correction/r
 - IBM Plex Sans + Mono typography
 - All colors use semantic tokens (no raw Tailwind color classes)
 
+### Phase 1.6 — Covenant/Compliance Tracking ✓
+- Digitized "Afspraken Kredietbrief" Excel into DB-backed covenant system
+- 6 covenant types: valuation, rent_roll, annual_accounts, insurance, kyc_check, financial_covenant
+- 8-status lifecycle with auto-overdue detection
+- Portfolio-wide Compliance dashboard (`/compliance`) with expandable loan rows
+- Per-loan Covenants tab in LoanDetail
+- Threshold tracking (LTV %, ICR, EBITDA, min rent)
+- Reminder / received action buttons
+- Excel → SQL import pipeline (`scripts/generate-covenant-sql.mjs`)
+- Additional pages: Collateral (`/collateral`), Activity (`/activity`), Export (`/export`), Portfolio (`/portfolio`)
+
 ### Phase 2 — Hardening for Production
 
 **Error handling and robustness:**
@@ -542,9 +602,10 @@ Events are hidden from the UI's event ledger view: `cash_received`, correction/r
 - Path alias `@/` maps to `src/` (configured in `vite.config.ts`)
 - All monetary amounts are stored and calculated in **EUR**, displayed with `formatCurrency()` which uses `€` symbol
 - Rates are stored as decimals (0.08 = 8%) but displayed as percentages via `formatPercent()`
-- Routes: `/loans`, `/loans/:id`, `/monthly-approval`, `/afas` (consolidated). Legacy routes `/afas-dashboard`, `/afas-data`, `/afas-gl-explorer` redirect to `/afas`.
-- Sidebar navigation is grouped: **Portfolio** (Loans), **Workflow** (Monthly Approval), **Integration** (AFAS)
+- Routes: `/loans`, `/loans/:id`, `/monthly-approval`, `/compliance`, `/collateral`, `/activity`, `/export`, `/portfolio`, `/afas` (consolidated). Legacy routes `/afas-dashboard`, `/afas-data`, `/afas-gl-explorer` redirect to `/afas`.
+- Sidebar navigation is grouped: **Portfolio** (Loans, Collateral, Activity, Export), **Workflow** (Monthly Approval, Compliance), **Integration** (AFAS)
 - **Color rule**: Never use raw Tailwind color classes (e.g. `text-emerald-600`, `bg-orange-100`). Always use semantic tokens: `text-accent-sage`, `text-accent-amber`, `text-primary`, `text-destructive`, or their `bg-` / `border-` variants with opacity modifiers.
+- **Completion rule**: When implementing new functionality, you MUST take screenshots of the result and manually test the user flow (navigate through the feature, verify interactions work, check edge states) before considering the task complete. Do not mark work as done without visual verification.
 
 ---
 

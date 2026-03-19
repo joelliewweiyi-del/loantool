@@ -49,7 +49,7 @@ import type { AfasDrawTransaction } from '@/types/loan';
 
 export default function MonthlyApproval() {
   const [currentMonth, setCurrentMonth] = useState(() =>
-    format(subMonths(startOfMonth(getCurrentDate()), 1), 'yyyy-MM')
+    format(startOfMonth(getCurrentDate()), 'yyyy-MM')
   );
   const [approvalNotes, setApprovalNotes] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -307,7 +307,6 @@ export default function MonthlyApproval() {
                     <thead>
                       <tr>
                         <th className="text-left">Loan</th>
-                        <th className="text-left">Borrower</th>
                         <th className="text-left">Period</th>
                         <th className="text-right">Calculated</th>
                         <th className="text-right">AFAS Received</th>
@@ -326,9 +325,6 @@ export default function MonthlyApproval() {
                               )}
                             >
                               <td className="font-mono font-medium">{period.loanNumericId || '—'}</td>
-                              <td className="text-muted-foreground max-w-[200px] truncate">
-                                {period.borrowerName}
-                              </td>
                               <td className="font-mono text-xs text-muted-foreground whitespace-nowrap">
                                 {formatDate(period.period_start)} – {formatDate(period.period_end)}
                               </td>
@@ -509,7 +505,6 @@ export default function MonthlyApproval() {
                         <thead>
                           <tr>
                             <th className="text-left">Loan</th>
-                            <th className="text-left">Borrower</th>
                             <th className="text-left">Date</th>
                             <th className="text-center">Type</th>
                             <th className="text-right">Amount</th>
@@ -524,9 +519,6 @@ export default function MonthlyApproval() {
                               <React.Fragment key={tx.afasRef}>
                                 <tr>
                                   <td className="font-mono font-medium">#{tx.loanId}</td>
-                                  <td className="text-muted-foreground max-w-[200px] truncate">
-                                    {tx.borrowerName}
-                                  </td>
                                   <td className="font-mono text-xs text-muted-foreground whitespace-nowrap">
                                     {formatDate(tx.entryDate)}
                                   </td>

@@ -325,11 +325,9 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono text-[11px] font-bold text-primary shrink-0">{(loan as any).loan_id}</span>
-                    <span className="text-[13px] font-medium truncate">{loan.borrower_name}</span>
+                    {(loan as any).city && <span className="text-[13px] font-medium truncate">{(loan as any).city}</span>}
                   </div>
                   <div className="flex items-center gap-2 mt-0.5 text-[11px] text-foreground-muted">
-                    {(loan as any).city && <span>{(loan as any).city}</span>}
-                    {(loan as any).city && loan.interest_rate ? <span className="opacity-40">|</span> : null}
                     {loan.interest_rate ? <span className="font-mono">{formatPercent(loan.interest_rate, 2)}</span> : null}
                   </div>
                 </div>

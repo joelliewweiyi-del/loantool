@@ -206,6 +206,32 @@
     @apply bg-destructive/10 text-destructive;
   }
 
+  /* Covenant status badges */
+  .status-pending {
+    @apply bg-accent-amber/10 text-accent-amber;
+  }
+  .status-reminder-sent {
+    @apply bg-primary/10 text-primary/70;
+  }
+  .status-requested {
+    @apply bg-accent-amber/10 text-accent-amber;
+  }
+  .status-received {
+    @apply bg-accent-sage/10 text-accent-sage;
+  }
+  .status-reviewed {
+    @apply bg-accent-sage/10 text-accent-sage;
+  }
+  .status-not-applicable {
+    @apply bg-muted text-foreground-muted;
+  }
+  .status-breached {
+    @apply bg-destructive/10 text-destructive;
+  }
+  .status-overdue {
+    @apply bg-destructive/10 text-destructive;
+  }
+
   /* Ledger-style data tables */
   .data-table {
     @apply w-full text-sm;

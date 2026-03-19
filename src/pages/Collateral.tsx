@@ -34,14 +34,13 @@ function OwnershipBadge({ type }: { type: string }) {
 
 function downloadCsv(items: CollateralItemWithLoan[]) {
   const headers = [
-    'Loan ID', 'Borrower', 'Gemeente', 'Sectie', 'Perceelnummer',
+    'Loan ID', 'Gemeente', 'Sectie', 'Perceelnummer',
     'Kadastrale Grootte', 'Ownership Type', 'Registration Date',
     'Registration Amount', 'City', 'Address', 'Security Provider',
     'Status', 'Notes',
   ];
   const rows = items.map(i => [
     i.loan_id_display,
-    i.borrower_name,
     i.gemeente || '',
     i.sectie || '',
     i.perceelnummer || '',

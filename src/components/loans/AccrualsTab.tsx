@@ -86,7 +86,6 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
     );
 
     for (const period of sortedPeriods) {
-      if (period.paymentDate) continue;
       const expected = expectedAmountFn(period);
       if (expected <= 0) continue;
 
@@ -110,8 +109,11 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
       }
 
       if (bestMatch) {
-        matches.set(period.periodId, bestMatch);
         usedRefs.add(bestMatch.ref);
+        // Only expose match for periods that aren't already confirmed as paid
+        if (!period.paymentDate) {
+          matches.set(period.periodId, bestMatch);
+        }
       }
     }
     return matches;

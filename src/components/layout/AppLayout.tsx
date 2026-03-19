@@ -13,6 +13,8 @@ import {
   LayoutDashboard,
   MessageSquare,
   Landmark,
+  Shield,
+  Handshake,
   type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -47,6 +49,13 @@ const navigation: NavGroup[] = [
     label: 'Workflow',
     items: [
       { name: 'Monthly Approval', href: '/monthly-approval', icon: ClipboardCheck },
+      { name: 'Compliance', href: '/compliance', icon: Shield },
+    ],
+  },
+  {
+    label: 'Funding',
+    items: [
+      { name: 'Back Leverage', href: '/funding', icon: Handshake },
     ],
   },
   {

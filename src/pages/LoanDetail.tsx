@@ -22,6 +22,7 @@ import { NoticePreviewTab } from '@/components/loans/NoticePreviewTab';
 import { ActivityTab } from '@/components/loans/ActivityTab';
 import { DocumentsTab } from '@/components/loans/DocumentsTab';
 import { CollateralTab } from '@/components/loans/CollateralTab';
+import { CovenantTab } from '@/components/loans/CovenantTab';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { formatCurrency, formatCurrencyShort, formatDate, formatDateTime, formatPercent, formatEventType } from '@/lib/format';
 import { FinancialStrip } from '@/components/loans/FinancialStrip';
@@ -38,7 +39,8 @@ import {
   Mail,
   Trash2,
   MessageSquare,
-  FolderOpen
+  FolderOpen,
+  Shield
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -320,6 +322,10 @@ export default function LoanDetail() {
           <TabsTrigger value="documents">
             <FolderOpen className="h-4 w-4 mr-1.5" />
             {isMobile ? 'Docs' : 'Documents'}
+          </TabsTrigger>
+          <TabsTrigger value="covenants">
+            <Shield className="h-4 w-4 mr-1.5" />
+            {isMobile ? 'Cov.' : 'Covenants'}
           </TabsTrigger>
           <TabsTrigger value="collateral">
             <Landmark className="h-4 w-4 mr-1.5" />
@@ -669,6 +675,12 @@ export default function LoanDetail() {
         <TabsContent value="documents">
           <ErrorBoundary fallbackTitle="Documents tab crashed">
             <DocumentsTab loanId={id!} />
+          </ErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="covenants">
+          <ErrorBoundary fallbackTitle="Covenants tab crashed">
+            <CovenantTab loanId={id!} />
           </ErrorBoundary>
         </TabsContent>
 

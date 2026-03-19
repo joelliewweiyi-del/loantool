@@ -299,3 +299,95 @@ export interface AfasDrawTransaction {
   createdEventId: string | null;
   eventStatus: 'draft' | 'approved' | null;
 }
+
+// ── Covenant Tracking ──
+
+export type CovenantType = 'valuation' | 'rent_roll' | 'annual_accounts' | 'insurance' | 'kyc_check' | 'financial_covenant';
+export type CovenantStatus = 'pending' | 'reminder_sent' | 'requested' | 'received' | 'reviewed' | 'not_applicable' | 'breached' | 'overdue';
+
+export interface LoanCovenant {
+  id: string;
+  loan_id: string;
+  covenant_type: CovenantType;
+  frequency: string | null;
+  frequency_detail: string | null;
+  threshold_value: number | null;
+  threshold_operator: string | null;
+  threshold_metric: string | null;
+  tracking_year: number;
+  notification_days: number;
+  active: boolean;
+  notes: string | null;
+  metadata: Record<string, any>;
+  created_at: string;
+}
+
+export interface CovenantSubmission {
+  id: string;
+  covenant_id: string;
+  loan_id: string;
+  period_label: string;
+  due_date: string | null;
+  reminder_date: string | null;
+  status: CovenantStatus;
+  received_at: string | null;
+  received_by: string | null;
+  file_url: string | null;
+  notes: string | null;
+  metadata: Record<string, any>;
+  created_at: string;
+}
+
+export interface RentRollEntry {
+  id: string;
+  submission_id: string;
+  loan_id: string;
+  tenant_name: string | null;
+  lease_start: string | null;
+  lease_end: string | null;
+  notice_period: string | null;
+  renewal_period: string | null;
+  sqm: number | null;
+  annual_rent: number | null;
+  notes: string | null;
+  created_at: string;
+}
+
+// ── Funding / Back Leverage Tracking ──
+
+export type FundingStage =
+  | 'initial_contact'
+  | 'nda_signed'
+  | 'term_sheet'
+  | 'due_diligence'
+  | 'credit_committee'
+  | 'docs_negotiation'
+  | 'closed';
+
+export interface FundingCounterparty {
+  id: string;
+  name: string;
+  stage: FundingStage;
+  key_terms: Record<string, any>;
+  next_followup: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  notes: string | null;
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FundingNote {
+  id: string;
+  counterparty_id: string;
+  content: string;
+  activity_type: ActivityType | null;
+  activity_date: string | null;
+  attachments: ActivityAttachment[] | null;
+  created_by: string;
+  created_by_email: string | null;
+  created_at: string;
+  updated_at: string | null;
+}

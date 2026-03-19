@@ -14,6 +14,8 @@ import Export from "./pages/Export";
 import Activity from "./pages/Activity";
 import Portfolio from "./pages/Portfolio";
 import Collateral from "./pages/Collateral";
+import Compliance from "./pages/Compliance";
+import Funding from "./pages/Funding";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -108,6 +110,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Collateral />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/compliance"
+        element={
+          <ProtectedRoute>
+            <Compliance />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/funding"
+        element={
+          <ProtectedRoute>
+            <Funding />
           </ProtectedRoute>
         }
       />
