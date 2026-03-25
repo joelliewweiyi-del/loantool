@@ -7,8 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Minus, FileUp, Loader2, ExternalLink } from 'lucide-react';
+import { Plus, Minus, FileUp, Loader2, ExternalLink, Upload, X, ImageIcon } from 'lucide-react';
 import { useCreateLoan } from '@/hooks/useLoans';
+import { uploadLoanPhoto } from '@/lib/uploadLoanPhoto';
 import { InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
 import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
 import { extractTextFromPdf } from '@/lib/pdfExtract';
@@ -128,6 +129,9 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsedResult, setParsedResult] = useState<ParsedDocumentResult | null>(null);
   const [propertyAddresses, setPropertyAddresses] = useState<string[]>(['']);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   // Sync vehicle when tab changes (only when dialog is closed / form is pristine)
   useEffect(() => {
     if (!isOpen && defaultVehicle) {
@@ -321,6 +325,8 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
     setPdfStatus(null);
     setParsedResult(null);
     durationMonthsRef.current = null;
+    setPhotoPreview(null);
+    setPhotoUploading(false);
   };
 
   const isTLF = vehicleRequiresFacility(formData.vehicle);
@@ -335,6 +341,8 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
         setPdfStatus(null);
         setParsedResult(null);
         durationMonthsRef.current = null;
+        setPhotoPreview(null);
+        setPhotoUploading(false);
       }
     }}>
       <DialogTrigger asChild>
@@ -881,13 +889,80 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="photo_url">Photo URL</Label>
-              <Input
-                id="photo_url"
-                value={formData.photo_url}
-                onChange={(e) => handleChange('photo_url', e.target.value)}
-                placeholder="Paste image URL"
+              <Label>Property Photo</Label>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  e.target.value = '';
+                  setPhotoUploading(true);
+                  try {
+                    // Show local preview immediately
+                    const previewUrl = URL.createObjectURL(file);
+                    setPhotoPreview(previewUrl);
+                    // Upload to Supabase
+                    const publicUrl = await uploadLoanPhoto(file, formData.loan_number || 'new');
+                    handleChange('photo_url', publicUrl);
+                  } catch (err) {
+                    console.error('Photo upload failed:', err);
+                    setPhotoPreview(null);
+                    handleChange('photo_url', '');
+                  } finally {
+                    setPhotoUploading(false);
+                  }
+                }}
               />
+              {formData.photo_url || photoPreview ? (
+                <div className="relative w-full h-32 rounded-md overflow-hidden border border-border bg-muted">
+                  <img
+                    src={formData.photo_url || photoPreview || ''}
+                    alt="Property"
+                    className="w-full h-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleChange('photo_url', '');
+                      setPhotoPreview(null);
+                    }}
+                    className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                  {photoUploading && (
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                      <Loader2 className="h-5 w-5 text-white animate-spin" />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={photoUploading}
+                  className="w-full h-32 rounded-md border-2 border-dashed border-border hover:border-primary/40 bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground-secondary transition-colors cursor-pointer"
+                >
+                  {photoUploading ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <>
+                      <ImageIcon className="h-6 w-6" />
+                      <span className="text-xs">Click to upload photo</span>
+                    </>
+                  )}
+                </button>
+              )}
+              {formData.photo_url && (
+                <Input
+                  value={formData.photo_url}
+                  readOnly
+                  className="text-xs text-muted-foreground"
+                />
+              )}
             </div>
           </div>
 
@@ -921,8 +996,8 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pik">PIK (Capitalized)</SelectItem>
-                    <SelectItem value="cash">Cash (Withheld)</SelectItem>
+                    <SelectItem value="pik">PIK</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">

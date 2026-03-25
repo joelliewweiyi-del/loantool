@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,8 +6,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Pencil, Plus, Minus } from 'lucide-react';
+import { Pencil, Plus, Minus, Loader2, X, ImageIcon } from 'lucide-react';
 import { useUpdateLoan } from '@/hooks/useLoans';
+import { uploadLoanPhoto } from '@/lib/uploadLoanPhoto';
 import { Loan, InterestType, PaymentType, CommitmentFeeBasis, PaymentTiming, AmortizationFrequency } from '@/types/loan';
 import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
 
@@ -64,6 +65,8 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const updateLoan = useUpdateLoan();
   const [propertyAddresses, setPropertyAddresses] = useState<string[]>(['']);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   
   const [formData, setFormData] = useState<LoanFormData>({
     borrower_name: '',
@@ -421,28 +424,28 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="cash">Cash (Invoiced)</SelectItem>
-                    <SelectItem value="pik">PIK (Capitalized)</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="pik">PIK</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {formData.interest_payment_type === 'pik' 
-                    ? 'Monthly interest rolled into principal' 
+                  {formData.interest_payment_type === 'pik'
+                    ? 'Monthly interest rolled into principal'
                     : 'Monthly interest invoiced for payment'}
                 </p>
               </div>
               <div className="space-y-2">
                 <Label>Arrangement Fees</Label>
-                <Select 
-                  value={formData.fee_payment_type} 
+                <Select
+                  value={formData.fee_payment_type}
                   onValueChange={(v) => handleChange('fee_payment_type', v)}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pik">PIK (Capitalized)</SelectItem>
-                    <SelectItem value="cash">Cash (Withheld)</SelectItem>
+                    <SelectItem value="pik">PIK</SelectItem>
+                    <SelectItem value="cash">Cash</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
@@ -839,13 +842,73 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit-photo_url">Photo URL</Label>
-                <Input
-                  id="edit-photo_url"
-                  value={formData.photo_url}
-                  onChange={(e) => handleChange('photo_url', e.target.value)}
-                  placeholder="https://i.imgur.com/..."
+                <Label>Property Photo</Label>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    e.target.value = '';
+                    setPhotoUploading(true);
+                    try {
+                      const publicUrl = await uploadLoanPhoto(file, loan.loan_id || loan.id);
+                      handleChange('photo_url', publicUrl);
+                    } catch (err) {
+                      console.error('Photo upload failed:', err);
+                    } finally {
+                      setPhotoUploading(false);
+                    }
+                  }}
                 />
+                {formData.photo_url ? (
+                  <div className="relative w-full h-32 rounded-md overflow-hidden border border-border bg-muted">
+                    <img
+                      src={formData.photo_url}
+                      alt="Property"
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-1 right-1 flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => photoInputRef.current?.click()}
+                        className="h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleChange('photo_url', '')}
+                        className="h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {photoUploading && (
+                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                        <Loader2 className="h-5 w-5 text-white animate-spin" />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={photoUploading}
+                    className="w-full h-32 rounded-md border-2 border-dashed border-border hover:border-primary/40 bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground-secondary transition-colors cursor-pointer"
+                  >
+                    {photoUploading ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <>
+                        <ImageIcon className="h-6 w-6" />
+                        <span className="text-xs">Click to upload photo</span>
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
             <div className="space-y-2">
