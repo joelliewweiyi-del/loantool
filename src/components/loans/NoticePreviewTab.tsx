@@ -1,15 +1,38 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { formatCurrency, formatDate, formatPercent, formatEventType } from '@/lib/format';
+import { formatCurrency, formatAmountBare, formatDate, formatPercent, formatEventType } from '@/lib/format';
 import { PeriodAccrual, AccrualsSummary } from '@/lib/loanCalculations';
 import { Loan, LoanEvent, PeriodStatus } from '@/types/loan';
 import { PeriodPipeline } from './PeriodPipeline';
-import { ChevronRight, AlertTriangle } from 'lucide-react';
+import { ChevronRight, AlertTriangle, Download, Printer, Loader2 } from 'lucide-react';
 import raxLogo from '@/assets/rax-logo.png';
 import { useAppConfig } from '@/hooks/useAppConfig';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
+
+/** Create a white version of the logo for dark backgrounds (html2canvas doesn't support CSS filters) */
+function useWhiteLogo(src: string) {
+  const [whiteLogo, setWhiteLogo] = useState<string>(src);
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      const ctx = c.getContext('2d')!;
+      ctx.drawImage(img, 0, 0);
+      ctx.globalCompositeOperation = 'source-in';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+      setWhiteLogo(c.toDataURL('image/png'));
+    };
+    img.src = src;
+  }, [src]);
+  return whiteLogo;
+}
 
 interface NoticePreviewTabProps {
   loan: Loan;
@@ -23,8 +46,61 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodAccrual | null>(
     periodAccruals.length > 0 ? periodAccruals[periodAccruals.length - 1] : null
   );
-  const { data: bankConfig } = useAppConfig(['bank_name', 'bank_iban', 'bank_bic', 'bank_account_name']);
-  const bankIncomplete = !bankConfig?.bank_name || !bankConfig?.bank_iban || !bankConfig?.bank_bic;
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const noticeRef = useRef<HTMLDivElement>(null);
+  const { data: bankConfig } = useAppConfig(['bank_iban']);
+  const bankIncomplete = !bankConfig?.bank_iban;
+  const whiteLogo = useWhiteLogo(raxLogo);
+
+  const generatePdf = useCallback(async () => {
+    if (!noticeRef.current || !selectedPeriod) return;
+    setIsGeneratingPdf(true);
+    try {
+      const pages = noticeRef.current.querySelectorAll<HTMLElement>('[data-pdf-page]');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const margin = 15;
+      const contentWidth = pdfWidth - margin * 2;
+
+      for (let i = 0; i < pages.length; i++) {
+        if (i > 0) pdf.addPage();
+        const canvas = await html2canvas(pages[i], {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+        });
+        const imgData = canvas.toDataURL('image/jpeg', 0.92);
+        const imgHeight = (canvas.height * contentWidth) / canvas.width;
+
+        // If the page content exceeds A4 height, scale it to fit
+        if (imgHeight > pdfHeight - margin * 2) {
+          const fitScale = (pdfHeight - margin * 2) / imgHeight;
+          const fitWidth = contentWidth * fitScale;
+          const fitHeight = imgHeight * fitScale;
+          const xOffset = margin + (contentWidth - fitWidth) / 2;
+          pdf.addImage(imgData, 'JPEG', xOffset, margin, fitWidth, fitHeight);
+        } else {
+          pdf.addImage(imgData, 'JPEG', margin, margin, contentWidth, imgHeight);
+        }
+      }
+
+      const loanId = (loan as any).loan_id || loan.id;
+      const periodMonth = String(new Date(selectedPeriod.periodEnd).getMonth() + 1).padStart(2, '0');
+      const year = new Date(selectedPeriod.periodEnd).getFullYear();
+      pdf.save(`RAX Finance Interest Notice - ${loanId} - P${periodMonth} ${year}.pdf`);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  }, [selectedPeriod, loan]);
+
+  const handlePrint = useCallback(() => {
+    if (!noticeRef.current) return;
+    window.print();
+  }, []);
 
   if (isLoading) {
     return <div className="animate-pulse h-96 bg-muted rounded-lg" />;
@@ -111,11 +187,13 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
                 <NoticeStatusBadge status={selectedPeriod.status} />
               </div>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={handlePrint}>
+                  <Printer className="h-4 w-4 mr-1" />
                   Print
                 </Button>
-                <Button variant="outline" size="sm">
-                  Download PDF
+                <Button variant="outline" size="sm" onClick={generatePdf} disabled={isGeneratingPdf}>
+                  {isGeneratingPdf ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+                  {isGeneratingPdf ? 'Generating...' : 'Download PDF'}
                 </Button>
                 {selectedPeriod.status === 'approved' && (
                   <Button size="sm">
@@ -127,6 +205,7 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
 
             {/* Notice Document */}
             <CardContent className="p-8 bg-white dark:bg-background">
+              <div ref={noticeRef}>
               <NoticeDocument
                 loan={loan}
                 period={selectedPeriod}
@@ -134,7 +213,9 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
                 events={periodEvents}
                 bankConfig={bankConfig}
                 bankIncomplete={bankIncomplete}
+                whiteLogo={whiteLogo}
               />
+              </div>
             </CardContent>
           </Card>
         ) : (
@@ -156,391 +237,442 @@ interface NoticeDocumentProps {
   events: LoanEvent[];
   bankConfig?: Record<string, string>;
   bankIncomplete: boolean;
+  whiteLogo: string;
 }
 
-function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncomplete }: NoticeDocumentProps) {
-  const paymentDueDate = new Date(period.periodEnd);
-  paymentDueDate.setDate(paymentDueDate.getDate() + 5);
-
-  // Categorize events for display only
-  const principalDraws = events.filter(e => e.event_type === 'principal_draw');
-  const principalRepayments = events.filter(e => e.event_type === 'principal_repayment');
-  const rateChanges = events.filter(e => e.event_type === 'interest_rate_change' || e.event_type === 'interest_rate_set');
-  const feeInvoices = events.filter(e => e.event_type === 'fee_invoice');
-  const pikCapitalizations = events.filter(e => e.event_type === 'pik_capitalization_posted');
-  const commitmentChanges = events.filter(e => 
-    e.event_type === 'commitment_change' || e.event_type === 'commitment_cancel'
-  );
+function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncomplete, whiteLogo }: NoticeDocumentProps) {
+  const endDate = new Date(period.periodEnd);
+  const startDate = new Date(period.periodStart);
+  const isInAdvance = loan.payment_timing === 'in_advance';
+  // In advance: due at start of period. In arrears: due first of next month.
+  const paymentDueDate = isInAdvance
+    ? new Date(startDate.getFullYear(), startDate.getMonth(), 1)
+    : new Date(endDate.getFullYear(), endDate.getMonth() + 1, 1);
 
   // CRITICAL: Use period accrual totals (derived from event ledger) for consistency
-  // This ensures Notice matches Accruals tab exactly
   const totalDraws = period.principalDrawn;
   const totalRepayments = period.principalRepaid;
   const totalFees = period.feesInvoiced;
-  const totalPikCapitalized = period.pikCapitalized;
-
-  // Interest charge (from accruals - already calculated from event ledger)
   const interestCharge = period.interestAccrued + period.commitmentFeeAccrued;
-
-  // PIK vs Cash determination
   const isPik = loan.interest_type === 'pik';
+  const netPrincipalChange = period.closingPrincipal - period.openingPrincipal;
+
+  const loanId = (loan as any).loan_id || loan.id;
+  const invoiceRef = `INT-${loanId}-${period.periodEnd}`;
+  const periodMonth = String(new Date(period.periodEnd).getMonth() + 1).padStart(2, '0');
+  const periodYear = new Date(period.periodEnd).getFullYear();
+  const paymentRef = `${loanId}_P${periodMonth}_${periodYear}`;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8">
-      {/* Letterhead */}
-      <div className="text-center border-b pb-6">
-        <img src={raxLogo} alt="RAX LMS" className="h-10 mx-auto mb-4" />
-        <h1 className="text-2xl font-bold tracking-tight">INTEREST PAYMENT NOTICE</h1>
-      </div>
+    <div className="text-[13px] leading-relaxed text-foreground" style={{ fontFamily: "'Barlow', sans-serif" }}>
 
-      {/* Recipient & Reference */}
-      <div className="grid grid-cols-2 gap-8">
-        <div>
-          <p className="text-sm text-muted-foreground mb-1">To:</p>
-          <p className="font-semibold text-lg">{loan.borrower_name}</p>
-          <p className="text-muted-foreground font-mono text-sm">{(loan as any).loan_id}</p>
-        </div>
-        <div className="text-right">
-          <p className="text-sm text-muted-foreground mb-1">Notice Date:</p>
-          <p className="font-mono">{formatDate(period.periodEnd)}</p>
-          <p className="text-sm text-muted-foreground mt-3 mb-1">Reference:</p>
-          <p className="font-mono text-sm">{period.periodId.slice(0, 8).toUpperCase()}</p>
-        </div>
-      </div>
+      {/* ═══════════════════════════════════════════════════════════
+          PAGE 1 — FORMAL LETTER (ING-style)
+          ═══════════════════════════════════════════════════════════ */}
+      <div data-pdf-page="1" className="max-w-[640px] mx-auto">
 
-      {/* Period Summary Box */}
-      <div className="bg-muted/30 rounded-lg p-6">
-        <div className="grid grid-cols-3 gap-6 text-center">
-          <div>
-            <p className="text-sm text-muted-foreground">Interest Period</p>
-            <p className="font-mono font-medium mt-1">
-              {formatDate(period.periodStart)} – {formatDate(period.periodEnd)}
-            </p>
-            <p className="text-xs text-muted-foreground">({period.days} days • 30/360)</p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">
-              {isPik ? 'Amount Capitalized' : 'Amount Due'}
-            </p>
-            <p className="text-2xl font-bold text-primary mt-1">
-              {formatCurrency(interestCharge)}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">
-              {isPik ? 'Interest Type' : 'Payment Due Date'}
-            </p>
-            <p className="font-mono font-medium mt-1">
-              {isPik ? (
-                <span className="text-amber-600 font-semibold">PIK (Rolled Up)</span>
-              ) : (
-                formatDate(paymentDueDate.toISOString())
-              )}
-            </p>
+        {/* ── Header bar ── */}
+        <div className="flex justify-between items-center px-5 py-4" style={{ backgroundColor: '#003B5C' }}>
+          <img src={whiteLogo} alt="RAX Finance" className="h-8" />
+          <div className="text-right text-[11px] leading-[1.5] text-white/70">
+            <p className="font-semibold text-white">RAX Finance B.V.</p>
+            <p>J.J. Viottastraat 29, 1071 JP Amsterdam</p>
+            <p>The Netherlands</p>
           </div>
         </div>
-      </div>
 
-      {/* Principal Movement Summary */}
-      <div>
-        <h3 className="font-semibold mb-4 text-sm uppercase tracking-wide text-muted-foreground">Principal Summary</h3>
-        <div className="bg-muted/20 rounded-lg p-4">
-          <div className="flex items-center justify-between text-sm">
-            <div className="text-center flex-1">
-              <p className="text-muted-foreground text-xs mb-1">Opening Principal</p>
-              <p className="font-mono font-semibold text-lg">{formatCurrency(period.openingPrincipal)}</p>
+        {/* ── Letter body with consistent px-5 inner padding ── */}
+        <div className="px-5 pt-6 pb-8 space-y-5">
+
+          {/* Recipient */}
+          <p className="font-semibold leading-tight">{loan.borrower_name}</p>
+
+          {/* Metadata row: Date | Phone */}
+          <div className="flex">
+            <div className="w-[140px]">
+              <p className="font-semibold text-foreground mb-0.5">Date</p>
+              <p>{formatDate(period.periodEnd)}</p>
             </div>
-            <div className="text-muted-foreground mx-2">→</div>
-            <div className="text-center flex-1 space-y-1">
-              {totalDraws > 0 && (
-                <div className="flex items-center justify-center gap-1">
-                  <span className="font-mono text-sm">+{formatCurrency(totalDraws)}</span>
-                  <span className="text-xs text-muted-foreground">Drawdowns</span>
-                </div>
-              )}
-              {totalRepayments > 0 && (
-                <div className="flex items-center justify-center gap-1">
-                  <span className="font-mono text-sm">-{formatCurrency(totalRepayments)}</span>
-                  <span className="text-xs text-muted-foreground">Repayments</span>
-                </div>
-              )}
-              {totalFees > 0 && isPik && (
-                <div className="flex items-center justify-center gap-1">
-                  <span className="font-mono text-sm">+{formatCurrency(totalFees)}</span>
-                  <span className="text-xs text-muted-foreground">Fees Capitalised</span>
-                </div>
-              )}
-              {isPik && interestCharge > 0 && (
-                <div className="flex items-center justify-center gap-1">
-                  <span className="font-mono text-sm">+{formatCurrency(interestCharge)}</span>
-                  <span className="text-xs text-muted-foreground">Interest Capitalised</span>
-                </div>
-              )}
-              {totalDraws === 0 && totalRepayments === 0 && totalFees === 0 && (!isPik || interestCharge === 0) && (
-                <span className="text-muted-foreground text-xs">No movements</span>
-              )}
-            </div>
-            <div className="text-muted-foreground mx-2">→</div>
-            <div className="text-center flex-1">
-              <p className="text-muted-foreground text-xs mb-1">Closing Principal</p>
-              <p className="font-mono font-semibold text-lg">{formatCurrency(period.closingPrincipal)}</p>
+            <div className="w-[140px]">
+              <p className="font-semibold text-foreground mb-0.5">Phone</p>
+              <p>+31 (0)20 575 46 45</p>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Period Transactions */}
-      {events.length > 0 && (
-        <div>
-          <h3 className="font-semibold mb-4 text-sm uppercase tracking-wide text-muted-foreground">Period Transactions</h3>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-muted-foreground">
-                <th className="text-left py-2 font-medium">Date</th>
-                <th className="text-left font-medium">Transaction</th>
-                <th className="text-left font-medium">Description</th>
-                <th className="text-right font-medium">Amount</th>
-                <th className="text-right font-medium">Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events
-                .filter(e => {
-                  // Hide cash_received (accounting only)
-                  if (e.event_type === 'cash_received') return false;
-                  // Hide fee split adjustment repayments (internal accounting, not client-facing)
-                  const meta = e.metadata as Record<string, unknown>;
-                  if (e.event_type === 'principal_repayment' && meta?.adjustment_type === 'fee_split') return false;
-                  return true;
-                })
-                .sort((a, b) => new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime())
-                .map((event) => {
-                  const meta = event.metadata as Record<string, unknown>;
-                  
-                  // Get description - standardized labels for arrangement fees
-                  const getEventDescription = () => {
-                    // For arrangement fees, ALWAYS use standardized labels based on payment_type
-                    // This ensures consistency regardless of stored description
-                    if (event.event_type === 'fee_invoice') {
-                      const feeType = meta?.fee_type as string | undefined;
-                      const paymentType = meta?.payment_type as string | undefined;
-                      
-                      // Arrangement fees: standardized labels
-                      if (feeType?.includes('arrangement') || meta?.adjustment_type === 'fee_split') {
-                        // PIK: Fee is capitalised (added to principal, accrues interest)
-                        // Cash: Fee is withheld from borrower (deducted from draw, no principal impact)
-                        return paymentType === 'pik' 
-                          ? 'Arrangement fee (capitalised)'
-                          : 'Arrangement fee (withheld from borrower)';
-                      }
-                      
-                      // Other fee types: use stored description or generate from fee_type
-                      if (meta?.description) return meta.description as string;
-                      if (feeType) return `${feeType} fee`;
-                    }
-                    
-                    // Non-fee events: use stored description if available
-                    if (meta?.description) return meta.description as string;
-                    if (meta?.period_id) return 'Period interest';
-                    return null;
-                  };
-                  
-                  const description = getEventDescription();
-                  
-                  return (
-                    <tr key={event.id} className="border-b border-border/50">
-                      <td className="py-2 font-mono text-xs">{formatDate(event.effective_date)}</td>
-                      <td className="py-2">
-                        <span className="text-xs">{formatEventType(event.event_type)}</span>
-                      </td>
-                      <td className="py-2 text-xs text-muted-foreground">
-                        {description || '—'}
-                      </td>
-                      <td className="text-right font-mono py-2">
-                        {event.amount ? (
-                          <span>
-                            {event.event_type === 'principal_repayment' ? '-' : ''}
-                            {formatCurrency(event.amount)}
-                          </span>
-                        ) : '—'}
-                      </td>
-                      <td className="text-right font-mono py-2 text-muted-foreground">
-                        {event.rate ? formatPercent(event.rate) : '—'}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
-        </div>
-      )}
+          {/* Subject block */}
+          <div>
+            <p><span className="font-semibold">Reference:</span> {paymentRef}</p>
+            <p>{loan.borrower_name}</p>
+            <p>Loan number: {loanId}</p>
+          </div>
 
-      {/* Interest Calculation Details */}
-      <div>
-        <h3 className="font-semibold mb-4 text-sm uppercase tracking-wide text-muted-foreground">Interest Calculation</h3>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-muted-foreground">
-              <th className="text-left py-2 font-medium">Period</th>
-              <th className="text-right font-medium">Days</th>
-              <th className="text-right font-medium">Principal</th>
-              <th className="text-right font-medium">Rate</th>
-              <th className="text-right font-medium">Interest</th>
-            </tr>
-          </thead>
-          <tbody>
-            {period.interestSegments.map((segment, idx) => (
-              <tr key={idx} className="border-b border-border/50">
-                <td className="py-2 font-mono text-xs">
-                  {formatDate(segment.startDate)} – {formatDate(segment.endDate)}
-                </td>
-                <td className="text-right font-mono">{segment.days}</td>
-                <td className="text-right font-mono">{formatCurrency(segment.principal)}</td>
-                <td className="text-right font-mono">{formatPercent(segment.rate)}</td>
-                <td className="text-right font-mono">{formatCurrency(segment.interest)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot>
-            <tr className="font-semibold">
-              <td className="py-2">Interest Subtotal</td>
-              <td className="text-right">{period.days}</td>
-              <td></td>
-              <td></td>
-              <td className="text-right font-mono">{formatCurrency(period.interestAccrued)}</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+          {/* Salutation + body */}
+          <div>
+            <p className="mb-2">Dear Sir / Madam,</p>
+            <p>
+              We hereby provide you with a statement of the outstanding amounts for the current period
+              regarding the above-mentioned loan.
+            </p>
+          </div>
 
-      {/* Commitment Fee (if applicable) */}
-      {period.commitmentFeeAccrued > 0 && (
-        <div>
-          <h3 className="font-semibold mb-4">Commitment Fee</h3>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-muted-foreground">
-                <th className="text-left py-2 font-medium">Period</th>
-                <th className="text-right font-medium">Days</th>
-                <th className="text-right font-medium">Undrawn Amount</th>
-                <th className="text-right font-medium">Fee Rate</th>
-                <th className="text-right font-medium">Fee</th>
-              </tr>
-            </thead>
-            <tbody>
-              {period.commitmentFeeSegments.map((segment, idx) => (
-                <tr key={idx} className="border-b border-border/50">
-                  <td className="py-2 font-mono text-xs">
-                    {formatDate(segment.startDate)} – {formatDate(segment.endDate)}
-                  </td>
-                  <td className="text-right font-mono">{segment.days}</td>
-                  <td className="text-right font-mono">{formatCurrency(segment.undrawn)}</td>
-                  <td className="text-right font-mono">{formatPercent(segment.feeRate)}</td>
-                  <td className="text-right font-mono">{formatCurrency(segment.fee)}</td>
-                </tr>
+          {/* ── Charges block ── */}
+          <div>
+            {/* Interest lines */}
+            <div className="mb-1">
+              {period.interestSegments.map((segment, idx) => (
+                <p key={idx}>
+                  Interest {formatPercent(segment.rate)}, {segment.days} day(s) ({formatDate(segment.startDate)} – {formatDate(segment.endDate)})
+                </p>
               ))}
-            </tbody>
-            <tfoot>
-              <tr className="font-semibold">
-                <td className="py-2">Fee Subtotal</td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td className="text-right font-mono">{formatCurrency(period.commitmentFeeAccrued)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      )}
+              <div className="flex justify-between items-baseline">
+                <span>over EUR {formatAmountBare(period.openingPrincipal)} (30/360)</span>
+                <span className="font-mono tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.interestAccrued)}</span>
+              </div>
+            </div>
 
-      {/* Total Summary */}
-      <div className="bg-primary/5 rounded-lg p-6">
-        <div className="flex justify-between items-center">
+            {/* Commitment fee */}
+            {period.commitmentFeeAccrued > 0 && (
+              <div className="mb-1">
+                {period.commitmentFeeSegments.map((segment, idx) => (
+                  <p key={idx}>
+                    Commitment fee {formatPercent(segment.feeRate)}, {segment.days} day(s)
+                  </p>
+                ))}
+                <div className="flex justify-between items-baseline">
+                  <span>over EUR {formatAmountBare(period.commitmentFeeSegments[0]?.undrawn || 0)} undrawn (30/360)</span>
+                  <span className="font-mono tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.commitmentFeeAccrued)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Scheduled amortization */}
+            {period.amortizationDue > 0 && (
+              <div className="mb-1">
+                <div className="flex justify-between items-baseline">
+                  <span>Scheduled repayment</span>
+                  <span className="font-mono tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.amortizationDue)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Total amount due */}
+            <div className="flex justify-between items-baseline mt-3 py-2.5 px-3 -mx-3" style={{ backgroundColor: '#003B5C0D' }}>
+              <span className="font-semibold">{isPik ? 'Total interest capitalised' : 'Total amount due'}</span>
+              <span className="font-mono tabular-nums text-right font-semibold">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.totalDue)}</span>
+            </div>
+          </div>
+
+          {/* ── Payment instructions (cash-pay) ── */}
+          {!isPik && (
+            <div>
+              {bankIncomplete && (
+                <div className="flex items-start gap-2 text-xs text-foreground-secondary border border-border rounded-sm px-3 py-2 mb-3 print:hidden">
+                  <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                  <span>Bank details not configured. Update bank_iban in app_config before sending.</span>
+                </div>
+              )}
+
+              <p className="mb-3">
+                On {formatDate(paymentDueDate.toISOString())}, the amount due will be debited from your
+                account via automatic direct debit:
+              </p>
+
+              <table className="border-collapse w-auto" style={{ border: '1px solid #003B5C20' }}>
+                <tbody>
+                  <tr>
+                    <td className="pr-8 py-1.5 pl-2 text-foreground-secondary" style={{ borderBottom: '1px solid #003B5C15' }}>Account:</td>
+                    <td className="py-1.5 pr-2" style={{ borderBottom: '1px solid #003B5C15' }}>RAX RED IV B.V.</td>
+                  </tr>
+                  <tr>
+                    <td className="pr-8 py-1.5 pl-2 text-foreground-secondary" style={{ borderBottom: '1px solid #003B5C15' }}>IBAN:</td>
+                    <td className="py-1.5 pr-2 font-mono" style={{ borderBottom: '1px solid #003B5C15' }}>{bankConfig?.bank_iban || 'NL81 INGB 0112 3138 92'}</td>
+                  </tr>
+                  <tr>
+                    <td className="pr-8 py-1.5 pl-2 text-foreground-secondary">Reference:</td>
+                    <td className="py-1.5 pr-2 font-mono">{paymentRef}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* PIK explanation */}
+          {isPik && (
+            <p>
+              As this is a PIK (Payment-in-Kind) loan, the interest amount of {formatCurrency(interestCharge)} has been
+              capitalised and added to the outstanding principal balance. No cash payment is required.
+            </p>
+          )}
+
+          {/* Closing */}
           <div>
-            <h3 className="font-semibold text-lg">
-              {isPik ? 'Total Interest Capitalized' : 'Total Amount Due'}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {isPik 
-                ? 'Added to principal balance'
-                : `Please remit payment by ${formatDate(paymentDueDate.toISOString())}`
-              }
-            </p>
+            <p className="mb-2">Kind regards,</p>
+            <p className="font-semibold">Martijn Louwerse</p>
           </div>
-          <div className="text-right">
-            <p className={`text-3xl font-bold ${isPik ? 'text-amber-600' : 'text-primary'}`}>
-              {formatCurrency(interestCharge)}
-            </p>
-          </div>
+        </div>
+
+        {/* ── Page 1 footer ── */}
+        <div className="mt-auto text-[9px] text-white/70 px-5 py-2 text-center" style={{ backgroundColor: '#003B5C' }}>
+          <p>RAX Finance B.V. — J.J. Viottastraat 29, 1071 JP Amsterdam, The Netherlands</p>
         </div>
       </div>
 
-      {/* Breakdown Summary */}
-      <div className="grid grid-cols-2 gap-4 text-sm">
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Interest Accrued</span>
-            <span className="font-mono">{formatCurrency(period.interestAccrued)}</span>
+      {/* ═══════════════════════════════════════════════════════════
+          PAGE BREAK — visual separator for on-screen preview
+          ═══════════════════════════════════════════════════════════ */}
+      <div className="my-10 flex items-center gap-3 print:hidden">
+        <div className="flex-1 border-t border-dashed border-foreground/15" />
+        <span className="text-[11px] text-foreground-muted tracking-widest uppercase">Page 2 — Calculation Detail</span>
+        <div className="flex-1 border-t border-dashed border-foreground/15" />
+      </div>
+      <div data-pdf-page="2" className="max-w-[640px] mx-auto break-before-page" style={{ pageBreakBefore: 'always' }}>
+
+          {/* ── Page 2 header bar ── */}
+          <div className="flex justify-between items-center px-5 py-4" style={{ backgroundColor: '#003B5C' }}>
+            <img src={whiteLogo} alt="RAX Finance" className="h-8" />
+            <div className="text-right text-[11px] text-white/70">
+              <p className="font-medium text-white">Calculation Detail</p>
+              <p className="font-mono">{loan.borrower_name} — {loanId}</p>
+              <p className="font-mono">{formatDate(period.periodStart)} – {formatDate(period.periodEnd)}</p>
+            </div>
           </div>
+
+          {/* ── Page 2 body ── */}
+          <div className="px-5 pt-5 pb-8 space-y-5">
+
+          {/* ── Principal Summary ── */}
+          <div>
+            <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: '3px solid #003B5C', color: '#003B5C' }}>
+              Principal Summary
+            </p>
+            <table className="w-full text-[11px]">
+              <tbody>
+                <tr>
+                  <td className="py-1 text-foreground-secondary">Opening balance</td>
+                  <td className="py-1 text-right font-mono tabular-nums">{formatCurrency(period.openingPrincipal)}</td>
+                </tr>
+                {totalDraws > 0 && (
+                  <tr>
+                    <td className="py-1 text-foreground-tertiary pl-4">Drawdowns</td>
+                    <td className="py-1 text-right font-mono tabular-nums text-foreground-secondary">+{formatCurrency(totalDraws)}</td>
+                  </tr>
+                )}
+                {totalRepayments > 0 && (
+                  <tr>
+                    <td className="py-1 text-foreground-tertiary pl-4">Repayments</td>
+                    <td className="py-1 text-right font-mono tabular-nums text-foreground-secondary">–{formatCurrency(totalRepayments)}</td>
+                  </tr>
+                )}
+                {totalFees > 0 && isPik && (
+                  <tr>
+                    <td className="py-1 text-foreground-tertiary pl-4">Fees capitalised</td>
+                    <td className="py-1 text-right font-mono tabular-nums text-foreground-secondary">+{formatCurrency(totalFees)}</td>
+                  </tr>
+                )}
+                {isPik && interestCharge > 0 && (
+                  <tr>
+                    <td className="py-1 text-foreground-tertiary pl-4">Interest capitalised</td>
+                    <td className="py-1 text-right font-mono tabular-nums text-foreground-secondary">+{formatCurrency(interestCharge)}</td>
+                  </tr>
+                )}
+                {totalDraws === 0 && totalRepayments === 0 && totalFees === 0 && (!isPik || interestCharge === 0) && (
+                  <tr>
+                    <td className="py-1 text-foreground-muted pl-4" colSpan={2}>No movements this period</td>
+                  </tr>
+                )}
+                <tr className="border-t border-border/60">
+                  <td className="pt-1.5 pb-1 font-semibold">Closing balance</td>
+                  <td className="pt-1.5 pb-1 text-right font-mono tabular-nums font-semibold">{formatCurrency(period.closingPrincipal)}</td>
+                </tr>
+                {netPrincipalChange !== 0 && (
+                  <tr>
+                    <td className="text-[11px] text-foreground-muted">Net change</td>
+                    <td className={`text-right font-mono tabular-nums text-[11px] ${netPrincipalChange > 0 ? 'text-accent-sage' : 'text-destructive'}`}>
+                      {netPrincipalChange > 0 ? '+' : ''}{formatCurrency(netPrincipalChange)}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ── Period Transactions ── */}
+          {events.length > 0 && (
+            <div>
+              <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: '3px solid #003B5C', color: '#003B5C' }}>
+                Transactions
+              </p>
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr style={{ backgroundColor: '#003B5C0D' }}>
+                    <th className="text-left py-1.5 pl-2 font-medium text-foreground-secondary">Date</th>
+                    <th className="text-left py-1.5 font-medium text-foreground-secondary">Type</th>
+                    <th className="text-left py-1.5 font-medium text-foreground-secondary">Description</th>
+                    <th className="text-right py-1.5 pr-2 font-medium text-foreground-secondary">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {events
+                    .filter(e => {
+                      if (e.event_type === 'cash_received') return false;
+                      const meta = e.metadata as Record<string, unknown>;
+                      if (e.event_type === 'principal_repayment' && meta?.adjustment_type === 'fee_split') return false;
+                      return true;
+                    })
+                    .sort((a, b) => new Date(a.effective_date).getTime() - new Date(b.effective_date).getTime())
+                    .map((event) => {
+                      const meta = event.metadata as Record<string, unknown>;
+                      const getEventDescription = () => {
+                        if (event.event_type === 'fee_invoice') {
+                          const feeType = meta?.fee_type as string | undefined;
+                          const paymentType = meta?.payment_type as string | undefined;
+                          if (feeType?.includes('arrangement') || meta?.adjustment_type === 'fee_split') {
+                            return paymentType === 'pik'
+                              ? 'Arrangement fee (capitalised)'
+                              : 'Arrangement fee (withheld from borrower)';
+                          }
+                          if (meta?.description) return meta.description as string;
+                          if (feeType) return `${feeType} fee`;
+                        }
+                        if (meta?.description) return meta.description as string;
+                        if (meta?.period_id) return 'Period interest';
+                        return null;
+                      };
+                      const description = getEventDescription();
+                      return (
+                        <tr key={event.id}>
+                          <td className="py-1 font-mono tabular-nums text-foreground-tertiary">{formatDate(event.effective_date)}</td>
+                          <td className="py-1">{formatEventType(event.event_type)}</td>
+                          <td className="py-1 text-foreground-tertiary">{description || '—'}</td>
+                          <td className="text-right font-mono tabular-nums py-1">
+                            {event.amount ? (
+                              <span>{event.event_type === 'principal_repayment' ? '–' : ''}{formatCurrency(event.amount)}</span>
+                            ) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ── Interest Calculation ── */}
+          <div>
+            <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: '3px solid #003B5C', color: '#003B5C' }}>
+              Interest Calculation
+            </p>
+            <table className="w-full text-[11px]">
+              <thead>
+                <tr style={{ backgroundColor: '#003B5C0D' }}>
+                  <th className="text-left py-1.5 pl-2 font-medium text-foreground-secondary">Period</th>
+                  <th className="text-right py-1.5 font-medium text-foreground-secondary w-12">Days</th>
+                  <th className="text-right py-1.5 font-medium text-foreground-secondary">Principal</th>
+                  <th className="text-right py-1.5 font-medium text-foreground-secondary w-16">Rate</th>
+                  <th className="text-right py-1.5 pr-2 font-medium text-foreground-secondary">Interest</th>
+                </tr>
+              </thead>
+              <tbody>
+                {period.interestSegments.map((segment, idx) => (
+                  <tr key={idx}>
+                    <td className="py-1 font-mono tabular-nums text-foreground-tertiary">
+                      {formatDate(segment.startDate)} – {formatDate(segment.endDate)}
+                    </td>
+                    <td className="text-right font-mono tabular-nums py-1">{segment.days}</td>
+                    <td className="text-right font-mono tabular-nums py-1">{formatCurrency(segment.principal)}</td>
+                    <td className="text-right font-mono tabular-nums py-1 text-foreground-tertiary">{formatPercent(segment.rate)}</td>
+                    <td className="text-right font-mono tabular-nums py-1">{formatCurrency(segment.interest)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-border/60">
+                  <td className="pt-1.5 font-semibold">Interest subtotal</td>
+                  <td className="text-right font-mono tabular-nums pt-1.5 text-foreground-tertiary">{period.days}</td>
+                  <td></td>
+                  <td></td>
+                  <td className="text-right font-mono tabular-nums pt-1.5 font-semibold">{formatCurrency(period.interestAccrued)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* ── Commitment Fee ── */}
           {period.commitmentFeeAccrued > 0 && (
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Commitment Fee</span>
-              <span className="font-mono">{formatCurrency(period.commitmentFeeAccrued)}</span>
+            <div>
+              <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: '3px solid #003B5C', color: '#003B5C' }}>
+                Commitment Fee
+              </p>
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr style={{ backgroundColor: '#003B5C0D' }}>
+                    <th className="text-left py-1.5 pl-2 font-medium text-foreground-secondary">Period</th>
+                    <th className="text-right py-1.5 font-medium text-foreground-secondary w-12">Days</th>
+                    <th className="text-right py-1.5 font-medium text-foreground-secondary">Undrawn</th>
+                    <th className="text-right py-1.5 font-medium text-foreground-secondary w-16">Rate</th>
+                    <th className="text-right py-1.5 pr-2 font-medium text-foreground-secondary">Fee</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {period.commitmentFeeSegments.map((segment, idx) => (
+                    <tr key={idx}>
+                      <td className="py-1 font-mono tabular-nums text-foreground-tertiary">
+                        {formatDate(segment.startDate)} – {formatDate(segment.endDate)}
+                      </td>
+                      <td className="text-right font-mono tabular-nums py-1">{segment.days}</td>
+                      <td className="text-right font-mono tabular-nums py-1">{formatCurrency(segment.undrawn)}</td>
+                      <td className="text-right font-mono tabular-nums py-1 text-foreground-tertiary">{formatPercent(segment.feeRate)}</td>
+                      <td className="text-right font-mono tabular-nums py-1">{formatCurrency(segment.fee)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-border/60">
+                    <td className="pt-1.5 font-semibold">Fee subtotal</td>
+                    <td></td>
+                    <td></td>
+                    <td></td>
+                    <td className="text-right font-mono tabular-nums pt-1.5 font-semibold">{formatCurrency(period.commitmentFeeAccrued)}</td>
+                  </tr>
+                </tfoot>
+              </table>
             </div>
           )}
-          <Separator className="my-1" />
-          <div className="flex justify-between font-semibold">
-            <span>Total Interest Charge</span>
-            <span className="font-mono">{formatCurrency(interestCharge)}</span>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Opening Principal</span>
-            <span className="font-mono">{formatCurrency(period.openingPrincipal)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Closing Principal</span>
-            <span className="font-mono">{formatCurrency(period.closingPrincipal)}</span>
-          </div>
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span>Net Change</span>
-            <span className={`font-mono ${period.closingPrincipal > period.openingPrincipal ? 'text-emerald-600' : 'text-destructive'}`}>
-              {period.closingPrincipal >= period.openingPrincipal ? '+' : ''}
-              {formatCurrency(period.closingPrincipal - period.openingPrincipal)}
-            </span>
-          </div>
-        </div>
-      </div>
 
-      {/* Payment Instructions (only for cash pay) */}
-      {!isPik && (
-        <>
-          <Separator />
-          {bankIncomplete && (
-            <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 rounded p-3 border border-amber-200">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-              Bank details not configured. Update bank_name, bank_iban, and bank_bic in app_config before sending notices.
-            </div>
-          )}
-          <div className="text-sm text-muted-foreground space-y-2">
-            <h4 className="font-medium text-foreground">Payment Instructions</h4>
-            <p>Please wire the amount due to the following account:</p>
-            <div className="bg-muted/30 rounded p-4 font-mono text-xs space-y-1">
-              <p>Bank: {bankConfig?.bank_name || '[Not configured]'}</p>
-              <p>Account Name: {bankConfig?.bank_account_name || 'RAX Loan Management System'}</p>
-              <p>IBAN: {bankConfig?.bank_iban || '[Not configured]'}</p>
-              <p>BIC/SWIFT: {bankConfig?.bank_bic || '[Not configured]'}</p>
-              <p>Reference: {period.periodId.slice(0, 8).toUpperCase()}</p>
+          {/* ── Charge Summary ── */}
+          <div className="pt-4 px-4 pb-4" style={{ backgroundColor: '#003B5C0D' }}>
+            <div className="space-y-1 text-[11px]">
+              <div className="flex justify-between">
+                <span className="text-foreground-tertiary">Interest accrued</span>
+                <span className="font-mono tabular-nums text-foreground-secondary">{formatCurrency(period.interestAccrued)}</span>
+              </div>
+              {period.commitmentFeeAccrued > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-foreground-tertiary">Commitment fee</span>
+                  <span className="font-mono tabular-nums text-foreground-secondary">{formatCurrency(period.commitmentFeeAccrued)}</span>
+                </div>
+              )}
+              {period.amortizationDue > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-foreground-tertiary">Scheduled repayment</span>
+                  <span className="font-mono tabular-nums text-foreground-secondary">{formatCurrency(period.amortizationDue)}</span>
+                </div>
+              )}
+              <div className="flex justify-between pt-2 text-[13px] font-semibold">
+                <span>{isPik ? 'Total capitalized' : 'Total due'}</span>
+                <span className="font-mono tabular-nums text-primary">
+                  {formatCurrency(period.totalDue)}
+                </span>
+              </div>
             </div>
           </div>
-        </>
-      )}
 
-      {/* Footer */}
-      <div className="text-center text-xs text-muted-foreground pt-4 border-t">
-        <p>This notice was generated automatically. Day count convention: 30E/360 (Eurobond).</p>
-        <p>For questions, contact your relationship manager.</p>
+          </div>
+
+          {/* ── Page 2 footer ── */}
+          <div className="mt-auto text-[9px] text-white/70 px-5 py-2 text-center" style={{ backgroundColor: '#003B5C' }}>
+            <p>RAX Finance B.V. — J.J. Viottastraat 29, 1071 JP Amsterdam, The Netherlands</p>
+          </div>
       </div>
     </div>
   );
@@ -549,55 +681,12 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
 function NoticeStatusBadge({ status }: { status: string }) {
   switch (status) {
     case 'sent':
-      return (
-        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
-          Sent
-        </Badge>
-      );
+      return <Badge className="status-done text-xs">Sent</Badge>;
     case 'approved':
-      return (
-        <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100">
-          Ready
-        </Badge>
-      );
+      return <Badge className="bg-primary/10 text-primary hover:bg-primary/10 text-xs border-0">Ready</Badge>;
     case 'submitted':
-      return (
-        <Badge variant="secondary">
-          Pending
-        </Badge>
-      );
+      return <Badge variant="secondary" className="text-xs">Pending</Badge>;
     default:
-      return (
-        <Badge variant="outline">
-          Draft
-        </Badge>
-      );
+      return <Badge variant="outline" className="text-xs">Draft</Badge>;
   }
-}
-
-interface WorkflowStepProps {
-  number: number;
-  title: string;
-  description: string;
-  completed: boolean;
-}
-
-function WorkflowStep({ number, title, description, completed }: WorkflowStepProps) {
-  return (
-    <div className="flex items-start gap-3">
-      <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-        completed 
-          ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
-          : 'bg-muted text-muted-foreground'
-      }`}>
-        {completed ? '✓' : number}
-      </div>
-      <div>
-        <p className={`text-sm font-medium ${completed ? 'text-foreground' : 'text-muted-foreground'}`}>
-          {title}
-        </p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-    </div>
-  );
 }

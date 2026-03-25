@@ -23,6 +23,8 @@ export type EventType =
 export type InterestType = 'cash_pay' | 'pik';
 export type PaymentType = 'pik' | 'cash';
 export type CommitmentFeeBasis = 'undrawn_only' | 'total_commitment';
+export type PaymentTiming = 'in_advance' | 'in_arrears';
+export type AmortizationFrequency = 'monthly' | 'quarterly' | 'semi_annual' | 'annual';
 
 export interface Loan {
   id: string;
@@ -70,6 +72,11 @@ export interface Loan {
   pipeline_stage: string | null;
   walt: number | null;
   walt_comment: string | null;
+  payment_timing: PaymentTiming;
+  amortization_amount: number | null;
+  amortization_frequency: AmortizationFrequency | null;
+  amortization_start_date: string | null;
+  exit_fee_terms: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -350,6 +357,7 @@ export interface RentRollEntry {
   sqm: number | null;
   annual_rent: number | null;
   notes: string | null;
+  reference_document: string | null;
   created_at: string;
 }
 

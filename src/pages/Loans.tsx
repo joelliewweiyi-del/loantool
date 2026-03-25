@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { StatusBadge } from '@/components/loans/LoanStatusBadge';
 import { CreateLoanDialog } from '@/components/loans/CreateLoanDialog';
-
+import { RentRollPanel } from '@/components/loans/RentRollPanel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
@@ -228,6 +228,7 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
         </div>
 
         <div className="flex items-center gap-2">
+          {!isMobile && <RentRollPanel />}
           {canCreate && !mobilePortfolio && <CreateLoanDialog defaultVehicle={activeVehicle} />}
         </div>
       </div>
@@ -249,8 +250,8 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
       {/* Portfolio Metrics Strip */}
       {isPipelineVehicle(activeVehicle) ? (() => {
         const prospectCount = vehicleLoans.filter(l => (l as any).pipeline_stage === 'prospect').length;
-        const softCount = vehicleLoans.filter(l => (l as any).pipeline_stage === 'soft').length;
         const hardCount = vehicleLoans.filter(l => (l as any).pipeline_stage === 'hard').length;
+        const signedCount = vehicleLoans.filter(l => (l as any).pipeline_stage === 'signed').length;
         const noStageCount = vehicleLoans.filter(l => !(l as any).pipeline_stage).length;
         const totalCommitmentPipeline = vehicleLoans.reduce((s, l) => s + (l.total_commitment || 0), 0);
         const loansWithRate = vehicleLoans.filter(l => l.interest_rate && l.interest_rate > 0);
@@ -264,14 +265,14 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
         return <FinancialStrip items={isMobile ? [
           { label: 'Deals', value: String(vehicleLoans.length), mono: false },
           { label: 'Prospect', value: String(prospectCount + noStageCount), mono: false },
-          { label: 'Soft', value: String(softCount), mono: false, accent: 'amber' as const },
-          { label: 'Hard', value: String(hardCount), mono: false, accent: 'sage' as const },
+          { label: 'Hard', value: String(hardCount), mono: false, accent: 'amber' as const },
+          { label: 'Signed', value: String(signedCount), mono: false, accent: 'sage' as const },
           { label: 'Commitment', value: formatCurrencyShort(totalCommitmentPipeline) },
         ] : [
           { label: 'Deals', value: String(vehicleLoans.length), mono: false },
           { label: 'Prospect', value: String(prospectCount + noStageCount), mono: false },
-          { label: 'Soft · KB Sent', value: String(softCount), mono: false, accent: 'amber' as const },
-          { label: 'Hard · KB Signed', value: String(hardCount), mono: false, accent: 'sage' as const },
+          { label: 'Hard', value: String(hardCount), mono: false, accent: 'amber' as const },
+          { label: 'Signed', value: String(signedCount), mono: false, accent: 'sage' as const },
           { label: 'Est. Commitment', value: formatCurrency(totalCommitmentPipeline) },
           { label: 'Avg Rate', value: avgRatePipeline > 0 ? formatPercent(avgRatePipeline, 2) : '—' },
           { label: 'Avg LTV', value: avgLtv > 0 ? formatPercent(avgLtv, 1) : '—' },
@@ -312,8 +313,8 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
           </div>
           {filteredLoans.map((loan, i) => {
             const stage = (loan as any).pipeline_stage;
-            const stageLabel = stage === 'hard' ? 'Hard' : stage === 'soft' ? 'Soft' : 'Prospect';
-            const stageColor = stage === 'hard' ? 'text-accent-sage' : stage === 'soft' ? 'text-accent-amber' : 'text-foreground-muted';
+            const stageLabel = stage === 'signed' ? 'Signed' : stage === 'hard' ? 'Hard' : 'Prospect';
+            const stageColor = stage === 'signed' ? 'text-accent-sage' : stage === 'hard' ? 'text-accent-amber' : 'text-foreground-muted';
             return (
               <div
                 key={loan.id}
@@ -415,7 +416,6 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
                             {PIPELINE_STAGES.map(s => (
                               <SelectItem key={s.value} value={s.value}>
                                 <span>{s.label}</span>
-                                <span className="ml-1 opacity-50">· {s.description}</span>
                               </SelectItem>
                             ))}
                           </SelectContent>

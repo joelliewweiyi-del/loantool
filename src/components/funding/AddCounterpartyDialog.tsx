@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useCreateCounterparty } from '@/hooks/useFunding';
 import { FundingStage, PartyType } from '@/types/loan';
@@ -16,7 +15,6 @@ export function AddCounterpartyDialog() {
   const [stage, setStage] = useState<FundingStage>('initial_contact');
   const [contactName, setContactName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
-  const [notes, setNotes] = useState('');
 
   const createCounterparty = useCreateCounterparty();
 
@@ -28,14 +26,12 @@ export function AddCounterpartyDialog() {
       stage,
       contact_name: contactName.trim() || undefined,
       contact_email: contactEmail.trim() || undefined,
-      notes: notes.trim() || undefined,
     });
     setName('');
     setPartyType('');
     setStage('initial_contact');
     setContactName('');
     setContactEmail('');
-    setNotes('');
     setOpen(false);
   };
 
@@ -107,15 +103,6 @@ export function AddCounterpartyDialog() {
                 placeholder="Optional"
               />
             </div>
-          </div>
-          <div>
-            <label className="ledger-label mb-1 block">Notes</label>
-            <Textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              placeholder="Optional — general notes about this relationship"
-              rows={2}
-            />
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>

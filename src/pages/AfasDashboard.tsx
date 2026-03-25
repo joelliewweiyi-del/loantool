@@ -111,6 +111,12 @@ function useAfasEnvToggle() {
 
 // ── Helpers ────────────────────────────────────────────────────
 
+function filterByMonth(rows: AfasRow[], month?: string): AfasRow[] {
+  if (!month) return rows;
+  // month is "yyyy-MM", EntryDate is "yyyy-MM-ddT..." or "yyyy-MM-dd"
+  return rows.filter(r => r.EntryDate?.startsWith(month));
+}
+
 function groupByLoan(
   rows: AfasRow[],
   getLoanId: (r: AfasRow) => string | null,
@@ -187,7 +193,7 @@ function useAfasDrawConfirmations() {
 
 // ── Page component ─────────────────────────────────────────────
 
-export default function AfasDashboard({ embedded }: { embedded?: boolean } = {}) {
+export default function AfasDashboard({ embedded, selectedMonth }: { embedded?: boolean; selectedMonth?: string } = {}) {
   const connection = useAfasConnection();
   const loanIds = useLoanIds();
   const drawConfirmations = useAfasDrawConfirmations();
@@ -252,14 +258,14 @@ export default function AfasDashboard({ embedded }: { embedded?: boolean } = {})
 
   // Group payments by loan, filtered to known loans only
   const paymentGroups = useMemo(() => {
-    const rows = payments.data ?? [];
+    const rows = filterByMonth(payments.data ?? [], selectedMonth);
     const groups = groupByLoan(
       rows,
       (r) => String(r.AccountNo),
       (r) => r.AmtCredit > 0 ? r.AmtCredit : -r.AmtDebit,
     );
     return validIds ? groups.filter(g => validIds.has(g.loanId)) : groups;
-  }, [payments.data, validIds]);
+  }, [payments.data, validIds, selectedMonth]);
 
   const filteredPaymentGroups = useMemo(() => {
     if (paymentFilter === 'all') return paymentGroups;
@@ -268,14 +274,14 @@ export default function AfasDashboard({ embedded }: { embedded?: boolean } = {})
 
   // Group draws by loan, filtered to known loans only
   const drawGroups = useMemo(() => {
-    const rows = draws.data ?? [];
+    const rows = filterByMonth(draws.data ?? [], selectedMonth);
     const groups = groupByLoan(
       rows,
       (r) => r.DimAx1 ?? null,
       (r) => r.AmtDebit > 0 ? r.AmtDebit : r.AmtCredit,
     );
     return validIds ? groups.filter(g => validIds.has(g.loanId)) : groups;
-  }, [draws.data, validIds]);
+  }, [draws.data, validIds, selectedMonth]);
 
   const filteredDrawGroups = useMemo(() => {
     if (drawFilter === 'all') return drawGroups;
@@ -284,14 +290,14 @@ export default function AfasDashboard({ embedded }: { embedded?: boolean } = {})
 
   // Group depot by loan, filtered to known loans only
   const depotGroups = useMemo(() => {
-    const rows = depot.data ?? [];
+    const rows = filterByMonth(depot.data ?? [], selectedMonth);
     const groups = groupByLoan(
       rows,
       (r) => String(r.AccountNo),
       (r) => r.AmtCredit > 0 ? r.AmtCredit : -r.AmtDebit,
     );
     return validIds ? groups.filter(g => validIds.has(g.loanId)) : groups;
-  }, [depot.data, validIds]);
+  }, [depot.data, validIds, selectedMonth]);
 
   const filteredDepotGroups = useMemo(() => {
     if (depotFilter === 'all') return depotGroups;
@@ -448,21 +454,21 @@ export default function AfasDashboard({ embedded }: { embedded?: boolean } = {})
           title="Connector #3 — Cash Payments"
           description="Interest payments received (debtor acct = loan ID)"
           data={payments}
-          count={payments.data?.length}
+          count={paymentGroups.reduce((sum, g) => sum + g.count, 0)}
           loanCount={paymentGroups.length}
         />
         <ConnectorStatusCard
           title="Depot Settlements"
           description="Interest depot settlements (journal 90, debtor acct = loan ID)"
           data={depot}
-          count={depot.data?.length}
+          count={depotGroups.reduce((sum, g) => sum + g.count, 0)}
           loanCount={depotGroups.length}
         />
         <ConnectorStatusCard
           title="Connector #4 — Draws & Repayments"
           description="Bank movements on loan accounts (1750–1752)"
           data={draws}
-          count={draws.data?.length}
+          count={drawGroups.reduce((sum, g) => sum + g.count, 0)}
           loanCount={drawGroups.length}
         />
       </div>
@@ -473,19 +479,19 @@ export default function AfasDashboard({ embedded }: { embedded?: boolean } = {})
           <TabsTrigger value="payments" className="gap-1.5">
             <Banknote className="h-4 w-4" />
             Cash Payments
-            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{payments.data?.length ?? 0}</Badge>
+            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{paymentGroups.reduce((sum, g) => sum + g.count, 0)}</Badge>
           </TabsTrigger>
           {depotGroups.length > 0 && (
             <TabsTrigger value="depot" className="gap-1.5">
               <Landmark className="h-4 w-4" />
               Depot Settlements
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{depot.data?.length ?? 0}</Badge>
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{depotGroups.reduce((sum, g) => sum + g.count, 0)}</Badge>
             </TabsTrigger>
           )}
           <TabsTrigger value="draws" className="gap-1.5">
             <ArrowUpRight className="h-4 w-4" />
             Draws & Repayments
-            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{draws.data?.length ?? 0}</Badge>
+            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{drawGroups.reduce((sum, g) => sum + g.count, 0)}</Badge>
           </TabsTrigger>
         </TabsList>
 

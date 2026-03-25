@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(node -e \":*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(grep -l \"loan_facilities\" /c/Users/joel_/loantool/supabase/migrations/*.sql)"
     ]
   }
 }

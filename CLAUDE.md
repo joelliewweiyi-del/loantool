@@ -107,6 +107,31 @@ When a rate change or principal draw/repayment occurs **mid-period**, the period
 
 Events on the **first day** of the period (period_start) affect the opening balance. Events on the **last day** (period_end) are excluded from segmentation (they affect the next period's opening).
 
+### Scheduled Amortization
+
+Some loans (e.g. RAX 516) have **mandatory periodic principal repayments** in addition to interest. This is tracked via three fields on the `loans` table:
+
+- `amortization_amount`: EUR amount per payment (e.g. 67,500)
+- `amortization_frequency`: `'monthly'` | `'quarterly'` | `'semi_annual'` | `'annual'`
+- `amortization_start_date`: Date of first scheduled payment
+
+When set, the calculation engine (`getAmortizationDueInPeriod()` in `loanCalculations.ts`) checks whether a scheduled payment falls within each period. If so, the amortization amount is added to `PeriodAccrual.amortizationDue` and included in `totalDue`. This shows on interest notices so the borrower sees the full amount owed (interest + repayment).
+
+The amortization amount on the notice is the **expected** payment. Actual repayments still come in as `principal_repayment` events (from AFAS bank entries). The AFAS reconciliation matches the incoming payment against `totalDue` (which now includes the amortization component).
+
+### Payment Timing (In Advance vs. In Arrears)
+
+Most loans pay interest **in arrears** (after the period). Some loans (e.g. RAX 516) pay **in advance** (vooraf — due at start of period). This is controlled by `loans.payment_timing`:
+
+- `'in_arrears'` (default): Payment due after period end. Notice generated after period closes.
+- `'in_advance'`: Payment due on the 1st of the period month. Notice should be prepared before the period starts.
+
+The accrual calculation is identical — only the payment due date and notice timing differ.
+
+### Exit Fee Terms
+
+Multi-tranche loans or loans with complex prepayment penalties store their exit fee rules as free text in `loans.exit_fee_terms`. This is reference information displayed on the loan detail page — the system does not auto-calculate exit fees. When a prepayment occurs, the PM enters any applicable exit fee as a `fee_invoice` event.
+
 ### PIK vs Cash-Pay
 
 Loans have `interest_type`: either `'pik'` (Payment-in-Kind) or `'cash_pay'`.

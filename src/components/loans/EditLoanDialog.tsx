@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Pencil, Plus, Minus } from 'lucide-react';
 import { useUpdateLoan } from '@/hooks/useLoans';
-import { Loan, InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
+import { Loan, InterestType, PaymentType, CommitmentFeeBasis, PaymentTiming, AmortizationFrequency } from '@/types/loan';
 import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
 
 interface EditLoanDialogProps {
@@ -53,6 +53,11 @@ interface LoanFormData {
   walt: string;
   walt_comment: string;
   occupancy: string;
+  payment_timing: PaymentTiming;
+  amortization_amount: string;
+  amortization_frequency: string;
+  amortization_start_date: string;
+  exit_fee_terms: string;
 }
 
 export function EditLoanDialog({ loan }: EditLoanDialogProps) {
@@ -98,6 +103,11 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
     walt: '',
     walt_comment: '',
     occupancy: '',
+    payment_timing: 'in_arrears' as PaymentTiming,
+    amortization_amount: '',
+    amortization_frequency: '',
+    amortization_start_date: '',
+    exit_fee_terms: '',
   });
 
   // Populate form when dialog opens
@@ -143,6 +153,11 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
         walt: loan.walt != null ? loan.walt.toString() : '',
         walt_comment: loan.walt_comment || '',
         occupancy: loan.occupancy != null ? (loan.occupancy * 100).toString() : '',
+        payment_timing: (loan as any).payment_timing || 'in_arrears',
+        amortization_amount: (loan as any).amortization_amount != null ? (loan as any).amortization_amount.toString() : '',
+        amortization_frequency: (loan as any).amortization_frequency || '',
+        amortization_start_date: (loan as any).amortization_start_date || '',
+        exit_fee_terms: (loan as any).exit_fee_terms || '',
       });
     }
   }, [isOpen, loan]);
@@ -198,6 +213,11 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
       walt: formData.walt ? parseFloat(formData.walt) : null,
       walt_comment: formData.walt_comment || null,
       occupancy: formData.occupancy ? parseFloat(formData.occupancy) / 100 : null,
+      payment_timing: formData.payment_timing,
+      amortization_amount: formData.amortization_amount ? parseFloat(formData.amortization_amount) : null,
+      amortization_frequency: formData.amortization_frequency || null,
+      amortization_start_date: formData.amortization_start_date || null,
+      exit_fee_terms: formData.exit_fee_terms || null,
     };
 
     await updateLoan.mutateAsync({ id: loan.id, updates: payload as unknown as Partial<Loan> });
@@ -266,7 +286,7 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                     <SelectContent>
                       {PIPELINE_STAGES.map(s => (
                         <SelectItem key={s.value} value={s.value}>
-                          {s.label} <span className="opacity-50">· {s.description}</span>
+                          {s.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -594,8 +614,8 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Notice Frequency</Label>
-                <Select 
-                  value={formData.notice_frequency} 
+                <Select
+                  value={formData.notice_frequency}
                   onValueChange={(v) => handleChange('notice_frequency', v)}
                 >
                   <SelectTrigger>
@@ -608,6 +628,21 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 </Select>
               </div>
               <div className="space-y-2">
+                <Label>Payment Timing</Label>
+                <Select
+                  value={formData.payment_timing}
+                  onValueChange={(v) => handleChange('payment_timing', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="in_arrears">In Arrears (after period end)</SelectItem>
+                    <SelectItem value="in_advance">In Advance (vooraf, at period start)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="payment_due_rule">Payment Due Date Rule</Label>
                 <Input
                   id="payment_due_rule"
@@ -616,6 +651,80 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                   placeholder="e.g., 5 business days after period end"
                 />
               </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Amortization Section */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Scheduled Amortization
+            </h3>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="amortization_amount">Amount (EUR)</Label>
+                <Input
+                  id="amortization_amount"
+                  type="number"
+                  step="0.01"
+                  value={formData.amortization_amount}
+                  onChange={(e) => handleChange('amortization_amount', e.target.value)}
+                  placeholder="e.g., 67500"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Frequency</Label>
+                <Select
+                  value={formData.amortization_frequency}
+                  onValueChange={(v) => handleChange('amortization_frequency', v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="quarterly">Quarterly</SelectItem>
+                    <SelectItem value="semi_annual">Semi-Annual</SelectItem>
+                    <SelectItem value="annual">Annual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="amortization_start_date">First Payment Date</Label>
+                <Input
+                  id="amortization_start_date"
+                  type="date"
+                  value={formData.amortization_start_date}
+                  onChange={(e) => handleChange('amortization_start_date', e.target.value)}
+                />
+              </div>
+            </div>
+            {formData.amortization_amount && formData.amortization_frequency && (
+              <p className="text-xs text-muted-foreground">
+                EUR {parseFloat(formData.amortization_amount).toLocaleString()} {formData.amortization_frequency} repayment will appear on interest notices and in totalDue.
+              </p>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Exit Fee Terms */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+              Exit Fee / Prepayment Terms
+            </h3>
+            <div className="space-y-2">
+              <Label htmlFor="exit_fee_terms">Exit Fee Terms</Label>
+              <textarea
+                id="exit_fee_terms"
+                className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={formData.exit_fee_terms}
+                onChange={(e) => handleChange('exit_fee_terms', e.target.value)}
+                placeholder="e.g., Tranche 1 (25M): full remaining-term interest. Tranche 2 (2M): only if >50% per year."
+                rows={3}
+              />
             </div>
           </div>
 

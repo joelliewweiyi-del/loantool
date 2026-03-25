@@ -23,6 +23,7 @@ import { ActivityTab } from '@/components/loans/ActivityTab';
 import { DocumentsTab } from '@/components/loans/DocumentsTab';
 import { CollateralTab } from '@/components/loans/CollateralTab';
 import { CovenantTab } from '@/components/loans/CovenantTab';
+import { RentRollTab } from '@/components/loans/RentRollTab';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { formatCurrency, formatCurrencyShort, formatDate, formatDateTime, formatPercent, formatEventType } from '@/lib/format';
 import { FinancialStrip } from '@/components/loans/FinancialStrip';
@@ -40,7 +41,8 @@ import {
   Trash2,
   MessageSquare,
   FolderOpen,
-  Shield
+  Shield,
+  Building2
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 
@@ -323,6 +325,10 @@ export default function LoanDetail() {
             <FolderOpen className="h-4 w-4 mr-1.5" />
             {isMobile ? 'Docs' : 'Documents'}
           </TabsTrigger>
+          <TabsTrigger value="rent-roll">
+            <Building2 className="h-4 w-4 mr-1.5" />
+            {isMobile ? 'Rent' : 'Rent Roll'}
+          </TabsTrigger>
           <TabsTrigger value="covenants">
             <Shield className="h-4 w-4 mr-1.5" />
             {isMobile ? 'Cov.' : 'Covenants'}
@@ -528,7 +534,7 @@ export default function LoanDetail() {
 
                 const getEventDescription = (event: typeof filtered[0]) => {
                   const meta = event.metadata as Record<string, unknown> | null;
-                  const description = meta?.description as string | undefined;
+                  const description = (meta?.description ?? meta?.afas_description) as string | undefined;
                   if (event.event_type === 'fee_invoice') {
                     const feeType = meta?.fee_type as string | undefined;
                     const paymentType = meta?.payment_type as string | undefined;
@@ -675,6 +681,12 @@ export default function LoanDetail() {
         <TabsContent value="documents">
           <ErrorBoundary fallbackTitle="Documents tab crashed">
             <DocumentsTab loanId={id!} />
+          </ErrorBoundary>
+        </TabsContent>
+
+        <TabsContent value="rent-roll">
+          <ErrorBoundary fallbackTitle="Rent Roll tab crashed">
+            <RentRollTab loanId={id!} occupancy={loan?.occupancy} />
           </ErrorBoundary>
         </TabsContent>
 

@@ -458,7 +458,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                     <SelectContent>
                       {PIPELINE_STAGES.map(s => (
                         <SelectItem key={s.value} value={s.value}>
-                          {s.label} <span className="opacity-50">· {s.description}</span>
+                          {s.label}
                         </SelectItem>
                       ))}
                     </SelectContent>

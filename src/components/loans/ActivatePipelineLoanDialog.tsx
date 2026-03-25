@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Rocket } from 'lucide-react';
+import { AlertTriangle, Rocket } from 'lucide-react';
 import { useActivatePipelineLoan } from '@/hooks/useLoans';
 import { Loan, PaymentType, CommitmentFeeBasis } from '@/types/loan';
 import { VEHICLES, vehicleRequiresFacility } from '@/lib/constants';
@@ -97,6 +97,26 @@ export function ActivatePipelineLoanDialog({ loan }: ActivatePipelineLoanDialogP
             Move this loan from Pipeline to an active vehicle. This will create founding events and generate interest periods.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="rounded-md border border-accent-amber/40 bg-accent-amber/5 p-3 text-sm space-y-1.5">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-accent-amber mt-0.5 shrink-0" />
+            <div>
+              <p className="font-medium text-accent-amber">Before activating, confirm you have:</p>
+              <ul className="mt-1.5 space-y-0.5 text-foreground-secondary list-disc pl-4">
+                <li>Loan start date and maturity date from the credit agreement</li>
+                <li>Correct interest rate (as per signed terms)</li>
+                <li>Initial draw amount (opening principal)</li>
+                <li>Total commitment amount</li>
+                <li>Interest payment type: cash-pay or PIK</li>
+                <li>Fee payment type: cash or PIK</li>
+                <li>Commitment fee rate (if applicable)</li>
+                <li>Arrangement fee amount (if applicable)</li>
+              </ul>
+              <p className="mt-2 text-foreground-tertiary">This action creates founding events and generates interest periods. It cannot be easily undone.</p>
+            </div>
+          </div>
+        </div>
 
         <div className="space-y-6 py-4">
           {/* Target Vehicle */}

@@ -43,7 +43,6 @@ export function PipelineStageBadge({ stage, className }: PipelineStageBadgeProps
         ))}
       </span>
       {info.label}
-      <span className="opacity-60 font-normal">· {info.description}</span>
     </span>
   );
 }

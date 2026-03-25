@@ -13,6 +13,18 @@ export function formatCurrency(amount: number | null | undefined): string {
 }
 
 /**
+ * Format amount as bare number without currency symbol (e.g. "46.432,50")
+ * Used in formal notices where "EUR" is printed separately.
+ */
+export function formatAmountBare(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined) return '—';
+  return new Intl.NumberFormat('nl-NL', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
+/**
  * Format currency without decimal places (for mobile / compact views)
  */
 export function formatCurrencyShort(amount: number | null | undefined): string {

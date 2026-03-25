@@ -283,6 +283,198 @@ export function useUploadRentRoll() {
   });
 }
 
+/**
+ * Fetch effective rental income for a single loan.
+ * Uses the sum of annual_rent from the latest received rent_roll submission,
+ * falling back to loans.rental_income if no rent roll entries exist.
+ */
+export function useRentRollIncome(loanId?: string) {
+  return useQuery({
+    queryKey: ['rent-roll-income', loanId],
+    enabled: !!loanId,
+    queryFn: async () => {
+      // Get the latest received rent_roll submission for this loan
+      const { data: submissions, error: subErr } = await supabase
+        .from('covenant_submissions')
+        .select('id, period_label, loan_covenants!inner(covenant_type)')
+        .eq('loan_id', loanId!)
+        .eq('loan_covenants.covenant_type', 'rent_roll')
+        .eq('status', 'received')
+        .order('period_label', { ascending: false })
+        .limit(1);
+      if (subErr) throw subErr;
+
+      if (!submissions || submissions.length === 0) return null;
+
+      const submissionId = submissions[0].id;
+
+      // Sum annual_rent from entries
+      const { data: entries, error: entErr } = await supabase
+        .from('rent_roll_entries')
+        .select('annual_rent')
+        .eq('submission_id', submissionId);
+      if (entErr) throw entErr;
+
+      const total = (entries ?? []).reduce((sum, e) => sum + (e.annual_rent || 0), 0);
+      return { total, periodLabel: submissions[0].period_label, submissionId };
+    },
+  });
+}
+
+/**
+ * Fetch effective rental income for all loans (portfolio-wide).
+ * Returns a map of loanId → { rentRollIncome, periodLabel }.
+ * Used by the loan tape export.
+ */
+export function useAllRentRollIncomes() {
+  return useQuery({
+    queryKey: ['all-rent-roll-incomes'],
+    queryFn: async () => {
+      // Get all received rent_roll submissions
+      const { data: submissions, error: subErr } = await supabase
+        .from('covenant_submissions')
+        .select('id, loan_id, period_label, loan_covenants!inner(covenant_type)')
+        .eq('loan_covenants.covenant_type', 'rent_roll')
+        .eq('status', 'received')
+        .order('period_label', { ascending: false });
+      if (subErr) throw subErr;
+
+      if (!submissions || submissions.length === 0) return {} as Record<string, number>;
+
+      // Keep only the latest submission per loan
+      const latestPerLoan = new Map<string, string>();
+      for (const s of submissions) {
+        if (!latestPerLoan.has(s.loan_id)) {
+          latestPerLoan.set(s.loan_id, s.id);
+        }
+      }
+
+      const submissionIds = [...latestPerLoan.values()];
+
+      // Get all entries for those submissions
+      const { data: entries, error: entErr } = await supabase
+        .from('rent_roll_entries')
+        .select('submission_id, loan_id, annual_rent')
+        .in('submission_id', submissionIds);
+      if (entErr) throw entErr;
+
+      // Sum per loan
+      const result: Record<string, number> = {};
+      for (const e of entries ?? []) {
+        result[e.loan_id] = (result[e.loan_id] || 0) + (e.annual_rent || 0);
+      }
+      return result;
+    },
+  });
+}
+
+/**
+ * Fetch rent roll entries for a loan — from the latest received rent_roll submission.
+ * Returns entries + submission metadata (period_label, received_at, annual_rent total).
+ */
+export function useRentRollEntries(loanId?: string) {
+  return useQuery({
+    queryKey: ['rent-roll-entries', loanId],
+    enabled: !!loanId,
+    queryFn: async () => {
+      // Get the latest received rent_roll submission
+      const { data: submissions, error: subErr } = await supabase
+        .from('covenant_submissions')
+        .select('id, period_label, received_at, metadata, loan_covenants!inner(covenant_type)')
+        .eq('loan_id', loanId!)
+        .eq('loan_covenants.covenant_type', 'rent_roll')
+        .eq('status', 'received')
+        .order('period_label', { ascending: false })
+        .limit(1);
+      if (subErr) throw subErr;
+      if (!submissions || submissions.length === 0) return null;
+
+      const sub = submissions[0];
+
+      // Get all entries for this submission
+      const { data: entries, error: entErr } = await supabase
+        .from('rent_roll_entries')
+        .select('*')
+        .eq('submission_id', sub.id)
+        .order('annual_rent', { ascending: false });
+      if (entErr) throw entErr;
+
+      return {
+        periodLabel: sub.period_label,
+        receivedAt: sub.received_at,
+        metadata: sub.metadata as Record<string, any> | null,
+        entries: (entries ?? []) as RentRollEntry[],
+        totalRent: (entries ?? []).reduce((sum, e) => sum + (e.annual_rent || 0), 0),
+        totalSqm: (entries ?? []).reduce((sum, e) => sum + (e.sqm || 0), 0),
+      };
+    },
+  });
+}
+
+/**
+ * Fetch rent roll entries for ALL loans — latest received submission per loan.
+ * Returns an array of { loanId, loanDisplayId, borrowerName, city, periodLabel, entries, totalRent, totalSqm }.
+ */
+export function useAllRentRollEntries() {
+  return useQuery({
+    queryKey: ['all-rent-roll-entries'],
+    queryFn: async () => {
+      // Get all received rent_roll submissions
+      const { data: submissions, error: subErr } = await supabase
+        .from('covenant_submissions')
+        .select('id, loan_id, period_label, received_at, metadata, loan_covenants!inner(covenant_type)')
+        .eq('loan_covenants.covenant_type', 'rent_roll')
+        .eq('status', 'received')
+        .order('period_label', { ascending: false });
+      if (subErr) throw subErr;
+      if (!submissions || submissions.length === 0) return [];
+
+      // Keep only latest per loan
+      const latestPerLoan = new Map<string, typeof submissions[0]>();
+      for (const s of submissions) {
+        if (!latestPerLoan.has(s.loan_id)) latestPerLoan.set(s.loan_id, s);
+      }
+
+      const submissionIds = [...latestPerLoan.values()].map(s => s.id);
+
+      // Get all entries
+      const { data: entries, error: entErr } = await supabase
+        .from('rent_roll_entries')
+        .select('*')
+        .in('submission_id', submissionIds)
+        .order('annual_rent', { ascending: false });
+      if (entErr) throw entErr;
+
+      // Get loan display info
+      const loanIds = [...latestPerLoan.keys()];
+      const { data: loanInfo } = await supabase
+        .from('loans')
+        .select('id, loan_id, borrower_name, city, occupancy')
+        .in('id', loanIds);
+
+      const loanMap = new Map((loanInfo ?? []).map(l => [l.id, l]));
+
+      // Build per-loan result
+      return [...latestPerLoan.entries()].map(([loanUuid, sub]) => {
+        const loanEntries = (entries ?? []).filter(e => e.submission_id === sub.id) as RentRollEntry[];
+        const loan = loanMap.get(loanUuid);
+        return {
+          loanUuid,
+          loanId: loan?.loan_id ?? '?',
+          borrowerName: loan?.borrower_name ?? '—',
+          city: loan?.city ?? '—',
+          occupancy: loan?.occupancy as number | null ?? null,
+          periodLabel: sub.period_label,
+          receivedAt: sub.received_at,
+          entries: loanEntries,
+          totalRent: loanEntries.reduce((s, e) => s + (e.annual_rent || 0), 0),
+          totalSqm: loanEntries.reduce((s, e) => s + (e.sqm || 0), 0),
+        };
+      }).sort((a, b) => a.loanId.localeCompare(b.loanId, undefined, { numeric: true }));
+    },
+  });
+}
+
 /** Update notes on a covenant submission */
 export function useUpdateSubmissionNotes() {
   const qc = useQueryClient();

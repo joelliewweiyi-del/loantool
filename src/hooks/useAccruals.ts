@@ -7,6 +7,7 @@ import {
   sortEventsByDate,
   PeriodAccrual,
   AccrualsSummary,
+  AmortizationParams,
 } from '@/lib/loanCalculations';
 import { getCurrentDateString } from '@/lib/simulatedDate';
 
@@ -40,6 +41,7 @@ export function useAccruals(loanId: string | undefined): UseAccrualsResult {
           totalCommitmentFees: 0,
           totalFeesInvoiced: 0,
           totalPikCapitalized: 0,
+          totalAmortizationDue: 0,
           totalDue: 0,
           currentPrincipal: 0,
           currentRate: 0,
@@ -54,6 +56,16 @@ export function useAccruals(loanId: string | undefined): UseAccrualsResult {
     const commitmentFeeRate = loan.commitment_fee_rate || 0;
     const initialCommitment = loan.total_commitment || 0;
     const loanInterestType = (loan.interest_type as 'cash_pay' | 'pik') || 'cash_pay';
+
+    // Build amortization params if loan has scheduled repayments
+    const amortizationParams: AmortizationParams | null =
+      loan.amortization_amount && loan.amortization_frequency && loan.amortization_start_date
+        ? {
+            amount: loan.amortization_amount,
+            frequency: loan.amortization_frequency,
+            startDate: loan.amortization_start_date,
+          }
+        : null;
 
     // If no periods exist, derive current state from events directly
     if (!periods || periods.length === 0) {
@@ -73,6 +85,7 @@ export function useAccruals(loanId: string | undefined): UseAccrualsResult {
           totalCommitmentFees: 0,
           totalFeesInvoiced: 0,
           totalPikCapitalized: 0,
+          totalAmortizationDue: 0,
           totalDue: 0,
           currentPrincipal: currentState.outstandingPrincipal,
           currentRate: currentState.currentRate,
@@ -90,7 +103,8 @@ export function useAccruals(loanId: string | undefined): UseAccrualsResult {
         events,
         commitmentFeeRate,
         initialCommitment,
-        loanInterestType
+        loanInterestType,
+        amortizationParams
       );
 
       // Pass approved events to calculate current principal from event ledger only
@@ -115,6 +129,7 @@ export function useAccruals(loanId: string | undefined): UseAccrualsResult {
           totalCommitmentFees: 0,
           totalFeesInvoiced: 0,
           totalPikCapitalized: 0,
+          totalAmortizationDue: 0,
           totalDue: 0,
           currentPrincipal: 0,
           currentRate: 0,

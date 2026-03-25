@@ -51,7 +51,8 @@ function computeDuration(maturityDate: string | null, asOfDate: string): number 
 
 export function buildLoanTapeData(
   loansWithEvents: LoanWithEvents[],
-  asOfDate: string
+  asOfDate: string,
+  rentRollIncomes?: Record<string, number>
 ): LoanTapeData[] {
   return loansWithEvents.map(({ loan, events }) => {
     const state = getLoanStateAtDate(events, asOfDate, loan.total_commitment ?? 0, loan.interest_type ?? 'cash_pay');
@@ -77,7 +78,9 @@ export function buildLoanTapeData(
       redIVStartDate: loan.red_iv_start_date || null,
       originalStartDate: loan.loan_start_date || null,
       maturityDate: loan.maturity_date || null,
-      rentalIncome: loan.rental_income,
+      rentalIncome: (rentRollIncomes && rentRollIncomes[loan.id] != null)
+        ? rentRollIncomes[loan.id]
+        : loan.rental_income,
       valuation: loan.valuation,
       valuationDate: loan.valuation_date || null,
       ltv: loan.valuation ? Math.max(effectiveCommitment, outstanding) / loan.valuation : null,
@@ -257,13 +260,17 @@ function triggerDownload(buffer: ExcelJS.Buffer, filename: string) {
 export async function downloadSummaryLoanTapeXlsx(
   loansWithEvents: LoanWithEvents[],
   asOfDate: string,
-  vehicle: string
+  vehicle: string,
+  rentRollIncomes?: Record<string, number>
 ) {
-  const data = buildLoanTapeData(loansWithEvents, asOfDate);
+  const data = buildLoanTapeData(loansWithEvents, asOfDate, rentRollIncomes);
   const byStartDate = (a: LoanTapeData, b: LoanTapeData) =>
     (a.originalStartDate || '').localeCompare(b.originalStartDate || '');
-  const incomeProducing = data.filter(d => d.earmarked).sort(byStartDate);
-  const nonIncomeProducing = data.filter(d => !d.earmarked).sort(byStartDate);
+  const isPipelineSection = (d: LoanTapeData) => d.currentFacility === 'Pipeline' && d.pipelineStage !== 'signed';
+  // Income Producing = earmarked non-pipeline + signed pipeline loans (earmarked only)
+  const incomeProducing = data.filter(d => !isPipelineSection(d) && d.earmarked).sort(byStartDate);
+  // Pipeline = hard + prospect only
+  const pipelineLoans = data.filter(d => isPipelineSection(d)).sort(byStartDate);
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'RAX Finance Loan Tool';
@@ -396,31 +403,8 @@ export async function downloadSummaryLoanTapeXlsx(
     });
   }
 
-  // "Income Producing" group
-  const ipLabelRow = ws.addRow([null, 'Income Producing']);
-  ipLabelRow.getCell(2).font = GROUP_FONT;
-  const ipFirstRow = ws.rowCount + 1;
-  for (const item of incomeProducing) addDataRow(item);
-  const ipLastRow = ws.rowCount;
-  if (incomeProducing.length > 0) addSubtotalRow(ipFirstRow, ipLastRow);
-
-  // Empty row
-  ws.addRow([]);
-
-  // "Non-Income Producing" group
-  const nipLabelRow = ws.addRow([null, 'Non-Income Producing']);
-  nipLabelRow.getCell(2).font = GROUP_FONT;
-  const nipFirstRow = ws.rowCount + 1;
-  for (const item of nonIncomeProducing) addDataRow(item);
-  const nipLastRow = ws.rowCount;
-  if (nonIncomeProducing.length > 0) addSubtotalRow(nipFirstRow, nipLastRow);
-
-  // Empty row + Grand total (reference all data rows)
-  ws.addRow([]);
-  const allFirstRow = ipFirstRow;
-  // Grand total: we need both subtotal rows referenced, but simpler to just
-  // reference all data rows. We'll build two-range formulas.
-  {
+  // Helper: add a grand total row spanning multiple data ranges
+  function addGrandTotalRow(groups: { first: number; last: number }[]) {
     const row = ws.addRow([]);
     const commitCol = colLetterOf('commitment');
     const rateCol = colLetterOf('interestRate');
@@ -429,11 +413,7 @@ export async function downloadSummaryLoanTapeXlsx(
     const waltCol = colLetterOf('walt');
     const occCol = colLetterOf('occupancy');
 
-    // Helper to build weighted average formula across IP + NIP ranges
     const weightedAvgFormula = (valCol: string) => {
-      const groups: { first: number; last: number }[] = [];
-      if (incomeProducing.length > 0) groups.push({ first: ipFirstRow, last: ipLastRow });
-      if (nonIncomeProducing.length > 0) groups.push({ first: nipFirstRow, last: nipLastRow });
       const commitParts = groups.map(src => ({
         val: `${valCol}${src.first}:${valCol}${src.last}`,
         commit: `${commitCol}${src.first}:${commitCol}${src.last}`,
@@ -446,11 +426,7 @@ export async function downloadSummaryLoanTapeXlsx(
     cols.forEach((col, i) => {
       const cell = row.getCell(i + 2);
       const letter = colLetter(i);
-      const rangeIP = incomeProducing.length > 0 ? `${letter}${ipFirstRow}:${letter}${ipLastRow}` : '';
-      const rangeNIP = nonIncomeProducing.length > 0 ? `${letter}${nipFirstRow}:${letter}${nipLastRow}` : '';
-
-      // Build combined range parts
-      const parts = [rangeIP, rangeNIP].filter(Boolean);
+      const parts = groups.map(g => `${letter}${g.first}:${letter}${g.last}`);
 
       if (col.key === 'loanId') {
         cell.value = { formula: parts.map(r => `COUNTA(${r})`).join('+') || '0' } as any;
@@ -482,6 +458,37 @@ export async function downloadSummaryLoanTapeXlsx(
     });
   }
 
+  // ── Section 1: Income Producing ──────────────────────────────
+  const ipLabelRow = ws.addRow([null, 'Income Producing']);
+  ipLabelRow.getCell(2).font = GROUP_FONT;
+  const ipFirstRow = ws.rowCount + 1;
+  for (const item of incomeProducing) addDataRow(item);
+  const ipLastRow = ws.rowCount;
+  if (incomeProducing.length > 0) addSubtotalRow(ipFirstRow, ipLastRow);
+
+  // ── Section 2: Pipeline (hard + prospect only) ───────────────
+  let plFirstRow = 0;
+  let plLastRow = 0;
+  if (pipelineLoans.length > 0) {
+    ws.addRow([]);
+    ws.addRow([]);
+    const plLabelRow = ws.addRow([null, 'Pipeline']);
+    plLabelRow.getCell(2).font = GROUP_FONT;
+    plFirstRow = ws.rowCount + 1;
+    for (const item of pipelineLoans) addDataRow(item);
+    plLastRow = ws.rowCount;
+    addSubtotalRow(plFirstRow, plLastRow);
+  }
+
+  // ── Grand total: Income Producing + Pipeline ─────────────────
+  ws.addRow([]);
+  {
+    const groups: { first: number; last: number }[] = [];
+    if (incomeProducing.length > 0) groups.push({ first: ipFirstRow, last: ipLastRow });
+    if (pipelineLoans.length > 0) groups.push({ first: plFirstRow, last: plLastRow });
+    if (groups.length > 0) addGrandTotalRow(groups);
+  }
+
   const buffer = await wb.xlsx.writeBuffer();
   const dateStr = asOfDate.replace(/-/g, '');
   triggerDownload(buffer, `Loan_Tape_${vehicle.replace(/\s+/g, '_')}_${dateStr}_summary.xlsx`);
@@ -492,9 +499,10 @@ export async function downloadSummaryLoanTapeXlsx(
 export async function downloadDetailedLoanTapeXlsx(
   loansWithEvents: LoanWithEvents[],
   asOfDate: string,
-  vehicle: string
+  vehicle: string,
+  rentRollIncomes?: Record<string, number>
 ) {
-  const data = buildLoanTapeData(loansWithEvents, asOfDate)
+  const data = buildLoanTapeData(loansWithEvents, asOfDate, rentRollIncomes)
     .filter(d => d.currentFacility !== 'Pipeline')
     .sort((a, b) => (a.originalStartDate || '').localeCompare(b.originalStartDate || ''));
   const cols = DETAILED_COLUMNS;
@@ -645,8 +653,9 @@ const CSV_COLUMNS = [
 export function downloadInvestorPortalCsv(
   loansWithEvents: LoanWithEvents[],
   asOfDate: string,
+  rentRollIncomes?: Record<string, number>
 ) {
-  const data = buildLoanTapeData(loansWithEvents, asOfDate)
+  const data = buildLoanTapeData(loansWithEvents, asOfDate, rentRollIncomes)
     .filter(d => d.currentFacility !== 'Pipeline')
     .sort((a, b) => (a.originalStartDate || '').localeCompare(b.originalStartDate || ''));
 
@@ -703,7 +712,8 @@ export function downloadInvestorPortalCsv(
 export async function downloadFullExportXlsx(
   loansWithEvents: LoanWithEvents[],
   asOfDate: string,
-  vehicle: string
+  vehicle: string,
+  rentRollIncomes?: Record<string, number>
 ) {
   const wb = new ExcelJS.Workbook();
   wb.creator = 'RAX Finance Loan Tool';
@@ -787,7 +797,7 @@ export async function downloadFullExportXlsx(
       startDate: toExcelDate(loan.loan_start_date || null),
       maturityDate: toExcelDate(loan.maturity_date || null),
       duration: computeDuration(loan.maturity_date, asOfDate) ?? '',
-      rentalIncome: loan.rental_income ?? '',
+      rentalIncome: (rentRollIncomes && rentRollIncomes[loan.id] != null) ? rentRollIncomes[loan.id] : (loan.rental_income ?? ''),
       valuation: loan.valuation ?? '',
       valuationDate: toExcelDate(loan.valuation_date || null),
       ltv: loan.valuation ? Math.max(commitment > 0 ? commitment : outstanding, outstanding) / loan.valuation : '',
@@ -819,9 +829,10 @@ export async function downloadFullExportXlsx(
 export async function downloadLoanTapeXlsx(
   loansWithEvents: LoanWithEvents[],
   asOfDate: string,
-  vehicle: string
+  vehicle: string,
+  rentRollIncomes?: Record<string, number>
 ) {
-  const data = buildLoanTapeData(loansWithEvents, asOfDate);
+  const data = buildLoanTapeData(loansWithEvents, asOfDate, rentRollIncomes);
 
   const wb = new ExcelJS.Workbook();
   wb.creator = 'RAX Finance Loan Tool';

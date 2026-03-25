@@ -1,4 +1,4 @@
-import { LoanEvent, Period, InterestType } from '@/types/loan';
+import { LoanEvent, Period, InterestType, AmortizationFrequency } from '@/types/loan';
 import { daysBetween30360 } from './format';
 
 /**
@@ -64,9 +64,12 @@ export interface PeriodAccrual {
   avgUndrawnAmount: number;
   feesInvoiced: number;
   
+  // Scheduled amortization due this period (if any)
+  amortizationDue: number;
+
   // Total due for the period
   totalDue: number;
-  
+
   // Daily breakdown for drill-down
   dailyAccruals: DailyAccrual[];
   
@@ -464,6 +467,55 @@ export function calculateCommitmentFeeSegments(
 }
 
 /**
+ * Amortization schedule parameters for loans with scheduled repayments.
+ */
+export interface AmortizationParams {
+  amount: number;
+  frequency: AmortizationFrequency;
+  startDate: string; // ISO date
+}
+
+/**
+ * Determines the amortization amount due within a given period.
+ * Returns the amortization amount if a scheduled payment falls within the period, 0 otherwise.
+ * For quarterly: due dates are every 3 months from start date.
+ * Multiple payments can fall in a single period if the period spans multiple due dates (unlikely for monthly periods).
+ */
+export function getAmortizationDueInPeriod(
+  periodStart: string,
+  periodEnd: string,
+  params: AmortizationParams | null
+): number {
+  if (!params) return 0;
+
+  const pStart = new Date(periodStart);
+  const pEnd = new Date(periodEnd);
+  const scheduleStart = new Date(params.startDate);
+
+  // If period ends before amortization starts, nothing due
+  if (pEnd < scheduleStart) return 0;
+
+  const monthStep = params.frequency === 'monthly' ? 1
+    : params.frequency === 'quarterly' ? 3
+    : params.frequency === 'semi_annual' ? 6
+    : 12; // annual
+
+  let count = 0;
+  // Walk through due dates from schedule start
+  const dueDate = new Date(scheduleStart);
+  // Safety: cap at 600 iterations (50 years monthly)
+  for (let i = 0; i < 600; i++) {
+    if (dueDate > pEnd) break;
+    if (dueDate >= pStart && dueDate <= pEnd) {
+      count++;
+    }
+    dueDate.setMonth(dueDate.getMonth() + monthStep);
+  }
+
+  return count * params.amount;
+}
+
+/**
  * Calculates comprehensive accruals for a single period.
  */
 export function calculatePeriodAccruals(
@@ -471,7 +523,8 @@ export function calculatePeriodAccruals(
   events: LoanEvent[],
   commitmentFeeRate: number = 0,
   initialCommitment: number = 0,
-  loanInterestType: InterestType = 'cash_pay'
+  loanInterestType: InterestType = 'cash_pay',
+  amortizationParams: AmortizationParams | null = null
 ): PeriodAccrual {
   const sortedEvents = sortEventsByDate(events);
   const periodStart = period.period_start;
@@ -546,12 +599,15 @@ export function calculatePeriodAccruals(
   // Commitment fee accrued derives from segments (30/360), not daily accruals
   const commitmentFeeAccrued = commitmentFeeSegments.reduce((sum, seg) => sum + seg.fee, 0);
 
-  // Total due (cash pay interest + commitment fee + invoiced fees)
+  // Scheduled amortization due this period
+  const amortizationDue = getAmortizationDueInPeriod(periodStart, periodEnd, amortizationParams);
+
+  // Total due (cash pay interest + commitment fee + invoiced fees + amortization)
   const cashPayInterest = interestSegments
     .filter(seg => seg.interestType === 'cash_pay')
     .reduce((sum, seg) => sum + seg.interest, 0);
 
-  const totalDue = cashPayInterest + commitmentFeeAccrued + feesInvoiced;
+  const totalDue = cashPayInterest + commitmentFeeAccrued + feesInvoiced + amortizationDue;
 
   // For PIK loans, the closing principal should include the interest charge
   // that will be capitalized at period end
@@ -591,6 +647,7 @@ export function calculatePeriodAccruals(
     commitmentFeeRate,
     avgUndrawnAmount,
     feesInvoiced,
+    amortizationDue,
     totalDue,
     dailyAccruals,
     interestSegments,
@@ -609,11 +666,12 @@ export function calculateAllPeriodAccruals(
   events: LoanEvent[],
   commitmentFeeRate: number = 0,
   initialCommitment: number = 0,
-  loanInterestType: InterestType = 'cash_pay'
+  loanInterestType: InterestType = 'cash_pay',
+  amortizationParams: AmortizationParams | null = null
 ): PeriodAccrual[] {
   return periods
     .sort((a, b) => new Date(a.period_start).getTime() - new Date(b.period_start).getTime())
-    .map(period => calculatePeriodAccruals(period, events, commitmentFeeRate, initialCommitment, loanInterestType));
+    .map(period => calculatePeriodAccruals(period, events, commitmentFeeRate, initialCommitment, loanInterestType, amortizationParams));
 }
 
 /**
@@ -625,6 +683,7 @@ export interface AccrualsSummary {
   totalCommitmentFees: number;
   totalFeesInvoiced: number;
   totalPikCapitalized: number;
+  totalAmortizationDue: number;
   totalDue: number;
   currentPrincipal: number;
   currentRate: number;
@@ -651,6 +710,7 @@ export function calculateAccrualsSummary(
       totalCommitmentFees: 0,
       totalFeesInvoiced: 0,
       totalPikCapitalized: 0,
+      totalAmortizationDue: 0,
       totalDue: 0,
       currentPrincipal: 0,
       currentRate: 0,
@@ -660,7 +720,7 @@ export function calculateAccrualsSummary(
       commitmentFeeRate: 0,
     };
   }
-  
+
   const lastPeriod = periodAccruals[periodAccruals.length - 1];
   
   // Calculate weighted average rate
@@ -716,6 +776,7 @@ export function calculateAccrualsSummary(
     totalCommitmentFees: periodAccruals.reduce((sum, pa) => sum + pa.commitmentFeeAccrued, 0),
     totalFeesInvoiced: periodAccruals.reduce((sum, pa) => sum + pa.feesInvoiced, 0),
     totalPikCapitalized: periodAccruals.reduce((sum, pa) => sum + pa.pikCapitalized, 0),
+    totalAmortizationDue: periodAccruals.reduce((sum, pa) => sum + pa.amortizationDue, 0),
     totalDue: periodAccruals.reduce((sum, pa) => sum + pa.totalDue, 0),
     currentPrincipal,
     currentRate: lastPeriod.closingRate,

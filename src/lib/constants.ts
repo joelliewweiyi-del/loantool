@@ -20,9 +20,9 @@ export function isPipelineVehicle(vehicle: string): boolean {
 }
 
 export const PIPELINE_STAGES = [
-  { value: 'prospect', label: 'Prospect', description: 'Early discussions', color: 'neutral' },
-  { value: 'soft', label: 'Soft', description: 'Kredietbrief sent', color: 'amber' },
-  { value: 'hard', label: 'Hard', description: 'Kredietbrief signed', color: 'sage' },
+  { value: 'prospect', label: 'Prospect', color: 'neutral' },
+  { value: 'hard', label: 'Hard', color: 'amber' },
+  { value: 'signed', label: 'Signed', color: 'sage' },
 ] as const;
 
 export type PipelineStage = (typeof PIPELINE_STAGES)[number]['value'];

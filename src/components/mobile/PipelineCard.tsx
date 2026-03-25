@@ -85,7 +85,6 @@ export function PipelineCard({ loan }: PipelineCardProps) {
             {PIPELINE_STAGES.map(s => (
               <SelectItem key={s.value} value={s.value}>
                 <span>{s.label}</span>
-                <span className="ml-1 opacity-50">· {s.description}</span>
               </SelectItem>
             ))}
           </SelectContent>

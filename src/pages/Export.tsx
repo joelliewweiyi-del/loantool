@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useLoans } from '@/hooks/useLoans';
+import { useAllRentRollIncomes } from '@/hooks/useCovenants';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, FileSpreadsheet, Loader2, Table2, DatabaseZap, FileText, PackageOpen } from 'lucide-react';
+import { Download, FileSpreadsheet, Loader2, Table2, DatabaseZap, FileText, PackageOpen, Building2 } from 'lucide-react';
+import { RentRollPanel } from '@/components/loans/RentRollPanel';
 import { supabase } from '@/integrations/supabase/client';
 import {
   downloadSummaryLoanTapeXlsx,
@@ -23,6 +25,7 @@ type ExportType = 'summary' | 'detailed' | 'csv' | 'full';
 export default function Export() {
   const [activeVehicle, setActiveVehicle] = useState<Vehicle | 'all'>('all');
   const { data: loans, isLoading } = useLoans();
+  const { data: rentRollIncomes } = useAllRentRollIncomes();
   const [exporting, setExporting] = useState<ExportType | null>(null);
   const [infoPackLoading, setInfoPackLoading] = useState(false);
 
@@ -86,13 +89,13 @@ export default function Export() {
       const label = activeVehicle === 'all' ? 'All' : activeVehicle;
 
       if (type === 'summary') {
-        await downloadSummaryLoanTapeXlsx(loansWithEvents, asOfDate, label);
+        await downloadSummaryLoanTapeXlsx(loansWithEvents, asOfDate, label, rentRollIncomes);
       } else if (type === 'detailed') {
-        await downloadDetailedLoanTapeXlsx(loansWithEvents, asOfDate, label);
+        await downloadDetailedLoanTapeXlsx(loansWithEvents, asOfDate, label, rentRollIncomes);
       } else if (type === 'csv') {
-        downloadInvestorPortalCsv(loansWithEvents, asOfDate);
+        downloadInvestorPortalCsv(loansWithEvents, asOfDate, rentRollIncomes);
       } else {
-        await downloadFullExportXlsx(loansWithEvents, asOfDate, label);
+        await downloadFullExportXlsx(loansWithEvents, asOfDate, label, rentRollIncomes);
       }
     } finally {
       setExporting(null);
@@ -134,11 +137,14 @@ export default function Export() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Export Loan Tapes</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Download loan portfolio data in different formats.
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Export Loan Tapes</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Download loan portfolio data in different formats.
+          </p>
+        </div>
+        <RentRollPanel />
       </div>
 
       <Tabs

@@ -15,6 +15,7 @@ import {
   Landmark,
   Shield,
   Handshake,
+  Calculator,
   type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -49,6 +50,7 @@ const navigation: NavGroup[] = [
     label: 'Workflow',
     items: [
       { name: 'Monthly Approval', href: '/monthly-approval', icon: ClipboardCheck },
+      { name: 'Calculation Sheet', href: '/calculation-sheet', icon: Calculator },
       { name: 'Compliance', href: '/compliance', icon: Shield },
     ],
   },
