@@ -33,10 +33,13 @@ export async function parseLoanDocument(rawText: string): Promise<ParsedDocument
   });
 
   if (error) {
-    console.error('AI document parsing failed:', error);
+    // When the Edge Function returns a non-2xx status, the Supabase client
+    // sets `error` but the response body (with the real error) may be in `data`.
+    const detail = data?.error || error.message;
+    console.error('AI document parsing failed:', detail, { error, data });
     return {
       fields: {},
-      warnings: [`AI parsing failed: ${error.message}`],
+      warnings: [`AI parsing failed: ${detail}`],
       documentType: 'unknown',
     };
   }

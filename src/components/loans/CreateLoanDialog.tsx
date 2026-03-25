@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Plus, Minus, FileUp, Loader2, ExternalLink, Upload, X, ImageIcon } from 'lucide-react';
 import { useCreateLoan } from '@/hooks/useLoans';
 import { uploadLoanPhoto } from '@/lib/uploadLoanPhoto';
+import { supabase } from '@/integrations/supabase/client';
 import { InterestType, PaymentType, CommitmentFeeBasis } from '@/types/loan';
 import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
 import { extractTextFromPdf } from '@/lib/pdfExtract';
@@ -132,6 +133,9 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
   const [photoUploading, setPhotoUploading] = useState(false);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+  const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
   // Sync vehicle when tab changes (only when dialog is closed / form is pristine)
   useEffect(() => {
     if (!isOpen && defaultVehicle) {
@@ -154,7 +158,10 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
   const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    event.target.value = '';
+    if (event.target.value) event.target.value = '';
+
+    // Store file for upload after loan creation
+    setPendingPdfFile(file);
 
     setPdfStatus(null);
     setPdfFilledFields(new Set());
@@ -234,6 +241,45 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
     } finally {
       setPdfParsing(false);
     }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file?.type === 'application/pdf') {
+      // Reuse the same handler by creating a synthetic event
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      if (fileInputRef.current) {
+        fileInputRef.current.files = dt.files;
+        fileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        // Fallback: call handlePdfUpload directly
+        handlePdfUpload({ target: { files: dt.files } } as any);
+      }
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes('Files')) setDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) setDragOver(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const pdfFieldClass = (field: keyof LoanFormData) =>
@@ -317,7 +363,29 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
       kadastrale_kaart_url: formData.kadastrale_kaart_url || null,
     };
 
-    await createLoan.mutateAsync(payload);
+    const createdLoan = await createLoan.mutateAsync(payload);
+
+    // Upload the dropped/uploaded PDF to loan-documents storage
+    if (pendingPdfFile && createdLoan?.id) {
+      try {
+        const filePath = `${createdLoan.id}/${pendingPdfFile.name}`;
+        await supabase.storage
+          .from('loan-documents')
+          .upload(filePath, pendingPdfFile, { upsert: true });
+        const { data: user } = await supabase.auth.getUser();
+        await supabase.from('loan_documents').insert({
+          loan_id: createdLoan.id,
+          file_name: pendingPdfFile.name,
+          file_path: filePath,
+          file_size: pendingPdfFile.size,
+          content_type: pendingPdfFile.type || 'application/pdf',
+          uploaded_by: user.user!.id,
+        });
+      } catch (err) {
+        console.error('Failed to upload PDF to documents:', err);
+      }
+    }
+
     setIsOpen(false);
     setFormData({ ...initialFormData, vehicle: defaultVehicle || DEFAULT_VEHICLE });
     setPropertyAddresses(['']);
@@ -325,6 +393,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
     setPdfStatus(null);
     setParsedResult(null);
     durationMonthsRef.current = null;
+    setPendingPdfFile(null);
     setPhotoPreview(null);
     setPhotoUploading(false);
   };
@@ -351,7 +420,21 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
           New Loan
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {dragOver && (
+          <div className="absolute inset-0 z-50 bg-primary/5 border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none">
+            <div className="text-center">
+              <FileUp className="h-10 w-10 text-primary mx-auto mb-2" />
+              <p className="text-sm font-medium text-primary">Drop PDF here</p>
+            </div>
+          </div>
+        )}
         <DialogHeader>
           <DialogTitle>Create New Loan</DialogTitle>
           <DialogDescription>
@@ -380,16 +463,23 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
               )}
               Upload Document
             </label>
-            {pdfStatus && (
-              <span className={cn(
-                'text-xs',
-                pdfStatus.type === 'success' && 'text-accent-sage',
-                pdfStatus.type === 'warning' && 'text-accent-amber',
-                pdfStatus.type === 'error' && 'text-destructive',
-              )}>
-                {pdfStatus.message}
-              </span>
-            )}
+            <div className="flex flex-col gap-0.5">
+              {pdfStatus && (
+                <span className={cn(
+                  'text-xs',
+                  pdfStatus.type === 'success' && 'text-accent-sage',
+                  pdfStatus.type === 'warning' && 'text-accent-amber',
+                  pdfStatus.type === 'error' && 'text-destructive',
+                )}>
+                  {pdfStatus.message}
+                </span>
+              )}
+              {pendingPdfFile && (
+                <span className="text-[11px] text-foreground-tertiary">
+                  {pendingPdfFile.name} will be stored in documents
+                </span>
+              )}
+            </div>
           </div>
           {parsedResult && (
             <details open className="mt-3 border border-accent-sage/40 rounded-lg overflow-hidden">

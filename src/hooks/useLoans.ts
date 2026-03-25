@@ -310,11 +310,32 @@ export function useCreateLoan() {
           }
         }
       }
+
+      // Log to activity feed
+      const summaryParts: string[] = [`New loan ${data.loan_id} created`];
+      if (data.borrower_name) summaryParts.push(`Borrower: ${data.borrower_name}`);
+      if (data.vehicle) summaryParts.push(`Vehicle: ${data.vehicle}`);
+      if (data.total_commitment) summaryParts.push(`Commitment: €${data.total_commitment.toLocaleString('nl-NL')}`);
+      if (data.outstanding) summaryParts.push(`Outstanding: €${data.outstanding.toLocaleString('nl-NL')}`);
+      if (data.interest_rate) summaryParts.push(`Rate: ${(data.interest_rate * 100).toFixed(2)}%`);
+      if (data.city) summaryParts.push(`City: ${data.city}`);
+
+      await supabase.from('loan_activity_log' as any).insert({
+        loan_id: createdLoan.id,
+        content: summaryParts.join(' · '),
+        activity_type: 'other',
+        activity_date: getCurrentDateString(),
+        created_by: userId,
+        created_by_email: user.user.email || null,
+      });
+
       return createdLoan;
     },
     onSuccess: (loan) => {
       queryClient.invalidateQueries({ queryKey: ['loans'] });
       queryClient.invalidateQueries({ queryKey: ['loan-periods', loan.id] });
+      queryClient.invalidateQueries({ queryKey: ['all-activity-log'] });
+      queryClient.invalidateQueries({ queryKey: ['latest-activity-per-loan'] });
       toast({ title: 'Loan created with founding events and periods' });
     },
     onError: (error) => {

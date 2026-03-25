@@ -108,7 +108,7 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
     occupancy: '',
     payment_timing: 'in_arrears' as PaymentTiming,
     amortization_amount: '',
-    amortization_frequency: '',
+    amortization_frequency: 'none',
     amortization_start_date: '',
     exit_fee_terms: '',
   });
@@ -158,7 +158,7 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
         occupancy: loan.occupancy != null ? (loan.occupancy * 100).toString() : '',
         payment_timing: (loan as any).payment_timing || 'in_arrears',
         amortization_amount: (loan as any).amortization_amount != null ? (loan as any).amortization_amount.toString() : '',
-        amortization_frequency: (loan as any).amortization_frequency || '',
+        amortization_frequency: (loan as any).amortization_frequency || 'none',
         amortization_start_date: (loan as any).amortization_start_date || '',
         exit_fee_terms: (loan as any).exit_fee_terms || '',
       });
@@ -218,7 +218,7 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
       occupancy: formData.occupancy ? parseFloat(formData.occupancy) / 100 : null,
       payment_timing: formData.payment_timing,
       amortization_amount: formData.amortization_amount ? parseFloat(formData.amortization_amount) : null,
-      amortization_frequency: formData.amortization_frequency || null,
+      amortization_frequency: formData.amortization_frequency && formData.amortization_frequency !== 'none' ? formData.amortization_frequency : null,
       amortization_start_date: formData.amortization_start_date || null,
       exit_fee_terms: formData.exit_fee_terms || null,
     };
@@ -686,7 +686,7 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                     <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     <SelectItem value="monthly">Monthly</SelectItem>
                     <SelectItem value="quarterly">Quarterly</SelectItem>
                     <SelectItem value="semi_annual">Semi-Annual</SelectItem>
