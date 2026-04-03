@@ -8,6 +8,7 @@ import { daysBetween30360 } from './format';
 export interface LoanState {
   date: string;
   outstandingPrincipal: number;
+  initialPrincipal: number; // first principal_draw amount — used when interest_base_fixed
   currentRate: number;
   interestType: InterestType;
   totalCommitment: number;
@@ -63,7 +64,8 @@ export interface PeriodAccrual {
   commitmentFeeRate: number;
   avgUndrawnAmount: number;
   feesInvoiced: number;
-  
+  feesWithheld: number;
+
   // Scheduled amortization due this period (if any)
   amortizationDue: number;
 
@@ -136,6 +138,7 @@ export function getLoanStateAtDate(
   let state: LoanState = {
     date: targetDate,
     outstandingPrincipal: 0,
+    initialPrincipal: 0,
     currentRate: 0,
     interestType: defaultInterestType,
     totalCommitment: initialCommitment,
@@ -163,6 +166,9 @@ export function applyEventToState(state: LoanState, event: LoanEvent): LoanState
   switch (event.event_type) {
     case 'principal_draw':
       newState.outstandingPrincipal += event.amount || 0;
+      if (newState.initialPrincipal === 0) {
+        newState.initialPrincipal = newState.outstandingPrincipal;
+      }
       newState.undrawnCommitment = Math.max(0, newState.totalCommitment - newState.outstandingPrincipal);
       break;
       
@@ -298,7 +304,8 @@ export function calculateInterestSegments(
   startDate: string,
   endDate: string,
   initialCommitment: number = 0,
-  loanInterestType: InterestType = 'cash_pay'
+  loanInterestType: InterestType = 'cash_pay',
+  interestBaseFixed: boolean = false
 ): InterestSegment[] {
   const segments: InterestSegment[] = [];
   const sortedEvents = sortEventsByDate(events);
@@ -341,35 +348,39 @@ export function calculateInterestSegments(
     if (new Date(segmentStart) <= segmentEnd) {
       const days = daysBetween30360(segmentStart, segmentEnd.toISOString().split('T')[0]);
       if (days > 0) {
-        const interest = currentState.outstandingPrincipal * currentState.currentRate * (days / 360);
-        
+        const principalForInterest = interestBaseFixed && currentState.initialPrincipal > 0
+          ? currentState.initialPrincipal : currentState.outstandingPrincipal;
+        const interest = principalForInterest * currentState.currentRate * (days / 360);
+
         segments.push({
           startDate: segmentStart,
           endDate: segmentEnd.toISOString().split('T')[0],
           days,
-          principal: currentState.outstandingPrincipal,
+          principal: principalForInterest,
           rate: currentState.currentRate,
           interest,
           interestType: currentState.interestType,
         });
       }
     }
-    
+
     // Apply event and start new segment
     currentState = applyEventToState(currentState, event);
     segmentStart = event.effective_date;
   }
-  
+
   // Close final segment
   const days = daysBetween30360(segmentStart, endDate);
   if (days > 0) {
-    const interest = currentState.outstandingPrincipal * currentState.currentRate * (days / 360);
-    
+    const principalForInterest = interestBaseFixed && currentState.initialPrincipal > 0
+      ? currentState.initialPrincipal : currentState.outstandingPrincipal;
+    const interest = principalForInterest * currentState.currentRate * (days / 360);
+
     segments.push({
       startDate: segmentStart,
       endDate: endDate,
       days,
-      principal: currentState.outstandingPrincipal,
+      principal: principalForInterest,
       rate: currentState.currentRate,
       interest,
       interestType: currentState.interestType,
@@ -524,7 +535,8 @@ export function calculatePeriodAccruals(
   commitmentFeeRate: number = 0,
   initialCommitment: number = 0,
   loanInterestType: InterestType = 'cash_pay',
-  amortizationParams: AmortizationParams | null = null
+  amortizationParams: AmortizationParams | null = null,
+  interestBaseFixed: boolean = false
 ): PeriodAccrual {
   const sortedEvents = sortEventsByDate(events);
   const periodStart = period.period_start;
@@ -551,10 +563,11 @@ export function calculatePeriodAccruals(
   let principalRepaid = 0;
   let pikCapitalized = 0;
   let feesInvoiced = 0;
-  
+  let feesWithheld = 0;
+
   for (const event of periodEvents) {
     const meta = event.metadata as Record<string, unknown> | null;
-    
+
     switch (event.event_type) {
       case 'principal_draw':
         principalDrawn += event.amount || 0;
@@ -570,13 +583,19 @@ export function calculatePeriodAccruals(
         pikCapitalized += event.amount || 0;
         break;
       case 'fee_invoice':
-        feesInvoiced += event.amount || 0;
+        // Withheld fees (payment_type pik) are already deducted from the draw,
+        // so they don't need to be invoiced again
+        if (meta?.payment_type === 'pik') {
+          feesWithheld += event.amount || 0;
+        } else {
+          feesInvoiced += event.amount || 0;
+        }
         break;
     }
   }
   
   // Calculate interest segments - pass loan interest type for correct labeling
-  const interestSegments = calculateInterestSegments(sortedEvents, periodStart, periodEnd, initialCommitment, loanInterestType);
+  const interestSegments = calculateInterestSegments(sortedEvents, periodStart, periodEnd, initialCommitment, loanInterestType, interestBaseFixed);
   const interestAccrued = interestSegments.reduce((sum, seg) => sum + seg.interest, 0);
   
   // Calculate daily accruals for detailed view (uses calendar days)
@@ -602,12 +621,16 @@ export function calculatePeriodAccruals(
   // Scheduled amortization due this period
   const amortizationDue = getAmortizationDueInPeriod(periodStart, periodEnd, amortizationParams);
 
-  // Total due (cash pay interest + commitment fee + invoiced fees + amortization)
+  // Total due: for PIK loans includes all interest (capitalized); for cash-pay only cash interest
   const cashPayInterest = interestSegments
     .filter(seg => seg.interestType === 'cash_pay')
     .reduce((sum, seg) => sum + seg.interest, 0);
 
-  const totalDue = cashPayInterest + commitmentFeeAccrued + feesInvoiced + amortizationDue;
+  const isPik = openingState.interestType === 'pik';
+  // Only cash-invoiced fees are due; withheld fees were already deducted from the draw
+  const totalDue = isPik
+    ? interestAccrued + commitmentFeeAccrued + feesInvoiced + amortizationDue
+    : cashPayInterest + commitmentFeeAccrued + feesInvoiced + amortizationDue;
 
   // For PIK loans, the closing principal should include the interest charge
   // that will be capitalized at period end
@@ -622,7 +645,7 @@ export function calculatePeriodAccruals(
         // PIK already posted - use actual closing balance
         ? closingState.outstandingPrincipal
         // PIK not yet posted - project the closing balance
-        : openingState.outstandingPrincipal + principalDrawn - principalRepaid + feesInvoiced + interestCharge)
+        : openingState.outstandingPrincipal + principalDrawn - principalRepaid + feesWithheld + interestCharge)
     : closingState.outstandingPrincipal;
   
   return {
@@ -647,6 +670,7 @@ export function calculatePeriodAccruals(
     commitmentFeeRate,
     avgUndrawnAmount,
     feesInvoiced,
+    feesWithheld,
     amortizationDue,
     totalDue,
     dailyAccruals,
@@ -667,11 +691,12 @@ export function calculateAllPeriodAccruals(
   commitmentFeeRate: number = 0,
   initialCommitment: number = 0,
   loanInterestType: InterestType = 'cash_pay',
-  amortizationParams: AmortizationParams | null = null
+  amortizationParams: AmortizationParams | null = null,
+  interestBaseFixed: boolean = false
 ): PeriodAccrual[] {
   return periods
     .sort((a, b) => new Date(a.period_start).getTime() - new Date(b.period_start).getTime())
-    .map(period => calculatePeriodAccruals(period, events, commitmentFeeRate, initialCommitment, loanInterestType, amortizationParams));
+    .map(period => calculatePeriodAccruals(period, events, commitmentFeeRate, initialCommitment, loanInterestType, amortizationParams, interestBaseFixed));
 }
 
 /**

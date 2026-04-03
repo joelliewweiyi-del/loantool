@@ -219,9 +219,16 @@ function CovenantRow({
       <tr
         className="cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={onToggle}
+        aria-expanded={isExpanded}
       >
         <td className="w-8 text-foreground-muted">
-          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          <span
+            role="button"
+            aria-expanded={isExpanded}
+            aria-label={`Toggle details for ${typeLabels[cov.covenant_type]} ${cov.tracking_year}`}
+          >
+            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          </span>
         </td>
         <td className="font-medium">{typeLabels[cov.covenant_type]}</td>
         <td className="text-foreground-secondary font-mono text-xs">{cov.tracking_year}</td>

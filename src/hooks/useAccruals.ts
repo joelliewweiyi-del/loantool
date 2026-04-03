@@ -98,13 +98,25 @@ export function useAccruals(loanId: string | undefined): UseAccrualsResult {
     }
 
     try {
+      // Only show periods up to end of current month
+      // For in-advance loans, show one extra month (next month's notice needed now)
+      const today = new Date(getCurrentDateString());
+      const extraMonths = loan.payment_timing === 'in_advance' ? 1 : 0;
+      const cutoffYear = today.getFullYear() + Math.floor((today.getMonth() + extraMonths) / 12);
+      const cutoffMonth = (today.getMonth() + extraMonths) % 12;
+      const cutoff = new Date(cutoffYear, cutoffMonth + 1, 0); // end of cutoff month
+      const cutoffStr = cutoff.toISOString().split('T')[0];
+
+      const visiblePeriods = periods.filter(p => p.period_start <= cutoffStr);
+
       const periodAccruals = calculateAllPeriodAccruals(
-        periods,
+        visiblePeriods,
         events,
         commitmentFeeRate,
         initialCommitment,
         loanInterestType,
-        amortizationParams
+        amortizationParams,
+        !!(loan as any).interest_base_fixed
       );
 
       // Pass approved events to calculate current principal from event ledger only

@@ -247,6 +247,27 @@ export function ActivatePipelineLoanDialog({ loan }: ActivatePipelineLoanDialogP
                   onChange={(e) => handleChange('arrangement_fee', e.target.value)}
                   placeholder="0.00"
                 />
+                {formData.arrangement_fee && parseFloat(formData.arrangement_fee) > 0 && (
+                  <>
+                    <Select
+                      value={formData.fee_payment_type}
+                      onValueChange={(v) => handleChange('fee_payment_type', v)}
+                    >
+                      <SelectTrigger className="mt-2">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pik">Withheld</SelectItem>
+                        <SelectItem value="cash">Cash Invoice</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {formData.fee_payment_type === 'pik'
+                        ? 'Will be withheld from borrower'
+                        : 'Separate cash invoice to borrower'}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </div>

@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useLoans, useLatestChargesPerLoan, useUpdateLoan } from '@/hooks/useLoans';
-import { useLatestActivityPerLoan, useCreateActivityLog } from '@/hooks/useActivityLog';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,13 +9,10 @@ import { StatusBadge } from '@/components/loans/LoanStatusBadge';
 import { CreateLoanDialog } from '@/components/loans/CreateLoanDialog';
 import { RentRollPanel } from '@/components/loans/RentRollPanel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Textarea } from '@/components/ui/textarea';
 import { formatDate, formatCurrency, formatCurrencyShort, formatPercent } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, ArrowUpDown, ArrowUp, ArrowDown, Plus, MessageSquare } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { FinancialStrip } from '@/components/loans/FinancialStrip';
 import { VEHICLES, DEFAULT_VEHICLE, type Vehicle, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -41,8 +37,6 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
     isLoading
   } = useLoans();
   const { data: latestCharges = {} } = useLatestChargesPerLoan();
-  const { data: latestActivity = {} } = useLatestActivityPerLoan();
-  const createActivityLog = useCreateActivityLog();
   // Derive the period label from the first available charge entry
   const chargesPeriodLabel = useMemo(() => {
     const firstEntry = Object.values(latestCharges)[0];
@@ -68,7 +62,7 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
   };
 
   const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-60" />;
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
   };
 
@@ -76,6 +70,8 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
     <th
       className={`cursor-pointer select-none hover:text-foreground group ${className || ''}`}
       onClick={() => handleSort(field)}
+      aria-sort={sortField === field ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      aria-label={`Sort by ${typeof children === 'string' ? children : field.replace(/_/g, ' ')}`}
     >
       <span className="inline-flex items-center gap-1">
         {children}
@@ -83,68 +79,6 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
       </span>
     </th>
   );
-  // Quick note popover cell for inline activity logging
-  const QuickNoteCell = ({ loanId }: { loanId: string }) => {
-    const [open, setOpen] = useState(false);
-    const [note, setNote] = useState('');
-    const latest = latestActivity[loanId];
-    const handleQuickAdd = async () => {
-      if (!note.trim()) return;
-      await createActivityLog.mutateAsync({ loan_id: loanId, content: note.trim() });
-      setNote('');
-      setOpen(false);
-    };
-    return (
-      <div className="flex items-center gap-1.5">
-        {latest ? (
-          <span className="text-xs text-muted-foreground truncate max-w-[120px]" title={latest.content}>
-            {latest.content.slice(0, 40)}{latest.content.length > 40 ? '...' : ''}
-            <span className="ml-1 opacity-60">
-              {formatDistanceToNow(new Date(latest.created_at), { addSuffix: false })}
-            </span>
-          </span>
-        ) : (
-          <span className="text-xs text-foreground-muted">—</span>
-        )}
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0 shrink-0">
-              <Plus className="h-3 w-3" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-72 p-3" align="end">
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-foreground-secondary">Quick note</p>
-              <Textarea
-                placeholder="Log a quick note..."
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                rows={3}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                    e.preventDefault();
-                    handleQuickAdd();
-                  }
-                }}
-              />
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  className="h-7 text-xs"
-                  onClick={handleQuickAdd}
-                  disabled={!note.trim() || createActivityLog.isPending}
-                >
-                  {createActivityLog.isPending ? 'Adding...' : 'Add'}
-                </Button>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
-      </div>
-    );
-  };
-
   const handleVehicleChange = (vehicle: string) => {
     setSearchParams({
       vehicle
@@ -387,7 +321,6 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
                   <SortTh field="last_cf" className="text-right">CF {chargesPeriodLabel || 't-1'}</SortTh>
                   <SortTh field="loan_start_date" className="text-right">Start</SortTh>
                   <SortTh field="maturity_date" className="text-right">Maturity</SortTh>
-                  <th>Last Note</th>
                 </tr>
               </thead>
               <tbody>
@@ -433,9 +366,6 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
                     </td>
                     <td className="text-right text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
                     <td className="text-right text-muted-foreground">{formatDate(loan.maturity_date)}</td>
-                    <td onClick={(e) => e.stopPropagation()} className="max-w-[200px]">
-                      <QuickNoteCell loanId={loan.id} />
-                    </td>
                   </tr>)}
               </tbody>
             </table>

@@ -17,6 +17,7 @@ import Collateral from "./pages/Collateral";
 import Compliance from "./pages/Compliance";
 import Funding from "./pages/Funding";
 import CalculationSheet from "./pages/CalculationSheet";
+import OutstandingApprovals from "./pages/OutstandingApprovals";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -67,6 +68,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <LoanDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/approvals"
+        element={
+          <ProtectedRoute>
+            <OutstandingApprovals />
           </ProtectedRoute>
         }
       />

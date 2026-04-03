@@ -247,11 +247,11 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
 
         <div className="space-y-6 py-4">
           {/* Identity Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Identity
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Vehicle</Label>
                 <Select 
@@ -393,16 +393,16 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 <Label htmlFor="edit-earmarked" className="cursor-pointer">Earmarked</Label>
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Payment Types Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Payment Types
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="interest_rate">Interest Rate (%)</Label>
                 <Input
@@ -444,19 +444,19 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pik">PIK</SelectItem>
-                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="pik">Withheld</SelectItem>
+                    <SelectItem value="cash">Cash Invoice</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
                   {formData.fee_payment_type === 'pik'
-                    ? 'Fees added to principal balance'
-                    : 'Fees withheld from initial funding'}
+                    ? 'Withheld from initial funding'
+                    : 'Separate cash invoice to borrower'}
                 </p>
               </div>
             </div>
             {formData.interest_payment_type === 'cash' && (
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="cash_interest_percentage">Cash Interest %</Label>
                   <Input
@@ -475,16 +475,16 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 </div>
               </div>
             )}
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Structure Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Commitment Structure
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="total_commitment">Total Commitment (EUR)</Label>
                 <Input
@@ -523,16 +523,16 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 </Select>
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Valuation Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Valuation
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-valuation">Valuation (EUR)</Label>
                 <Input
@@ -570,7 +570,7 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 LTV is auto-calculated as max(commitment, outstanding) / valuation
               </p>
             )}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-walt">WALT (years)</Label>
                 <Input
@@ -605,16 +605,16 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 />
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Payments & Notices Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Payments & Notices
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Notice Frequency</Label>
                 <Select
@@ -655,16 +655,16 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 />
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Amortization Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Scheduled Amortization
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="amortization_amount">Amount (EUR)</Label>
                 <Input
@@ -709,15 +709,15 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 EUR {parseFloat(formData.amortization_amount).toLocaleString()} {formData.amortization_frequency} repayment will appear on interest notices and in totalDue.
               </p>
             )}
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Exit Fee Terms */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Exit Fee / Prepayment Terms
-            </h3>
+            </legend>
             <div className="space-y-2">
               <Label htmlFor="exit_fee_terms">Exit Fee Terms</Label>
               <textarea
@@ -729,16 +729,16 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 rows={3}
               />
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Address Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Addresses & Contact
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-borrower_address">Borrower Address</Label>
                 <Input
@@ -785,7 +785,7 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                   Add Address
                 </Button>
               </div>
-              <div className="space-y-2 col-span-2">
+              <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="edit-borrower_email">Borrower Email</Label>
                 <Input
                   id="edit-borrower_email"
@@ -795,15 +795,15 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 />
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Remarks Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Notes
-            </h3>
+            </legend>
             <div className="space-y-2">
               <Label htmlFor="remarks">Remarks</Label>
               <Input
@@ -813,16 +813,16 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 placeholder="Any additional notes..."
               />
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Property Detail Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Property Detail (Loan Tape)
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="edit-google_maps_url">Google Maps URL</Label>
                 <Input
@@ -922,15 +922,15 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
                 rows={4}
               />
             </div>
-          </div>
+          </fieldset>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setIsOpen(false)}>
             Cancel
           </Button>
-          <Button 
-            onClick={handleSave} 
+          <Button
+            onClick={handleSave}
             disabled={updateLoan.isPending}
           >
             {updateLoan.isPending ? 'Saving...' : 'Save Changes'}

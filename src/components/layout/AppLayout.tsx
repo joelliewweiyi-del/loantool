@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import {
   FileText,
   LogOut,
+  Loader2,
   User,
   ClipboardCheck,
   Download,
@@ -16,6 +17,7 @@ import {
   Shield,
   Handshake,
   Calculator,
+  Eye,
   type LucideIcon
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -49,6 +51,7 @@ const navigation: NavGroup[] = [
   {
     label: 'Workflow',
     items: [
+      { name: 'Approvals', href: '/approvals', icon: Eye },
       { name: 'Monthly Approval', href: '/monthly-approval', icon: ClipboardCheck },
       { name: 'Calculation Sheet', href: '/calculation-sheet', icon: Calculator },
       { name: 'Compliance', href: '/compliance', icon: Shield },
@@ -72,6 +75,16 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { user, roles, signOut } = useAuth();
   const location = useLocation();
   const isMobile = useIsMobile();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   if (isMobile) {
     return <MobileLayout>{children}</MobileLayout>;
@@ -79,6 +92,9 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background flex">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md">
+        Skip to main content
+      </a>
       {/* Sidebar — cool light gray, temperature contrast with warm content */}
       <aside className="w-60 bg-sidebar border-r border-sidebar-border flex flex-col shrink-0">
         <div className="p-4 border-b border-sidebar-border">
@@ -102,6 +118,7 @@ export function AppLayout({ children }: AppLayoutProps) {
                     <Link
                       key={item.name}
                       to={item.href}
+                      aria-current={isActive ? "page" : undefined}
                       className={cn(
                         'flex items-center gap-3 px-3 py-1.5 rounded-md text-sm transition-colors',
                         isActive
@@ -125,7 +142,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               <User className="h-3.5 w-3.5 text-sidebar-foreground/70" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">
+              <p className="text-sm font-medium text-sidebar-foreground truncate" title={user?.email || ""}>
                 {user?.email}
               </p>
               <p className="text-[11px] text-sidebar-foreground/50 capitalize">
@@ -137,16 +154,21 @@ export function AppLayout({ children }: AppLayoutProps) {
             variant="ghost"
             size="sm"
             className="w-full justify-start mt-1 text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
-            onClick={signOut}
+            onClick={handleSignOut}
+            disabled={signingOut}
           >
-            <LogOut className="h-4 w-4 mr-2" />
-            Sign out
+            {signingOut ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <LogOut className="h-4 w-4 mr-2" />
+            )}
+            {signingOut ? 'Signing out...' : 'Sign out'}
           </Button>
         </div>
       </aside>
 
       {/* Main content — warm parchment */}
-      <main className="flex-1 overflow-auto">
+      <main id="main-content" className="flex-1 overflow-auto">
         {children}
       </main>
     </div>

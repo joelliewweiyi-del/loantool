@@ -7,6 +7,7 @@ import {
   useMonthlyApprovalAccruals,
   useConfirmPaymentFromApproval,
   EnrichedPeriod,
+  PikPeriodStatus,
 } from '@/hooks/useMonthlyApprovalAccruals';
 import {
   useMonthlyApprovalDraws,
@@ -43,6 +44,7 @@ import {
   ChevronDown,
   Database,
   Landmark,
+  RefreshCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AfasDrawTransaction } from '@/types/loan';
@@ -187,13 +189,13 @@ export default function MonthlyApproval() {
 
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handlePrevMonth}>
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handlePrevMonth} aria-label="Previous month">
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <span className="text-lg font-semibold min-w-[170px] text-center">
               {displayMonth}
             </span>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleNextMonth}>
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleNextMonth} aria-label="Next month">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -270,6 +272,19 @@ export default function MonthlyApproval() {
             Draws & Repayments
             {drawsData && <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{drawsData.summary.totalTransactions}</Badge>}
           </TabsTrigger>
+          {data && data.pikPeriods.length > 0 && (
+            <TabsTrigger value="pik" className="gap-1.5">
+              <RefreshCcw className="h-4 w-4" />
+              PIK Roll-Up
+              {data.pikNeedsAction > 0 ? (
+                <Badge className="ml-1 h-5 px-1.5 text-xs bg-accent-amber/15 text-accent-amber border border-accent-amber/30">
+                  {data.pikNeedsAction}
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{data.pikPeriods.length}</Badge>
+              )}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* ── Cash Payments Tab ── */}
@@ -646,6 +661,82 @@ export default function MonthlyApproval() {
             <Card>
               <CardContent className="py-12 text-center text-muted-foreground">
                 No draws or repayments for {displayMonth}.
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* ── PIK Roll-Up Tab ── */}
+        <TabsContent value="pik" className="space-y-6 mt-6">
+          {data && data.pikPeriods.length > 0 ? (
+            <Card>
+              <div className="px-4 py-3 border-b bg-muted/30">
+                <h2 className="text-sm font-semibold uppercase tracking-wide">PIK Interest — Roll Up Required</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  PIK loans need interest capitalized each month. Go to the loan's Accruals tab and click "Roll Up".
+                </p>
+              </div>
+              <CardContent className="p-0">
+                <table className="data-table w-full">
+                  <thead>
+                    <tr>
+                      <th className="text-left">Loan</th>
+                      <th className="text-left">Borrower</th>
+                      <th className="text-left">Period</th>
+                      <th className="text-right">Interest</th>
+                      <th className="text-center">Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.pikPeriods.map(pik => (
+                      <tr
+                        key={pik.periodId}
+                        className={cn(
+                          pik.rollUpStatus === 'needs_rollup' && 'border-l-2 border-l-accent-amber bg-accent-amber/5'
+                        )}
+                      >
+                        <td className="font-mono font-medium">#{pik.loanNumericId}</td>
+                        <td className="text-muted-foreground">{pik.borrowerName}</td>
+                        <td className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                          {formatDate(pik.periodStart)} – {formatDate(pik.periodEnd)}
+                        </td>
+                        <td className="numeric font-medium">{formatCurrency(pik.interestAccrued)}</td>
+                        <td className="text-center">
+                          {pik.rollUpStatus === 'approved' ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-accent-sage">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Rolled up
+                            </span>
+                          ) : pik.rollUpStatus === 'draft' ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-accent-amber">
+                              <Clock className="h-3.5 w-3.5" />
+                              Needs approval
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-xs text-accent-amber">
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                              Needs roll-up
+                            </span>
+                          )}
+                        </td>
+                        <td className="text-right">
+                          <Link to={`/loans/${pik.loanUuid}`}>
+                            <Button size="sm" variant="ghost" className="h-7 text-xs gap-1">
+                              {pik.rollUpStatus === 'needs_rollup' ? 'Roll Up' : 'View'} <ChevronRight className="h-3 w-3" />
+                            </Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                No PIK loans with periods in {displayMonth}.
               </CardContent>
             </Card>
           )}

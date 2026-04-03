@@ -7,6 +7,7 @@ export interface PeriodWithLoan extends Period {
   loans?: {
     borrower_name: string;
     loan_id: string;
+    payment_timing?: string;
   };
 }
 
@@ -70,6 +71,9 @@ export function useMonthlyApprovalDetails(yearMonth: string | undefined) {
       const startOfMonth = `${yearMonth}-01`;
       const endOfMonth = new Date(parseInt(yearMonth.split('-')[0]), parseInt(yearMonth.split('-')[1]), 0)
         .toISOString().split('T')[0];
+      // For in-advance loans, also show next month's period (payment due on 1st)
+      const nextMonthEnd = new Date(parseInt(yearMonth.split('-')[0]), parseInt(yearMonth.split('-')[1]) + 1, 0)
+        .toISOString().split('T')[0];
 
       const { data: periods, error: periodsError } = await supabase
         .from('periods')
@@ -77,23 +81,32 @@ export function useMonthlyApprovalDetails(yearMonth: string | undefined) {
           *,
           loans:loan_id (
             borrower_name,
-            loan_id
+            loan_id,
+            payment_timing
           )
         `)
         .gte('period_end', startOfMonth)
-        .lte('period_start', endOfMonth)
+        .lte('period_start', nextMonthEnd)
         .order('period_start', { ascending: true });
 
       if (periodsError) throw periodsError;
 
-      const totalPeriods = periods?.length || 0;
-      const periodsWithExceptions = periods?.filter(p => p.has_economic_events)?.length || 0;
+      // Filter: keep this month's periods for all loans,
+      // plus next month's periods only for in-advance loans
+      const filteredPeriods = (periods || []).filter(p => {
+        const isThisMonth = p.period_start <= endOfMonth;
+        if (isThisMonth) return true;
+        return p.loans?.payment_timing === 'in_advance';
+      });
+
+      const totalPeriods = filteredPeriods.length;
+      const periodsWithExceptions = filteredPeriods.filter(p => p.has_economic_events)?.length || 0;
 
       return {
         ...(approval ?? { id: '', year_month: yearMonth, status: 'pending', approved_by: null, approved_at: null, notes: null, total_periods: 0, periods_with_exceptions: 0, created_at: '' }),
         total_periods: totalPeriods,
         periods_with_exceptions: periodsWithExceptions,
-        periods: periods || [],
+        periods: filteredPeriods,
       } as MonthlyApprovalWithPeriods;
     },
     enabled: !!yearMonth,
@@ -137,6 +150,7 @@ export function useApproveMonth() {
       const endOfMonth = new Date(parseInt(yearMonth.split('-')[0]), parseInt(yearMonth.split('-')[1]), 0)
         .toISOString().split('T')[0];
 
+      // Approve this month's periods (all loans)
       const { error: periodsError } = await supabase
         .from('periods')
         .update({
@@ -147,6 +161,33 @@ export function useApproveMonth() {
         .gte('period_end', startOfMonth)
         .lte('period_start', endOfMonth)
         .in('status', ['open', 'submitted']);
+
+      // Also approve next month's periods for in-advance loans
+      const nextMonthStart = new Date(parseInt(yearMonth.split('-')[0]), parseInt(yearMonth.split('-')[1]), 1)
+        .toISOString().split('T')[0];
+      const nextMonthEnd = new Date(parseInt(yearMonth.split('-')[0]), parseInt(yearMonth.split('-')[1]) + 1, 0)
+        .toISOString().split('T')[0];
+
+      // Get in-advance loan IDs
+      const { data: advanceLoans } = await supabase
+        .from('loans')
+        .select('id')
+        .eq('payment_timing', 'in_advance');
+
+      if (advanceLoans && advanceLoans.length > 0) {
+        const advanceLoanIds = advanceLoans.map(l => l.id);
+        await supabase
+          .from('periods')
+          .update({
+            status: 'approved',
+            approved_at: new Date().toISOString(),
+            monthly_approval_id: approval.id,
+          })
+          .gte('period_start', nextMonthStart)
+          .lte('period_start', nextMonthEnd)
+          .in('loan_id', advanceLoanIds)
+          .in('status', ['open', 'submitted']);
+      }
 
       if (periodsError) throw periodsError;
 

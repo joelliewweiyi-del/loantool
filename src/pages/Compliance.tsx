@@ -249,14 +249,15 @@ export default function Compliance() {
         { label: 'Received', value: String(totalReceived), accent: 'sage', mono: false },
       ]} />
 
+      <div className="overflow-x-auto">
       <table className="data-table">
         <thead>
           <tr>
             <th className="w-8"></th>
             <th>Loan</th>
-            <th>Vehicle</th>
+            <th className="hidden md:table-cell">Vehicle</th>
             <th>Action Items</th>
-            <th>Next Due</th>
+            <th className="hidden md:table-cell">Next Due</th>
             <th>Status</th>
           </tr>
         </thead>
@@ -281,6 +282,7 @@ export default function Compliance() {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -314,7 +316,7 @@ function ComplianceLoanRow({
             {row.loan_id}
           </Link>
         </td>
-        <td className="text-xs text-foreground-secondary">{row.vehicle}</td>
+        <td className="hidden md:table-cell text-xs text-foreground-secondary">{row.vehicle}</td>
         <td>
           {row.actionCount > 0 ? (
             <span className="font-mono text-sm font-medium text-accent-amber">{row.actionCount}</span>
@@ -322,7 +324,7 @@ function ComplianceLoanRow({
             <span className="text-accent-sage text-xs">All clear</span>
           )}
         </td>
-        <td className="text-xs text-foreground-secondary">
+        <td className="hidden md:table-cell text-xs text-foreground-secondary">
           {row.nextDueDate ? (
             <span>
               <span className="font-mono">{row.nextDueDate}</span>

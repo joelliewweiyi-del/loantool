@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Loan, LoanEvent, Period, LoanFacility, EventType, EventStatus } from '@/types/loan';
-import { isPipelineVehicle } from '@/lib/constants';
+import { isPipelineVehicle, getPipelineStage } from '@/lib/constants';
 import { useToast } from '@/hooks/use-toast';
 import type { Database, Json } from '@/integrations/supabase/types';
 import { startOfMonth, endOfMonth, addMonths, format, parseISO, isBefore, isAfter } from 'date-fns';
@@ -14,14 +14,16 @@ type DbEventStatus = Database['public']['Enums']['event_status'];
 function generateMonthlyPeriods(
   loanId: string,
   startDate: string,
-  maturityDate?: string | null
+  maturityDate?: string | null,
+  paymentTiming?: string
 ): Database['public']['Tables']['periods']['Insert'][] {
   const periods: Database['public']['Tables']['periods']['Insert'][] = [];
   const start = parseISO(startDate);
-  const today = getCurrentDate();
   const maturity = maturityDate ? parseISO(maturityDate) : null;
-  const endOfCurrentMonth = endOfMonth(today);
-  const effectiveEnd = maturity && isBefore(maturity, endOfCurrentMonth) ? maturity : endOfCurrentMonth;
+  // Always generate periods to maturity; fall back to current month if no maturity
+  const today = getCurrentDate();
+  const fallbackEnd = paymentTiming === 'in_advance' ? addMonths(endOfMonth(today), 1) : endOfMonth(today);
+  const effectiveEnd = maturity || fallbackEnd;
   let currentMonthStart = startOfMonth(start);
   while (isBefore(currentMonthStart, effectiveEnd) || format(currentMonthStart, 'yyyy-MM') === format(effectiveEnd, 'yyyy-MM')) {
     const monthEnd = endOfMonth(currentMonthStart);
@@ -234,6 +236,7 @@ export function useCreateLoan() {
       vehicle?: string;
       facility?: string | null;
       arrangement_fee?: number | null;
+      commitment_fee_oneoff?: number | null;
       city?: string | null;
       category?: string | null;
       property_status?: string | null;
@@ -261,7 +264,7 @@ export function useCreateLoan() {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error('Not authenticated');
       const userId = user.user.id;
-      const { arrangement_fee, ...loanData } = data;
+      const { arrangement_fee, commitment_fee_oneoff, ...loanData } = data;
       const { data: loan, error } = await supabase.from('loans').insert([loanData]).select().single();
       if (error) throw error;
       const createdLoan = loan as Loan;
@@ -298,23 +301,41 @@ export function useCreateLoan() {
           await createFoundingEvent('fee_invoice', arrangement_fee, null, {
             auto_generated: true, fee_type: 'arrangement',
             payment_type: isFeeCapitalized ? 'pik' : 'cash',
-            description: isFeeCapitalized ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)',
+            description: 'Arrangement fee (withheld from borrower)',
+          });
+        if (commitment_fee_oneoff && commitment_fee_oneoff > 0)
+          await createFoundingEvent('fee_invoice', commitment_fee_oneoff, null, {
+            auto_generated: true, fee_type: 'commitment_fee',
+            payment_type: 'cash',
+            description: 'Pre-drawdown commitment fee (signing to drawdown)',
           });
 
         if (loanData.loan_start_date) {
-          const monthlyPeriods = generateMonthlyPeriods(createdLoan.id, loanData.loan_start_date, loanData.maturity_date);
-          if (monthlyPeriods.length > 0) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const { error: periodsError } = await supabase.from('periods').insert(monthlyPeriods as any);
-            if (periodsError) throw new Error(`Failed to create periods: ${periodsError.message}`);
+          try {
+            const monthlyPeriods = generateMonthlyPeriods(createdLoan.id, loanData.loan_start_date, loanData.maturity_date, (createdLoan as any).payment_timing);
+            if (monthlyPeriods.length > 0) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const { error: periodsError } = await supabase.from('periods').insert(monthlyPeriods as any);
+              if (periodsError) throw periodsError;
+            }
+          } catch (error) {
+            console.error('Failed to generate periods:', error);
+            toast({ title: 'Loan created but period generation failed. Please contact support.', variant: 'destructive' });
           }
         }
       }
 
       // Log to activity feed
-      const summaryParts: string[] = [`New loan ${data.loan_id} created`];
+      const isPipeline = isPipelineVehicle(loanData.vehicle || '');
+      const summaryParts: string[] = [isPipeline
+        ? `New pipeline loan ${data.loan_id} created`
+        : `New loan ${data.loan_id} created`];
       if (data.borrower_name) summaryParts.push(`Borrower: ${data.borrower_name}`);
-      if (data.vehicle) summaryParts.push(`Vehicle: ${data.vehicle}`);
+      if (isPipeline && data.pipeline_stage) {
+        const stage = getPipelineStage(data.pipeline_stage);
+        if (stage) summaryParts.push(`Stage: ${stage.label}`);
+      }
+      if (data.vehicle && !isPipeline) summaryParts.push(`Vehicle: ${data.vehicle}`);
       if (data.total_commitment) summaryParts.push(`Commitment: €${data.total_commitment.toLocaleString('nl-NL')}`);
       if (data.outstanding) summaryParts.push(`Outstanding: €${data.outstanding.toLocaleString('nl-NL')}`);
       if (data.interest_rate) summaryParts.push(`Rate: ${(data.interest_rate * 100).toFixed(2)}%`);
@@ -644,7 +665,7 @@ export function useActivatePipelineLoan() {
         });
 
       // Generate periods
-      const monthlyPeriods = generateMonthlyPeriods(loanId, loanUpdates.loan_start_date, loanUpdates.maturity_date);
+      const monthlyPeriods = generateMonthlyPeriods(loanId, loanUpdates.loan_start_date, loanUpdates.maturity_date, (loan as any).payment_timing);
       if (monthlyPeriods.length > 0) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: periodsError } = await supabase.from('periods').insert(monthlyPeriods as any);

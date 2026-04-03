@@ -63,15 +63,15 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch existing confirmed draw events (to know which AFAS transactions are already confirmed)
+  // Fetch all approved draw/repayment events (for matching against AFAS transactions)
   const { data: confirmedEvents, isLoading: eventsLoading } = useQuery({
     queryKey: ['afas-draw-confirmations'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('loan_events')
-        .select('id, loan_id, event_type, status, metadata')
+        .select('id, loan_id, event_type, effective_date, amount, status, metadata')
         .in('event_type', ['principal_draw', 'principal_repayment'])
-        .not('metadata->afas_ref', 'is', null);
+        .eq('status', 'approved');
       if (error) throw error;
       return data as LoanEvent[];
     },
@@ -86,11 +86,31 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
 
     // Map afas_ref → event info
     const refToEvent = new Map<string, { id: string; status: string }>();
+    // Founding events by loan UUID for proximity matching
+    const foundingByLoan = new Map<string, Array<{ date: string; id: string; status: string }>>();
     for (const event of confirmedEvents) {
-      const ref = (event.metadata as Record<string, unknown>)?.afas_ref;
+      const meta = event.metadata as Record<string, unknown> | null;
+      const ref = meta?.afas_ref;
       if (typeof ref === 'string') {
         refToEvent.set(ref, { id: event.id, status: event.status });
       }
+      if (meta?.founding_event === true) {
+        const arr = foundingByLoan.get(event.loan_id) ?? [];
+        arr.push({ date: event.effective_date, id: event.id, status: event.status });
+        foundingByLoan.set(event.loan_id, arr);
+      }
+    }
+
+    // Match founding event within ±2 days of AFAS entry
+    function findFoundingMatch(loanUuid: string, afasDate: string) {
+      const entries = foundingByLoan.get(loanUuid);
+      if (!entries) return undefined;
+      const afasTime = new Date(afasDate).getTime();
+      for (const e of entries) {
+        const diff = Math.abs(new Date(e.date).getTime() - afasTime);
+        if (diff <= 2 * 86400000) return { id: e.id, status: e.status };
+      }
+      return undefined;
     }
 
     // Filter to selected month and enrich
@@ -108,9 +128,13 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
 
       const loan = numericToLoan.get(loanId);
       const afasRef = `${row.EntryNo}-${row.SeqNo}`;
-      const existing = refToEvent.get(afasRef);
+      const existing = refToEvent.get(afasRef)
+        || (loan ? findFoundingMatch(loan.id, row.EntryDate) : undefined);
       const isDraw = row.AmtDebit > 0;
       const amount = isDraw ? row.AmtDebit : row.AmtCredit;
+
+      // Skip trivial test transactions (e.g. €1 bank verification)
+      if (amount <= 1) continue;
 
       transactions.push({
         loanId,

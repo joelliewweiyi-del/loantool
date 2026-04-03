@@ -77,6 +77,7 @@ export interface Loan {
   amortization_frequency: AmortizationFrequency | null;
   amortization_start_date: string | null;
   exit_fee_terms: string | null;
+  interest_base_fixed: boolean;
   created_at: string;
   updated_at: string;
 }

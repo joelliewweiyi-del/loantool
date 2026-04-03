@@ -23,17 +23,18 @@ export function PeriodPipeline({ current, variant = 'horizontal', className }: P
 
   if (variant === 'vertical') {
     return (
-      <div className={cn('flex flex-col gap-0', className)}>
+      <div role="group" aria-label={`Period status: ${stageLabels[current]}`} className={cn('flex flex-col gap-0', className)}>
         {stages.map((stage, i) => (
           <div key={stage} className="flex items-start gap-3">
             <div className="flex flex-col items-center">
               <div
+                title={stageLabels[stage]}
                 className={cn(
-                  'w-2.5 h-2.5 rounded-full border-2 transition-colors',
+                  'w-2.5 h-2.5 rounded-full border-2 transition-colors duration-200',
                   i < currentIndex
                     ? 'bg-accent-sage border-accent-sage'
                     : i === currentIndex
-                    ? 'bg-primary border-primary'
+                    ? 'bg-primary border-primary ring-2 ring-primary/30'
                     : 'bg-transparent border-border-strong'
                 )}
               />
@@ -61,7 +62,7 @@ export function PeriodPipeline({ current, variant = 'horizontal', className }: P
   }
 
   return (
-    <div className={cn('flex items-center gap-0.5', className)} title={stageLabels[current]}>
+    <div role="group" aria-label={`Period status: ${stageLabels[current]}`} className={cn('flex items-center gap-0.5', className)} title={stageLabels[current]}>
       {stages.map((stage, i) => (
         <Fragment key={stage}>
           {i > 0 && (
@@ -73,13 +74,14 @@ export function PeriodPipeline({ current, variant = 'horizontal', className }: P
             />
           )}
           <div
+            title={stageLabels[stage]}
             className={cn(
-              'w-1.5 h-1.5 rounded-full',
+              'w-1.5 h-1.5 rounded-full transition-colors duration-200',
               i < currentIndex
                 ? 'bg-accent-sage'
                 : i === currentIndex
-                ? 'bg-primary'
-                : 'bg-border-strong'
+                ? 'bg-primary ring-1 ring-primary/30'
+                : 'bg-transparent border border-border-strong'
             )}
           />
         </Fragment>

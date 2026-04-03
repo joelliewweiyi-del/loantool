@@ -41,6 +41,18 @@ export interface EnrichedPeriod {
   paymentAmount: number | null;
 }
 
+export interface PikPeriodStatus {
+  loanUuid: string;
+  loanNumericId: string;
+  borrowerName: string;
+  vehicle: string;
+  periodId: string;
+  periodStart: string;
+  periodEnd: string;
+  interestAccrued: number;
+  rollUpStatus: 'needs_rollup' | 'draft' | 'approved';
+}
+
 export interface MonthlyApprovalAccruals {
   id: string;
   status: string;
@@ -52,6 +64,8 @@ export interface MonthlyApprovalAccruals {
   unmatchedCount: number;
   confirmedCount: number;
   totalAllPeriods: number;
+  pikPeriods: PikPeriodStatus[];
+  pikNeedsAction: number;
 }
 
 export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
@@ -101,6 +115,29 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
       return data as LoanEvent[];
     },
     enabled: loanIds.length > 0,
+  });
+
+  // PIK capitalization events (both draft and approved) for the month
+  const { data: pikCapEvents, isLoading: pikLoading } = useQuery({
+    queryKey: ['monthly-approval-pik-cap-events', loanIds, yearMonth],
+    queryFn: async () => {
+      if (loanIds.length === 0 || !yearMonth) return [];
+      const [year, month] = yearMonth.split('-').map(Number);
+      const monthStart = `${yearMonth}-01`;
+      const lastDay = new Date(year, month, 0).getDate();
+      const monthEnd = `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
+
+      const { data, error } = await supabase
+        .from('loan_events')
+        .select('id, loan_id, event_type, effective_date, amount, status')
+        .in('loan_id', loanIds)
+        .eq('event_type', 'pik_capitalization_posted')
+        .gte('effective_date', monthStart)
+        .lte('effective_date', monthEnd);
+      if (error) throw error;
+      return data;
+    },
+    enabled: loanIds.length > 0 && !!yearMonth,
   });
 
   // AFAS cash payments (journal 50 — bank)
@@ -370,6 +407,45 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
       });
     }
 
+    // PIK periods — show roll-up status
+    const pikPeriods: PikPeriodStatus[] = [];
+    const pikLoanPeriods = baseData.periods.filter(period => {
+      const loan = loanMap.get(period.loan_id);
+      return loan?.interest_type === 'pik';
+    });
+
+    for (const period of pikLoanPeriods) {
+      const loan = loanMap.get(period.loan_id);
+      const events = eventsByLoan.get(period.loan_id) ?? [];
+      const accruals = calculatePeriodAccruals(
+        period as Period,
+        events,
+        loan?.commitment_fee_rate ?? 0,
+        loan?.total_commitment ?? 0,
+        loan?.interest_type ?? 'pik'
+      );
+
+      const pikEvent = (pikCapEvents ?? []).find(e => e.loan_id === period.loan_id);
+      let rollUpStatus: PikPeriodStatus['rollUpStatus'] = 'needs_rollup';
+      if (pikEvent) {
+        rollUpStatus = pikEvent.status === 'approved' ? 'approved' : 'draft';
+      }
+
+      pikPeriods.push({
+        loanUuid: period.loan_id,
+        loanNumericId: loan?.loan_id ?? '',
+        borrowerName: loan?.borrower_name ?? '',
+        vehicle: loan?.vehicle ?? '',
+        periodId: period.id,
+        periodStart: period.period_start,
+        periodEnd: period.period_end,
+        interestAccrued: accruals.interestAccrued,
+        rollUpStatus,
+      });
+    }
+
+    const pikNeedsAction = pikPeriods.filter(p => p.rollUpStatus !== 'approved').length;
+
     return {
       id: baseData.id,
       status: baseData.status,
@@ -381,12 +457,14 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
       unmatchedCount,
       confirmedCount,
       totalAllPeriods: baseData.periods.length,
+      pikPeriods,
+      pikNeedsAction,
     };
-  }, [baseData, loansData, eventsData, afasData, afasDepotData, afas1751Data]);
+  }, [baseData, loansData, eventsData, afasData, afasDepotData, afas1751Data, pikCapEvents]);
 
   return {
     data: result,
-    isLoading: baseLoading || loansLoading || eventsLoading || afasLoading || afasDepotLoading || afas1751Loading,
+    isLoading: baseLoading || loansLoading || eventsLoading || afasLoading || afasDepotLoading || afas1751Loading || pikLoading,
   };
 }
 

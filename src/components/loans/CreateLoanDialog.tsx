@@ -47,6 +47,7 @@ interface LoanFormData {
   commitment_fee_basis: CommitmentFeeBasis;
   // Fees
   arrangement_fee: string;
+  commitment_fee_oneoff: string;
   // Valuation & Asset
   valuation: string;
   valuation_date: string;
@@ -95,6 +96,7 @@ const initialFormData: LoanFormData = {
   commitment_fee_rate: '',
   commitment_fee_basis: 'undrawn_only',
   arrangement_fee: '',
+  commitment_fee_oneoff: '',
   valuation: '',
   valuation_date: '',
   ltv: '',
@@ -346,6 +348,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
       borrower_address: formData.borrower_address || null,
       property_address: propertyAddresses.filter(a => a.trim()).join('\n') || null,
       arrangement_fee: formData.arrangement_fee ? parseFloat(formData.arrangement_fee) : null,
+      commitment_fee_oneoff: formData.commitment_fee_oneoff ? parseFloat(formData.commitment_fee_oneoff) : null,
       valuation: formData.valuation ? parseFloat(formData.valuation) : null,
       valuation_date: formData.valuation_date || null,
       ltv: formData.ltv ? parseFloat(formData.ltv) / 100 : null,
@@ -508,11 +511,11 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
 
         <div className="space-y-6 py-4">
           {/* Identity Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Identity
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Vehicle *<PdfPill field="vehicle" /></Label>
                 <Select
@@ -674,16 +677,16 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                 <Label htmlFor="earmarked" className="cursor-pointer">Earmarked<PdfPill field="earmarked" /></Label>
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Address Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Addresses & Contact
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="borrower_address">Borrower Address<PdfPill field="borrower_address" /></Label>
                 <Input
@@ -732,7 +735,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                   Add Address
                 </Button>
               </div>
-              <div className="space-y-2 col-span-2">
+              <div className="space-y-2 sm:col-span-2">
                 <Label htmlFor="borrower_email">Borrower Email</Label>
                 <Input
                   id="borrower_email"
@@ -742,16 +745,16 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                 />
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Payment Types Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Payment Types
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="interest_rate">Interest Rate (%)<PdfPill field="interest_rate" /></Label>
                 <Input
@@ -786,7 +789,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
               </div>
             </div>
             {formData.interest_payment_type === 'cash' && (
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="cash_interest_percentage">Cash Interest %</Label>
                   <Input
@@ -805,12 +808,12 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                 </div>
               </div>
             )}
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Structure Section */}
-          <div className="space-y-4">
+          <fieldset className="space-y-4">
             {!isPipeline && (
               <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-700 rounded-lg p-3">
                 <h3 className="text-sm font-semibold text-orange-900 dark:text-orange-100 flex items-center gap-2">
@@ -822,7 +825,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                 </p>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {!isPipeline && (
                 <div className="space-y-2">
                   <Label htmlFor="outstanding">Outstanding (EUR)</Label>
@@ -876,16 +879,16 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                 </Select>
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Valuation & Asset Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Valuation & Asset
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="valuation">Valuation (EUR)<PdfPill field="valuation" /></Label>
                 <Input
@@ -958,7 +961,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="walt_comment">WALT Comment</Label>
                 <Input
@@ -1054,19 +1057,19 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                 />
               )}
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Fees Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Fees — As of Start Date
-            </h3>
+            </legend>
             <p className="text-xs text-muted-foreground -mt-2">
               Only enter fees effective on {formData.loan_start_date || 'the loan start date'}. Fees charged on later dates must be added as separate events.
             </p>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="arrangement_fee">Arrangement Fee (EUR)<PdfPill field="arrangement_fee" /></Label>
                 <Input
@@ -1086,27 +1089,41 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pik">PIK</SelectItem>
-                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="pik">Withheld</SelectItem>
+                    <SelectItem value="cash">Cash Invoice</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {formData.fee_payment_type === 'pik' 
-                    ? 'Will be capitalised into principal' 
-                    : 'Will be withheld from borrower'}
+                  {formData.fee_payment_type === 'pik'
+                    ? 'Will be withheld from borrower'
+                    : 'Separate cash invoice to borrower'}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="commitment_fee_oneoff">Commitment Fee (EUR)</Label>
+                <Input
+                  id="commitment_fee_oneoff"
+                  type="number"
+                  step="0.01"
+                  value={formData.commitment_fee_oneoff}
+                  onChange={(e) => handleChange('commitment_fee_oneoff', e.target.value)}
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  One-off pre-drawdown commitment fee (signing to drawdown). Always cash.
                 </p>
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Payments & Notices Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Payments & Notices
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
+            </legend>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Notice Frequency<PdfPill field="notice_frequency" /></Label>
                 <Select
@@ -1133,15 +1150,15 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                 />
               </div>
             </div>
-          </div>
+          </fieldset>
 
           <Separator />
 
           {/* Notes & Links Section */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          <fieldset className="space-y-4">
+            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
               Notes & Links
-            </h3>
+            </legend>
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="remarks">Remarks</Label>
@@ -1163,7 +1180,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                   className={pdfFieldClass('additional_info')}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="google_maps_url">Google Maps</Label>
                   <div className="flex gap-2">
@@ -1200,14 +1217,14 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
                 </div>
               </div>
             </div>
-          </div>
+          </fieldset>
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setIsOpen(false)}>
             Cancel
           </Button>
-          <Button 
+          <Button
             onClick={handleCreate} 
             disabled={!canSubmit || createLoan.isPending}
           >

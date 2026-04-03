@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RAX Finance — Borrower Interest Notice Template</title>
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ── RAX Design Tokens ── */
+    :root {
+      --rax-navy: #003B5C;
+      --rax-navy-05: #003B5C0D;
+      --rax-navy-10: #003B5C1A;
+      --rax-navy-15: #003B5C26;
+      --fg: #1a2a33;
+      --fg-secondary: #4a5568;
+      --fg-tertiary: #718096;
+      --fg-muted: #a0aab4;
+      --border: #e2ddd5;
+      --accent-sage: #4d8b6e;
+      --destructive: #c53030;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Barlow', system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.625;
+      color: var(--fg);
+      background: #f5f0eb;
+      padding: 40px 20px;
+    }
+
+    .page {
+      max-width: 640px;
+      margin: 0 auto 60px;
+      background: white;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    /* ── Header Bar ── */
+    .header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      background: var(--rax-navy);
+      color: white;
+    }
+    .header-bar .logo {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .header-bar .company-info {
+      text-align: right;
+      font-size: 11px;
+      line-height: 1.5;
+      color: rgba(255,255,255,0.7);
+    }
+    .header-bar .company-info .name {
+      font-weight: 600;
+      color: white;
+    }
+
+    /* ── Letter Body ── */
+    .letter-body {
+      padding: 24px 20px 32px;
+    }
+    .letter-body > * + * { margin-top: 20px; }
+
+    .recipient { font-weight: 600; line-height: 1.3; }
+
+    .meta-row { display: flex; gap: 0; }
+    .meta-item { width: 140px; }
+    .meta-item .label { font-weight: 600; margin-bottom: 2px; }
+
+    .subject .label { font-weight: 600; }
+
+    /* ── Charges Block ── */
+    .charge-line {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .charge-amount {
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+    .charge-group { margin-bottom: 4px; }
+
+    .total-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-top: 12px;
+      padding: 10px 12px;
+      margin-left: -12px;
+      margin-right: -12px;
+      background: var(--rax-navy-05);
+      font-weight: 600;
+    }
+
+    /* ── Payment Table ── */
+    .payment-table { border-collapse: collapse; border: 1px solid #003B5C20; }
+    .payment-table td { padding: 6px 8px; }
+    .payment-table td:first-child { color: var(--fg-secondary); padding-right: 32px; }
+    .payment-table tr:not(:last-child) td { border-bottom: 1px solid #003B5C15; }
+    .payment-table .mono { font-variant-numeric: tabular-nums; }
+
+    .closing .name { font-weight: 600; }
+
+    /* ── Footer ── */
+    .footer {
+      font-size: 9px;
+      color: rgba(255,255,255,0.7);
+      background: var(--rax-navy);
+      padding: 8px 20px;
+      text-align: center;
+    }
+
+    /* ── Page Break ── */
+    .page-break {
+      max-width: 640px;
+      margin: 0 auto 60px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .page-break .line { flex: 1; border-top: 1px dashed #ccc; }
+    .page-break .label {
+      font-size: 11px;
+      color: var(--fg-muted);
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    /* ── Page 2: Section Headers ── */
+    .section-header {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 500;
+      margin-bottom: 12px;
+      padding-left: 8px;
+      border-left: 3px solid var(--rax-navy);
+      color: var(--rax-navy);
+    }
+
+    /* ── Page 2: Data Tables ── */
+    .detail-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+    .detail-table th {
+      text-align: left;
+      padding: 6px 8px;
+      font-weight: 500;
+      color: var(--fg-secondary);
+      background: var(--rax-navy-05);
+    }
+    .detail-table th.right { text-align: right; }
+    .detail-table td { padding: 4px 8px; }
+    .detail-table td.right { text-align: right; font-variant-numeric: tabular-nums; }
+    .detail-table td.muted { color: var(--fg-tertiary); }
+    .detail-table td.indent { padding-left: 24px; color: var(--fg-tertiary); }
+    .detail-table td.bold { font-weight: 600; }
+    .detail-table tr.subtotal td { padding-top: 6px; border-top: 1px solid var(--border); }
+    .detail-table tr.no-movement td { color: var(--fg-muted); padding-left: 24px; }
+
+    .detail-section + .detail-section { margin-top: 20px; }
+
+    /* ── Charge Summary Box ── */
+    .charge-summary {
+      padding: 16px;
+      background: var(--rax-navy-05);
+      font-size: 11px;
+    }
+    .charge-summary .row {
+      display: flex;
+      justify-content: space-between;
+    }
+    .charge-summary .row + .row { margin-top: 4px; }
+    .charge-summary .row .label { color: var(--fg-tertiary); }
+    .charge-summary .row .value { font-variant-numeric: tabular-nums; color: var(--fg-secondary); }
+    .charge-summary .total-row {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      padding-top: 8px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .charge-summary .total-row .value { color: var(--rax-navy); }
+
+    @media print {
+      body { background: white; padding: 0; }
+      .page { box-shadow: none; margin: 0; }
+      .page-break { display: none; }
+      .page + .page { page-break-before: always; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       PAGE 1 — FORMAL LETTER
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="page">
+
+    <!-- Header Bar -->
+    <div class="header-bar">
+      <div class="logo">RAX Finance</div>
+      <div class="company-info">
+        <p class="name">RAX Finance B.V.</p>
+        <p>J.J. Viottastraat 29, 1071 JP Amsterdam</p>
+        <p>The Netherlands</p>
+      </div>
+    </div>
+
+    <!-- Letter Body -->
+    <div class="letter-body">
+
+      <!-- Recipient -->
+      <p class="recipient">{{borrower_name}}</p>
+
+      <!-- Metadata row -->
+      <div class="meta-row">
+        <div class="meta-item">
+          <p class="label">Date</p>
+          <p>{{notice_date}}</p>
+        </div>
+        <div class="meta-item">
+          <p class="label">Phone</p>
+          <p>+31 (0)20 575 46 45</p>
+        </div>
+      </div>
+
+      <!-- Subject block -->
+      <div class="subject">
+        <p><span class="label">Reference:</span> {{payment_ref}}</p>
+        <p>{{borrower_name}}</p>
+        <p>Loan number: {{loan_id}}</p>
+      </div>
+
+      <!-- Salutation + body -->
+      <div>
+        <p style="margin-bottom: 8px;">Dear Sir / Madam,</p>
+        <p>
+          We hereby provide you with a statement of the outstanding amounts for the current period
+          regarding the above-mentioned loan.
+        </p>
+      </div>
+
+      <!-- Charges Block -->
+      <div>
+        <!-- Interest line(s) — one per segment if rate changes mid-period -->
+        <div class="charge-group">
+          <p>Interest {{rate}}%, {{days}} day(s) ({{segment_start}} – {{segment_end}})</p>
+          <div class="charge-line">
+            <span>over EUR {{opening_principal}} (30/360)</span>
+            <span class="charge-amount">EUR&nbsp;&nbsp;&nbsp;&nbsp;{{interest_accrued}}</span>
+          </div>
+        </div>
+
+        <!-- Commitment fee (conditional — only if > 0) -->
+        <!--
+        <div class="charge-group">
+          <p>Commitment fee {{fee_rate}}%, {{fee_days}} day(s)</p>
+          <div class="charge-line">
+            <span>over EUR {{undrawn_amount}} undrawn (30/360)</span>
+            <span class="charge-amount">EUR&nbsp;&nbsp;&nbsp;&nbsp;{{commitment_fee}}</span>
+          </div>
+        </div>
+        -->
+
+        <!-- Fees invoiced (conditional — only if > 0) -->
+        <!--
+        <div class="charge-group">
+          <div class="charge-line">
+            <span>Fees invoiced</span>
+            <span class="charge-amount">EUR&nbsp;&nbsp;&nbsp;&nbsp;{{fees_invoiced}}</span>
+          </div>
+        </div>
+        -->
+
+        <!-- Scheduled repayment (conditional — only if > 0) -->
+        <!--
+        <div class="charge-group">
+          <div class="charge-line">
+            <span>Scheduled repayment</span>
+            <span class="charge-amount">EUR&nbsp;&nbsp;&nbsp;&nbsp;{{amortization_due}}</span>
+          </div>
+        </div>
+        -->
+
+        <!-- Total -->
+        <div class="total-bar">
+          <span>Total amount due</span>
+          <span class="charge-amount">EUR&nbsp;&nbsp;&nbsp;&nbsp;{{total_due}}</span>
+        </div>
+      </div>
+
+      <!-- Payment instructions (cash-pay only) -->
+      <div>
+        <p style="margin-bottom: 12px;">
+          On {{payment_due_date}}, the amount due will be debited from your
+          account via automatic direct debit:
+        </p>
+        <table class="payment-table">
+          <tr>
+            <td>Account:</td>
+            <td>{{vehicle_entity_name}}</td>
+          </tr>
+          <tr>
+            <td>IBAN:</td>
+            <td class="mono">{{bank_iban}}</td>
+          </tr>
+          <tr>
+            <td>Reference:</td>
+            <td class="mono">{{payment_ref}}</td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- PIK alternative (shown instead of payment instructions for PIK loans) -->
+      <!--
+      <p>
+        As this is a PIK (Payment-in-Kind) loan, the interest amount of {{interest_charge}}
+        has been capitalised and added to the outstanding principal balance. No cash payment is required.
+      </p>
+      -->
+
+      <!-- Closing -->
+      <div class="closing">
+        <p style="margin-bottom: 8px;">Kind regards,</p>
+        <p class="name">Martijn Louwerse</p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>RAX Finance B.V. — J.J. Viottastraat 29, 1071 JP Amsterdam, The Netherlands</p>
+    </div>
+  </div>
+
+  <!-- Page Break -->
+  <div class="page-break">
+    <div class="line"></div>
+    <span class="label">Page 2 — Calculation Detail</span>
+    <div class="line"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       PAGE 2 — CALCULATION DETAIL
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="page">
+
+    <!-- Header Bar -->
+    <div class="header-bar">
+      <div class="logo">RAX Finance</div>
+      <div class="company-info">
+        <p class="name" style="font-weight:500;">Calculation Detail</p>
+        <p>{{borrower_name}} — {{loan_id}}</p>
+        <p>{{period_start}} – {{period_end}}</p>
+      </div>
+    </div>
+
+    <div class="letter-body">
+
+      <!-- Principal Summary -->
+      <div class="detail-section">
+        <p class="section-header">Principal Summary</p>
+        <table class="detail-table">
+          <tbody>
+            <tr>
+              <td class="muted">Opening balance</td>
+              <td class="right">{{opening_principal_fmt}}</td>
+            </tr>
+            <tr>
+              <td class="indent">Drawdowns</td>
+              <td class="right muted">+{{total_draws_fmt}}</td>
+            </tr>
+            <tr>
+              <td class="indent">Repayments</td>
+              <td class="right muted">–{{total_repayments_fmt}}</td>
+            </tr>
+            <!-- For PIK loans: -->
+            <!--
+            <tr>
+              <td class="indent">Fees capitalised</td>
+              <td class="right muted">+{{fees_capitalised_fmt}}</td>
+            </tr>
+            <tr>
+              <td class="indent">Interest capitalised</td>
+              <td class="right muted">+{{interest_capitalised_fmt}}</td>
+            </tr>
+            -->
+            <tr class="subtotal">
+              <td class="bold">Closing balance</td>
+              <td class="right bold">{{closing_principal_fmt}}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Period Transactions -->
+      <div class="detail-section">
+        <p class="section-header">Transactions</p>
+        <table class="detail-table">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Description</th>
+              <th class="right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="muted">{{event_date}}</td>
+              <td>{{event_type}}</td>
+              <td class="muted">{{event_description}}</td>
+              <td class="right">{{event_amount}}</td>
+            </tr>
+            <!-- repeat per event -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Interest Calculation -->
+      <div class="detail-section">
+        <p class="section-header">Interest Calculation</p>
+        <table class="detail-table">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th class="right" style="width:48px">Days</th>
+              <th class="right">Principal</th>
+              <th class="right" style="width:64px">Rate</th>
+              <th class="right">Interest</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="muted">{{segment_start}} – {{segment_end}}</td>
+              <td class="right">{{segment_days}}</td>
+              <td class="right">{{segment_principal}}</td>
+              <td class="right muted">{{segment_rate}}</td>
+              <td class="right">{{segment_interest}}</td>
+            </tr>
+            <!-- repeat per segment -->
+          </tbody>
+          <tfoot>
+            <tr class="subtotal">
+              <td class="bold">Interest subtotal</td>
+              <td class="right muted">{{total_days}}</td>
+              <td></td>
+              <td></td>
+              <td class="right bold">{{interest_accrued_fmt}}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <!-- Commitment Fee (conditional) -->
+      <!--
+      <div class="detail-section">
+        <p class="section-header">Commitment Fee</p>
+        <table class="detail-table">
+          <thead>
+            <tr>
+              <th>Period</th>
+              <th class="right" style="width:48px">Days</th>
+              <th class="right">Undrawn</th>
+              <th class="right" style="width:64px">Rate</th>
+              <th class="right">Fee</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="muted">{{fee_seg_start}} – {{fee_seg_end}}</td>
+              <td class="right">{{fee_seg_days}}</td>
+              <td class="right">{{fee_seg_undrawn}}</td>
+              <td class="right muted">{{fee_seg_rate}}</td>
+              <td class="right">{{fee_seg_amount}}</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr class="subtotal">
+              <td class="bold">Fee subtotal</td>
+              <td></td><td></td><td></td>
+              <td class="right bold">{{commitment_fee_fmt}}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      -->
+
+      <!-- Charge Summary -->
+      <div class="charge-summary">
+        <div class="row">
+          <span class="label">Interest accrued</span>
+          <span class="value">{{interest_accrued_fmt}}</span>
+        </div>
+        <!-- conditional rows: -->
+        <!--
+        <div class="row">
+          <span class="label">Commitment fee</span>
+          <span class="value">{{commitment_fee_fmt}}</span>
+        </div>
+        <div class="row">
+          <span class="label">Fees invoiced</span>
+          <span class="value">{{fees_invoiced_fmt}}</span>
+        </div>
+        <div class="row">
+          <span class="label">Scheduled repayment</span>
+          <span class="value">{{amortization_due_fmt}}</span>
+        </div>
+        -->
+        <div class="total-row">
+          <span>Total due</span>
+          <span class="value">{{total_due_fmt}}</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>RAX Finance B.V. — J.J. Viottastraat 29, 1071 JP Amsterdam, The Netherlands</p>
+    </div>
+  </div>
+
+</body>
+</html>

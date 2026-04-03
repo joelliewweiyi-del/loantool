@@ -192,7 +192,7 @@ export function useBatchCreateLoans() {
                   auto_generated: true,
                   fee_type: 'arrangement',
                   payment_type: isPikLoan ? 'pik' : 'cash',
-                  description: isPikLoan ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)'
+                  description: 'Arrangement fee (withheld from borrower)'
                 }
               );
             }

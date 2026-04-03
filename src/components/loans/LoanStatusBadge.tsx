@@ -6,6 +6,18 @@ interface StatusBadgeProps {
   className?: string;
 }
 
+const statusLabels: Record<string, string> = {
+  draft: 'Draft',
+  open: 'Open',
+  submitted: 'Submitted',
+  approved: 'Approved',
+  sent: 'Sent',
+  paid: 'Paid',
+  active: 'Active',
+  repaid: 'Repaid',
+  defaulted: 'Defaulted',
+};
+
 const statusClasses: Record<string, string> = {
   // Action needed (amber)
   draft: 'status-badge status-draft',
@@ -24,8 +36,8 @@ const statusClasses: Record<string, string> = {
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
   return (
-    <span className={cn(statusClasses[status] || 'status-badge status-neutral', className)}>
-      {status}
+    <span className={cn('text-xs', statusClasses[status] || 'status-badge status-neutral', className)}>
+      {statusLabels[status] || status}
     </span>
   );
 }

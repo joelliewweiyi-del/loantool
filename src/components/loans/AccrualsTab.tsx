@@ -251,7 +251,12 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
                 <div
                   key={period.periodId}
                   className="rounded-xl border bg-card overflow-hidden"
+                  role="button"
+                  aria-expanded={isExpanded}
+                  aria-label={`Toggle details for period ${formatDateShort(period.periodStart)} to ${formatDate(period.periodEnd)}`}
+                  tabIndex={0}
                   onClick={() => togglePeriod(period.periodId)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); togglePeriod(period.periodId); } }}
                 >
                   {/* Card header */}
                   <div className="px-4 py-3 flex items-center justify-between">
@@ -302,6 +307,12 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
                           <div>
                             <div className="text-foreground-tertiary uppercase tracking-wide text-[10px]">Commit. Fee</div>
                             <div className="font-mono">{formatCurrency(period.commitmentFeeAccrued)}</div>
+                          </div>
+                        )}
+                        {period.amortizationDue > 0 && (
+                          <div>
+                            <div className="text-foreground-tertiary uppercase tracking-wide text-[10px]">Amortization</div>
+                            <div className="font-mono text-accent-amber font-semibold">{formatCurrency(period.amortizationDue)}</div>
                           </div>
                         )}
                       </div>
@@ -624,7 +635,7 @@ function PeriodTableRow({
 
   return (
     <>
-      <tr 
+      <tr
         className={`
           cursor-pointer transition-colors border-l-4
           ${getStatusBorderColor(period.status)}
@@ -632,13 +643,20 @@ function PeriodTableRow({
           hover:bg-muted/40
         `}
         onClick={onToggle}
+        aria-expanded={isExpanded}
       >
         <td className="py-4 px-4">
+          <span
+            role="button"
+            aria-expanded={isExpanded}
+            aria-label={`Toggle details for period ${formatDate(period.periodStart)} to ${formatDate(period.periodEnd)}`}
+          >
           {isExpanded ? (
             <ChevronDown className="h-4 w-4 text-muted-foreground" />
           ) : (
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           )}
+          </span>
         </td>
         <td className="py-4 px-4">
           <span className="font-mono text-sm font-medium">
@@ -785,6 +803,12 @@ function PeriodTableRow({
                   <div className="space-y-1">
                     <div className="text-muted-foreground uppercase tracking-wide">Commit. Fee</div>
                     <div className="font-mono">{formatCurrency(period.commitmentFeeAccrued)}</div>
+                  </div>
+                )}
+                {period.amortizationDue > 0 && (
+                  <div className="space-y-1">
+                    <div className="text-muted-foreground uppercase tracking-wide">Amortization Due</div>
+                    <div className="font-mono text-accent-amber font-semibold">{formatCurrency(period.amortizationDue)}</div>
                   </div>
                 )}
                 <div className="space-y-1">
@@ -934,10 +958,18 @@ function PeriodTableRow({
                       <span className="font-mono text-emerald-600">+{formatCurrency(period.principalDrawn)}</span>
                     </div>
                   )}
+                  {period.feesWithheld > 0 && (
+                    <div>
+                      <span className="text-muted-foreground">
+                        {'Fee (withheld): '}
+                      </span>
+                      <span className="font-mono text-emerald-600">+{formatCurrency(period.feesWithheld)}</span>
+                    </div>
+                  )}
                   {period.feesInvoiced > 0 && (
                     <div>
                       <span className="text-muted-foreground">
-                        {isPik ? 'Fee (capitalised): ' : 'Fee (withheld): '}
+                        {'Fee (invoiced): '}
                       </span>
                       <span className="font-mono text-emerald-600">+{formatCurrency(period.feesInvoiced)}</span>
                     </div>

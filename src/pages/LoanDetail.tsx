@@ -26,6 +26,7 @@ import { CovenantTab } from '@/components/loans/CovenantTab';
 import { RentRollTab } from '@/components/loans/RentRollTab';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { formatCurrency, formatCurrencyShort, formatDate, formatDateTime, formatPercent, formatEventType } from '@/lib/format';
+import { getCurrentDate } from '@/lib/simulatedDate';
 import { FinancialStrip } from '@/components/loans/FinancialStrip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EventType } from '@/types/loan';
@@ -172,8 +173,9 @@ export default function LoanDetail() {
         <div className={isMobile ? "" : "flex items-center gap-3"}>
           {!isMobile && (
             <Link to="/loans">
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button variant="ghost" size="sm" className="gap-1.5 min-h-[44px] min-w-[44px]">
                 <ArrowLeft className="h-4 w-4" />
+                Back
               </Button>
             </Link>
           )}
@@ -181,7 +183,7 @@ export default function LoanDetail() {
             <div className={isMobile ? "flex items-center gap-2 mb-1.5" : "flex items-center gap-2 flex-wrap"}>
               {isMobile && (
                 <Link to="/loans">
-                  <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2">
+                  <Button variant="ghost" size="icon" className="h-11 w-11 -ml-2">
                     <ArrowLeft className="h-4 w-4" />
                   </Button>
                 </Link>
@@ -217,7 +219,7 @@ export default function LoanDetail() {
                   ? 'bg-accent-amber/10 text-accent-amber'
                   : 'bg-muted text-muted-foreground'
               }`}>
-                Fees: {(loan as any).fee_payment_type === 'pik' ? 'PIK' : 'Cash'}
+                Fees: {(loan as any).fee_payment_type === 'pik' ? 'Withheld' : 'Cash Invoice'}
               </span>
               <span className="text-xs text-foreground-tertiary ml-1">
                 Created {formatDate(loan.created_at)} · {loan.notice_frequency} notices
@@ -306,9 +308,34 @@ export default function LoanDetail() {
         ]} />
       )}
 
+      {/* Amortization Strip — only for loans with scheduled amortization */}
+      {loan.amortization_amount && loan.amortization_frequency && (() => {
+        const freqLabel: Record<string, string> = { monthly: 'Monthly', quarterly: 'Quarterly', semi_annual: 'Semi-Annual', annual: 'Annual' };
+        const freqShort: Record<string, string> = { monthly: '/mo', quarterly: '/qtr', semi_annual: '/semi', annual: '/yr' };
+        const startDate = loan.amortization_start_date ? new Date(loan.amortization_start_date + 'T00:00:00') : null;
+        const now = getCurrentDate();
+        const notStarted = startDate && startDate > now;
+        const totalAmortized = periodAccruals.reduce((sum, p) => sum + (p.amortizationDue || 0), 0);
+        return (
+          <div className={`rounded-lg border-2 ${notStarted ? 'border-accent-amber/40 bg-accent-amber/5' : 'border-primary/30 bg-primary/5'}`}>
+            <FinancialStrip className="border-0" items={isMobile ? [
+              { label: 'Amortization', value: `${formatCurrencyShort(loan.amortization_amount)}${freqShort[loan.amortization_frequency!] || ''}`, accent: notStarted ? 'amber' : 'primary' },
+              { label: 'Starts', value: formatDate(loan.amortization_start_date) || '—', accent: notStarted ? 'amber' : undefined },
+              ...(totalAmortized > 0 ? [{ label: 'Total Amortized', value: formatCurrencyShort(totalAmortized) }] : []),
+            ] : [
+              { label: 'Scheduled Amortization', value: formatCurrency(loan.amortization_amount), accent: notStarted ? 'amber' : 'primary' },
+              { label: 'Frequency', value: freqLabel[loan.amortization_frequency!] || loan.amortization_frequency!, mono: false },
+              { label: notStarted ? 'Starts' : 'Started', value: formatDate(loan.amortization_start_date) || '—', accent: notStarted ? 'amber' : undefined },
+              { label: 'Payment Timing', value: (loan as any).payment_timing === 'in_advance' ? 'In Advance' : 'In Arrears', mono: false },
+              ...(totalAmortized > 0 ? [{ label: 'Total Amortized', value: formatCurrency(totalAmortized) }] : []),
+            ]} />
+          </div>
+        );
+      })()}
+
       {/* Tabs */}
       <Tabs defaultValue={isMobile ? "activity" : "accruals"} className="space-y-4">
-        <TabsList className={isMobile ? "w-full overflow-x-auto flex" : ""}>
+        <TabsList className={isMobile ? "w-full overflow-x-auto flex" : "overflow-x-auto"}>
           {!isMobile && <TabsTrigger value="accruals">Interest Periods</TabsTrigger>}
           {!isMobile && (
             <TabsTrigger value="notices">
@@ -539,9 +566,7 @@ export default function LoanDetail() {
                     const feeType = meta?.fee_type as string | undefined;
                     const paymentType = meta?.payment_type as string | undefined;
                     if (feeType?.includes('arrangement') || meta?.adjustment_type === 'fee_split') {
-                      return paymentType === 'pik'
-                        ? 'Arrangement fee (capitalised)'
-                        : 'Arrangement fee (withheld)';
+                      return 'Arrangement fee (withheld)';
                     }
                     if (description) return description;
                     if (feeType) return `${feeType} fee`;

@@ -4,7 +4,7 @@ import { useAllRentRollIncomes } from '@/hooks/useCovenants';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, FileSpreadsheet, Loader2, Table2, DatabaseZap, FileText, PackageOpen, Building2 } from 'lucide-react';
+import { Download, FileSpreadsheet, Loader2, Table2, DatabaseZap, FileText, PackageOpen, Building2, Globe } from 'lucide-react';
 import { RentRollPanel } from '@/components/loans/RentRollPanel';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -17,7 +17,7 @@ import {
 import { getCurrentDateString } from '@/lib/simulatedDate';
 import { LoanEvent } from '@/types/loan';
 import { VEHICLES, DEFAULT_VEHICLE, type Vehicle } from '@/lib/constants';
-import { generateInfoPack } from '@/lib/infoPack';
+import { generateInfoPack, generateTranslationPack } from '@/lib/infoPack';
 import { toast } from 'sonner';
 
 type ExportType = 'summary' | 'detailed' | 'csv' | 'full';
@@ -28,28 +28,31 @@ export default function Export() {
   const { data: rentRollIncomes } = useAllRentRollIncomes();
   const [exporting, setExporting] = useState<ExportType | null>(null);
   const [infoPackLoading, setInfoPackLoading] = useState(false);
+  const [translationPackLoading, setTranslationPackLoading] = useState(false);
 
   const handleInfoPack = async () => {
-    const earmarked = (loans || []).filter(l => (l as any).earmarked);
-    if (earmarked.length === 0) {
-      toast.error('No earmarked loans found');
+    const allLoans = loans || [];
+    const earmarked = allLoans.filter(l => (l as any).earmarked);
+    const nonEarmarked = allLoans.filter(l => !(l as any).earmarked);
+    if (allLoans.length === 0) {
+      toast.error('No loans found');
       return;
     }
     setInfoPackLoading(true);
     try {
-      const loanIds = earmarked.map(l => l.id);
       const loanDisplayIds: Record<string, string> = {};
-      for (const l of earmarked) {
+      for (const l of allLoans) {
         loanDisplayIds[l.id] = (l as any).loan_id || l.id;
       }
       const blob = await generateInfoPack({
-        loanIds,
+        earmarkedIds: earmarked.map(l => l.id),
+        nonEarmarkedIds: nonEarmarked.map(l => l.id),
         loanDisplayIds,
         onProgress: (current, total) => {
           toast.loading(`Downloading files... ${current}/${total}`, { id: 'info-pack' });
         },
       });
-      toast.success(`Info pack ready (${earmarked.length} loans)`, { id: 'info-pack' });
+      toast.success(`Info pack ready (${earmarked.length} earmarked, ${nonEarmarked.length} non-earmarked)`, { id: 'info-pack' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -60,6 +63,39 @@ export default function Export() {
       toast.error(err.message || 'Failed to generate info pack', { id: 'info-pack' });
     } finally {
       setInfoPackLoading(false);
+    }
+  };
+
+  const handleTranslationPack = async () => {
+    const earmarked = (loans || []).filter(l => (l as any).earmarked);
+    if (earmarked.length === 0) {
+      toast.error('No earmarked loans found');
+      return;
+    }
+    setTranslationPackLoading(true);
+    try {
+      const loanDisplayIds: Record<string, string> = {};
+      for (const l of earmarked) {
+        loanDisplayIds[l.id] = (l as any).loan_id || l.id;
+      }
+      const blob = await generateTranslationPack({
+        loanIds: earmarked.map(l => l.id),
+        loanDisplayIds,
+        onProgress: (current, total) => {
+          toast.loading(`Downloading translations... ${current}/${total}`, { id: 'translation-pack' });
+        },
+      });
+      toast.success('Translation pack ready', { id: 'translation-pack' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `translations-${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to generate translation pack', { id: 'translation-pack' });
+    } finally {
+      setTranslationPackLoading(false);
     }
   };
 
@@ -228,14 +264,14 @@ export default function Export() {
             <div className="flex-1">
               <CardTitle className="text-base">Info Pack</CardTitle>
               <CardDescription className="mt-1">
-                Download all uploaded documents for earmarked loans as a single zip file.
-                Folder structure: Loan ID / filename.
+                Download all uploaded documents as a zip file, split into Earmarked and Non-Earmarked sections.
+                Folder structure: Section / Loan ID / filename.
               </CardDescription>
             </div>
           </CardHeader>
           <CardContent className="flex items-center justify-between pt-0">
             <span className="text-xs text-muted-foreground">
-              {(loans || []).filter(l => (l as any).earmarked).length} earmarked loans
+              {(loans || []).filter(l => (l as any).earmarked).length} earmarked · {(loans || []).filter(l => !(l as any).earmarked).length} non-earmarked
             </span>
             <Button
               size="sm"
@@ -248,6 +284,38 @@ export default function Export() {
                 <Download className="h-4 w-4 mr-2" />
               )}
               {infoPackLoading ? 'Packing...' : 'Download'}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* English Translations zip */}
+        <Card>
+          <CardHeader className="flex flex-row items-start gap-4 space-y-0 pb-3">
+            <div className="rounded-md border p-2">
+              <Globe className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="flex-1">
+              <CardTitle className="text-base">English Translations</CardTitle>
+              <CardDescription className="mt-1">
+                Download all -EN.html translation files for earmarked loans as a single zip.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent className="flex items-center justify-between pt-0">
+            <span className="text-xs text-muted-foreground">
+              {(loans || []).filter(l => (l as any).earmarked).length} earmarked loans
+            </span>
+            <Button
+              size="sm"
+              onClick={handleTranslationPack}
+              disabled={translationPackLoading || isLoading}
+            >
+              {translationPackLoading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              {translationPackLoading ? 'Packing...' : 'Download'}
             </Button>
           </CardContent>
         </Card>

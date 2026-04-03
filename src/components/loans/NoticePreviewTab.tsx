@@ -12,6 +12,9 @@ import { useAppConfig } from '@/hooks/useAppConfig';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 
+/** Single source of truth for the RAX navy hex — needed in inline styles for html2canvas compatibility */
+const RAX_NAVY = '#003B5C';
+
 /** Create a white version of the logo for dark backgrounds (html2canvas doesn't support CSS filters) */
 function useWhiteLogo(src: string) {
   const [whiteLogo, setWhiteLogo] = useState<string>(src);
@@ -141,7 +144,7 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
                   }`}
                 >
                   <div>
-                    <div className="font-mono text-sm">
+                    <div className="text-sm">
                       {formatDate(period.periodStart)} – {formatDate(period.periodEnd)}
                     </div>
                     <div className="flex items-center gap-2 mt-1">
@@ -272,7 +275,7 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
       <div data-pdf-page="1" className="max-w-[640px] mx-auto">
 
         {/* ── Header bar ── */}
-        <div className="flex justify-between items-center px-5 py-4" style={{ backgroundColor: '#003B5C' }}>
+        <div className="flex justify-between items-center px-5 py-4" style={{ backgroundColor: RAX_NAVY }}>
           <img src={whiteLogo} alt="RAX Finance" className="h-8" />
           <div className="text-right text-[11px] leading-[1.5] text-white/70">
             <p className="font-semibold text-white">RAX Finance B.V.</p>
@@ -326,7 +329,7 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
               ))}
               <div className="flex justify-between items-baseline">
                 <span>over EUR {formatAmountBare(period.openingPrincipal)} (30/360)</span>
-                <span className="font-mono tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.interestAccrued)}</span>
+                <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.interestAccrued)}</span>
               </div>
             </div>
 
@@ -340,7 +343,17 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
                 ))}
                 <div className="flex justify-between items-baseline">
                   <span>over EUR {formatAmountBare(period.commitmentFeeSegments[0]?.undrawn || 0)} undrawn (30/360)</span>
-                  <span className="font-mono tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.commitmentFeeAccrued)}</span>
+                  <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.commitmentFeeAccrued)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Fees invoiced */}
+            {period.feesInvoiced > 0 && (
+              <div className="mb-1">
+                <div className="flex justify-between items-baseline">
+                  <span>Fees invoiced</span>
+                  <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.feesInvoiced)}</span>
                 </div>
               </div>
             )}
@@ -350,15 +363,15 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
               <div className="mb-1">
                 <div className="flex justify-between items-baseline">
                   <span>Scheduled repayment</span>
-                  <span className="font-mono tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.amortizationDue)}</span>
+                  <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.amortizationDue)}</span>
                 </div>
               </div>
             )}
 
             {/* Total amount due */}
-            <div className="flex justify-between items-baseline mt-3 py-2.5 px-3 -mx-3" style={{ backgroundColor: '#003B5C0D' }}>
+            <div className="flex justify-between items-baseline mt-3 py-2.5 px-3 -mx-3" style={{ backgroundColor: `${RAX_NAVY}0D` }}>
               <span className="font-semibold">{isPik ? 'Total interest capitalised' : 'Total amount due'}</span>
-              <span className="font-mono tabular-nums text-right font-semibold">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.totalDue)}</span>
+              <span className="tabular-nums text-right font-semibold">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.totalDue)}</span>
             </div>
           </div>
 
@@ -377,32 +390,25 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
                 account via automatic direct debit:
               </p>
 
-              <table className="border-collapse w-auto" style={{ border: '1px solid #003B5C20' }}>
+              <table className="border-collapse w-auto" style={{ border: `1px solid ${RAX_NAVY}20` }}>
                 <tbody>
                   <tr>
-                    <td className="pr-8 py-1.5 pl-2 text-foreground-secondary" style={{ borderBottom: '1px solid #003B5C15' }}>Account:</td>
-                    <td className="py-1.5 pr-2" style={{ borderBottom: '1px solid #003B5C15' }}>RAX RED IV B.V.</td>
+                    <td className="pr-8 py-1.5 pl-2 text-foreground-secondary" style={{ borderBottom: `1px solid ${RAX_NAVY}15` }}>Account:</td>
+                    <td className="py-1.5 pr-2" style={{ borderBottom: `1px solid ${RAX_NAVY}15` }}>RAX RED IV B.V.</td>
                   </tr>
                   <tr>
-                    <td className="pr-8 py-1.5 pl-2 text-foreground-secondary" style={{ borderBottom: '1px solid #003B5C15' }}>IBAN:</td>
-                    <td className="py-1.5 pr-2 font-mono" style={{ borderBottom: '1px solid #003B5C15' }}>{bankConfig?.bank_iban || 'NL81 INGB 0112 3138 92'}</td>
+                    <td className="pr-8 py-1.5 pl-2 text-foreground-secondary" style={{ borderBottom: `1px solid ${RAX_NAVY}15` }}>IBAN:</td>
+                    <td className="py-1.5 pr-2 tabular-nums" style={{ borderBottom: `1px solid ${RAX_NAVY}15` }}>{bankConfig?.bank_iban || 'NL81 INGB 0112 3138 92'}</td>
                   </tr>
                   <tr>
                     <td className="pr-8 py-1.5 pl-2 text-foreground-secondary">Reference:</td>
-                    <td className="py-1.5 pr-2 font-mono">{paymentRef}</td>
+                    <td className="py-1.5 pr-2 tabular-nums">{paymentRef}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
           )}
 
-          {/* PIK explanation */}
-          {isPik && (
-            <p>
-              As this is a PIK (Payment-in-Kind) loan, the interest amount of {formatCurrency(interestCharge)} has been
-              capitalised and added to the outstanding principal balance. No cash payment is required.
-            </p>
-          )}
 
           {/* Closing */}
           <div>
@@ -412,7 +418,7 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
         </div>
 
         {/* ── Page 1 footer ── */}
-        <div className="mt-auto text-[9px] text-white/70 px-5 py-2 text-center" style={{ backgroundColor: '#003B5C' }}>
+        <div className="mt-auto text-[11px] text-white/70 px-5 py-2 text-center" style={{ backgroundColor: RAX_NAVY }}>
           <p>RAX Finance B.V. — J.J. Viottastraat 29, 1071 JP Amsterdam, The Netherlands</p>
         </div>
       </div>
@@ -428,12 +434,12 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
       <div data-pdf-page="2" className="max-w-[640px] mx-auto break-before-page" style={{ pageBreakBefore: 'always' }}>
 
           {/* ── Page 2 header bar ── */}
-          <div className="flex justify-between items-center px-5 py-4" style={{ backgroundColor: '#003B5C' }}>
+          <div className="flex justify-between items-center px-5 py-4" style={{ backgroundColor: RAX_NAVY }}>
             <img src={whiteLogo} alt="RAX Finance" className="h-8" />
             <div className="text-right text-[11px] text-white/70">
               <p className="font-medium text-white">Calculation Detail</p>
-              <p className="font-mono">{loan.borrower_name} — {loanId}</p>
-              <p className="font-mono">{formatDate(period.periodStart)} – {formatDate(period.periodEnd)}</p>
+              <p className="tabular-nums">{loan.borrower_name} — {loanId}</p>
+              <p className="tabular-nums">{formatDate(period.periodStart)} – {formatDate(period.periodEnd)}</p>
             </div>
           </div>
 
@@ -442,37 +448,37 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
 
           {/* ── Principal Summary ── */}
           <div>
-            <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: '3px solid #003B5C', color: '#003B5C' }}>
+            <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: `3px solid ${RAX_NAVY}`, color: RAX_NAVY }}>
               Principal Summary
             </p>
             <table className="w-full text-[11px]">
               <tbody>
                 <tr>
                   <td className="py-1 text-foreground-secondary">Opening balance</td>
-                  <td className="py-1 text-right font-mono tabular-nums">{formatCurrency(period.openingPrincipal)}</td>
+                  <td className="py-1 text-right tabular-nums">{formatCurrency(period.openingPrincipal)}</td>
                 </tr>
                 {totalDraws > 0 && (
                   <tr>
                     <td className="py-1 text-foreground-tertiary pl-4">Drawdowns</td>
-                    <td className="py-1 text-right font-mono tabular-nums text-foreground-secondary">+{formatCurrency(totalDraws)}</td>
+                    <td className="py-1 text-right tabular-nums text-foreground-secondary">+{formatCurrency(totalDraws)}</td>
                   </tr>
                 )}
                 {totalRepayments > 0 && (
                   <tr>
                     <td className="py-1 text-foreground-tertiary pl-4">Repayments</td>
-                    <td className="py-1 text-right font-mono tabular-nums text-foreground-secondary">–{formatCurrency(totalRepayments)}</td>
+                    <td className="py-1 text-right tabular-nums text-foreground-secondary">–{formatCurrency(totalRepayments)}</td>
                   </tr>
                 )}
                 {totalFees > 0 && isPik && (
                   <tr>
                     <td className="py-1 text-foreground-tertiary pl-4">Fees capitalised</td>
-                    <td className="py-1 text-right font-mono tabular-nums text-foreground-secondary">+{formatCurrency(totalFees)}</td>
+                    <td className="py-1 text-right tabular-nums text-foreground-secondary">+{formatCurrency(totalFees)}</td>
                   </tr>
                 )}
                 {isPik && interestCharge > 0 && (
                   <tr>
                     <td className="py-1 text-foreground-tertiary pl-4">Interest capitalised</td>
-                    <td className="py-1 text-right font-mono tabular-nums text-foreground-secondary">+{formatCurrency(interestCharge)}</td>
+                    <td className="py-1 text-right tabular-nums text-foreground-secondary">+{formatCurrency(interestCharge)}</td>
                   </tr>
                 )}
                 {totalDraws === 0 && totalRepayments === 0 && totalFees === 0 && (!isPik || interestCharge === 0) && (
@@ -482,12 +488,12 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
                 )}
                 <tr className="border-t border-border/60">
                   <td className="pt-1.5 pb-1 font-semibold">Closing balance</td>
-                  <td className="pt-1.5 pb-1 text-right font-mono tabular-nums font-semibold">{formatCurrency(period.closingPrincipal)}</td>
+                  <td className="pt-1.5 pb-1 text-right tabular-nums font-semibold">{formatCurrency(period.closingPrincipal)}</td>
                 </tr>
                 {netPrincipalChange !== 0 && (
                   <tr>
                     <td className="text-[11px] text-foreground-muted">Net change</td>
-                    <td className={`text-right font-mono tabular-nums text-[11px] ${netPrincipalChange > 0 ? 'text-accent-sage' : 'text-destructive'}`}>
+                    <td className={`text-right tabular-nums text-[11px] ${netPrincipalChange > 0 ? 'text-accent-sage' : 'text-destructive'}`}>
                       {netPrincipalChange > 0 ? '+' : ''}{formatCurrency(netPrincipalChange)}
                     </td>
                   </tr>
@@ -499,16 +505,16 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
           {/* ── Period Transactions ── */}
           {events.length > 0 && (
             <div>
-              <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: '3px solid #003B5C', color: '#003B5C' }}>
+              <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: `3px solid ${RAX_NAVY}`, color: RAX_NAVY }}>
                 Transactions
               </p>
               <table className="w-full text-[11px]">
                 <thead>
-                  <tr style={{ backgroundColor: '#003B5C0D' }}>
-                    <th className="text-left py-1.5 pl-2 font-medium text-foreground-secondary">Date</th>
-                    <th className="text-left py-1.5 font-medium text-foreground-secondary">Type</th>
-                    <th className="text-left py-1.5 font-medium text-foreground-secondary">Description</th>
-                    <th className="text-right py-1.5 pr-2 font-medium text-foreground-secondary">Amount</th>
+                  <tr style={{ backgroundColor: `${RAX_NAVY}0D` }}>
+                    <th scope="col" className="text-left py-1.5 pl-2 font-medium text-foreground-secondary">Date</th>
+                    <th scope="col" className="text-left py-1.5 font-medium text-foreground-secondary">Type</th>
+                    <th scope="col" className="text-left py-1.5 font-medium text-foreground-secondary">Description</th>
+                    <th scope="col" className="text-right py-1.5 pr-2 font-medium text-foreground-secondary">Amount</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -527,9 +533,7 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
                           const feeType = meta?.fee_type as string | undefined;
                           const paymentType = meta?.payment_type as string | undefined;
                           if (feeType?.includes('arrangement') || meta?.adjustment_type === 'fee_split') {
-                            return paymentType === 'pik'
-                              ? 'Arrangement fee (capitalised)'
-                              : 'Arrangement fee (withheld from borrower)';
+                            return 'Arrangement fee (withheld from borrower)';
                           }
                           if (meta?.description) return meta.description as string;
                           if (feeType) return `${feeType} fee`;
@@ -541,10 +545,10 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
                       const description = getEventDescription();
                       return (
                         <tr key={event.id}>
-                          <td className="py-1 font-mono tabular-nums text-foreground-tertiary">{formatDate(event.effective_date)}</td>
+                          <td className="py-1 tabular-nums text-foreground-tertiary">{formatDate(event.effective_date)}</td>
                           <td className="py-1">{formatEventType(event.event_type)}</td>
                           <td className="py-1 text-foreground-tertiary">{description || '—'}</td>
-                          <td className="text-right font-mono tabular-nums py-1">
+                          <td className="text-right tabular-nums py-1">
                             {event.amount ? (
                               <span>{event.event_type === 'principal_repayment' ? '–' : ''}{formatCurrency(event.amount)}</span>
                             ) : '—'}
@@ -559,39 +563,39 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
 
           {/* ── Interest Calculation ── */}
           <div>
-            <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: '3px solid #003B5C', color: '#003B5C' }}>
+            <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: `3px solid ${RAX_NAVY}`, color: RAX_NAVY }}>
               Interest Calculation
             </p>
             <table className="w-full text-[11px]">
               <thead>
-                <tr style={{ backgroundColor: '#003B5C0D' }}>
-                  <th className="text-left py-1.5 pl-2 font-medium text-foreground-secondary">Period</th>
-                  <th className="text-right py-1.5 font-medium text-foreground-secondary w-12">Days</th>
-                  <th className="text-right py-1.5 font-medium text-foreground-secondary">Principal</th>
-                  <th className="text-right py-1.5 font-medium text-foreground-secondary w-16">Rate</th>
-                  <th className="text-right py-1.5 pr-2 font-medium text-foreground-secondary">Interest</th>
+                <tr style={{ backgroundColor: `${RAX_NAVY}0D` }}>
+                  <th scope="col" className="text-left py-1.5 pl-2 font-medium text-foreground-secondary">Period</th>
+                  <th scope="col" className="text-right py-1.5 font-medium text-foreground-secondary w-12">Days</th>
+                  <th scope="col" className="text-right py-1.5 font-medium text-foreground-secondary">Principal</th>
+                  <th scope="col" className="text-right py-1.5 font-medium text-foreground-secondary w-16">Rate</th>
+                  <th scope="col" className="text-right py-1.5 pr-2 font-medium text-foreground-secondary">Interest</th>
                 </tr>
               </thead>
               <tbody>
                 {period.interestSegments.map((segment, idx) => (
                   <tr key={idx}>
-                    <td className="py-1 font-mono tabular-nums text-foreground-tertiary">
+                    <td className="py-1 tabular-nums text-foreground-tertiary">
                       {formatDate(segment.startDate)} – {formatDate(segment.endDate)}
                     </td>
-                    <td className="text-right font-mono tabular-nums py-1">{segment.days}</td>
-                    <td className="text-right font-mono tabular-nums py-1">{formatCurrency(segment.principal)}</td>
-                    <td className="text-right font-mono tabular-nums py-1 text-foreground-tertiary">{formatPercent(segment.rate)}</td>
-                    <td className="text-right font-mono tabular-nums py-1">{formatCurrency(segment.interest)}</td>
+                    <td className="text-right tabular-nums py-1">{segment.days}</td>
+                    <td className="text-right tabular-nums py-1">{formatCurrency(segment.principal)}</td>
+                    <td className="text-right tabular-nums py-1 text-foreground-tertiary">{formatPercent(segment.rate)}</td>
+                    <td className="text-right tabular-nums py-1">{formatCurrency(segment.interest)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t border-border/60">
                   <td className="pt-1.5 font-semibold">Interest subtotal</td>
-                  <td className="text-right font-mono tabular-nums pt-1.5 text-foreground-tertiary">{period.days}</td>
+                  <td className="text-right tabular-nums pt-1.5 text-foreground-tertiary">{period.days}</td>
                   <td></td>
                   <td></td>
-                  <td className="text-right font-mono tabular-nums pt-1.5 font-semibold">{formatCurrency(period.interestAccrued)}</td>
+                  <td className="text-right tabular-nums pt-1.5 font-semibold">{formatCurrency(period.interestAccrued)}</td>
                 </tr>
               </tfoot>
             </table>
@@ -600,29 +604,29 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
           {/* ── Commitment Fee ── */}
           {period.commitmentFeeAccrued > 0 && (
             <div>
-              <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: '3px solid #003B5C', color: '#003B5C' }}>
+              <p className="text-[11px] tracking-[0.12em] uppercase font-medium mb-3 pl-2" style={{ borderLeft: `3px solid ${RAX_NAVY}`, color: RAX_NAVY }}>
                 Commitment Fee
               </p>
               <table className="w-full text-[11px]">
                 <thead>
-                  <tr style={{ backgroundColor: '#003B5C0D' }}>
-                    <th className="text-left py-1.5 pl-2 font-medium text-foreground-secondary">Period</th>
-                    <th className="text-right py-1.5 font-medium text-foreground-secondary w-12">Days</th>
-                    <th className="text-right py-1.5 font-medium text-foreground-secondary">Undrawn</th>
-                    <th className="text-right py-1.5 font-medium text-foreground-secondary w-16">Rate</th>
-                    <th className="text-right py-1.5 pr-2 font-medium text-foreground-secondary">Fee</th>
+                  <tr style={{ backgroundColor: `${RAX_NAVY}0D` }}>
+                    <th scope="col" className="text-left py-1.5 pl-2 font-medium text-foreground-secondary">Period</th>
+                    <th scope="col" className="text-right py-1.5 font-medium text-foreground-secondary w-12">Days</th>
+                    <th scope="col" className="text-right py-1.5 font-medium text-foreground-secondary">Undrawn</th>
+                    <th scope="col" className="text-right py-1.5 font-medium text-foreground-secondary w-16">Rate</th>
+                    <th scope="col" className="text-right py-1.5 pr-2 font-medium text-foreground-secondary">Fee</th>
                   </tr>
                 </thead>
                 <tbody>
                   {period.commitmentFeeSegments.map((segment, idx) => (
                     <tr key={idx}>
-                      <td className="py-1 font-mono tabular-nums text-foreground-tertiary">
+                      <td className="py-1 tabular-nums text-foreground-tertiary">
                         {formatDate(segment.startDate)} – {formatDate(segment.endDate)}
                       </td>
-                      <td className="text-right font-mono tabular-nums py-1">{segment.days}</td>
-                      <td className="text-right font-mono tabular-nums py-1">{formatCurrency(segment.undrawn)}</td>
-                      <td className="text-right font-mono tabular-nums py-1 text-foreground-tertiary">{formatPercent(segment.feeRate)}</td>
-                      <td className="text-right font-mono tabular-nums py-1">{formatCurrency(segment.fee)}</td>
+                      <td className="text-right tabular-nums py-1">{segment.days}</td>
+                      <td className="text-right tabular-nums py-1">{formatCurrency(segment.undrawn)}</td>
+                      <td className="text-right tabular-nums py-1 text-foreground-tertiary">{formatPercent(segment.feeRate)}</td>
+                      <td className="text-right tabular-nums py-1">{formatCurrency(segment.fee)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -632,7 +636,7 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
                     <td></td>
                     <td></td>
                     <td></td>
-                    <td className="text-right font-mono tabular-nums pt-1.5 font-semibold">{formatCurrency(period.commitmentFeeAccrued)}</td>
+                    <td className="text-right tabular-nums pt-1.5 font-semibold">{formatCurrency(period.commitmentFeeAccrued)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -640,27 +644,33 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
           )}
 
           {/* ── Charge Summary ── */}
-          <div className="pt-4 px-4 pb-4" style={{ backgroundColor: '#003B5C0D' }}>
+          <div className="pt-4 px-4 pb-4" style={{ backgroundColor: `${RAX_NAVY}0D` }}>
             <div className="space-y-1 text-[11px]">
               <div className="flex justify-between">
                 <span className="text-foreground-tertiary">Interest accrued</span>
-                <span className="font-mono tabular-nums text-foreground-secondary">{formatCurrency(period.interestAccrued)}</span>
+                <span className="tabular-nums text-foreground-secondary">{formatCurrency(period.interestAccrued)}</span>
               </div>
               {period.commitmentFeeAccrued > 0 && (
                 <div className="flex justify-between">
                   <span className="text-foreground-tertiary">Commitment fee</span>
-                  <span className="font-mono tabular-nums text-foreground-secondary">{formatCurrency(period.commitmentFeeAccrued)}</span>
+                  <span className="tabular-nums text-foreground-secondary">{formatCurrency(period.commitmentFeeAccrued)}</span>
+                </div>
+              )}
+              {period.feesInvoiced > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-foreground-tertiary">Fees invoiced</span>
+                  <span className="tabular-nums text-foreground-secondary">{formatCurrency(period.feesInvoiced)}</span>
                 </div>
               )}
               {period.amortizationDue > 0 && (
                 <div className="flex justify-between">
                   <span className="text-foreground-tertiary">Scheduled repayment</span>
-                  <span className="font-mono tabular-nums text-foreground-secondary">{formatCurrency(period.amortizationDue)}</span>
+                  <span className="tabular-nums text-foreground-secondary">{formatCurrency(period.amortizationDue)}</span>
                 </div>
               )}
               <div className="flex justify-between pt-2 text-[13px] font-semibold">
-                <span>{isPik ? 'Total capitalized' : 'Total due'}</span>
-                <span className="font-mono tabular-nums text-primary">
+                <span>{isPik ? 'Total capitalised' : 'Total due'}</span>
+                <span className="tabular-nums text-primary">
                   {formatCurrency(period.totalDue)}
                 </span>
               </div>
@@ -670,7 +680,7 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
           </div>
 
           {/* ── Page 2 footer ── */}
-          <div className="mt-auto text-[9px] text-white/70 px-5 py-2 text-center" style={{ backgroundColor: '#003B5C' }}>
+          <div className="mt-auto text-[11px] text-white/70 px-5 py-2 text-center" style={{ backgroundColor: RAX_NAVY }}>
             <p>RAX Finance B.V. — J.J. Viottastraat 29, 1071 JP Amsterdam, The Netherlands</p>
           </div>
       </div>

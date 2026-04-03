@@ -36,6 +36,23 @@ export function useConfirmDraw(loanId?: string) {
 
       if (existing) throw new Error('This AFAS transaction has already been confirmed');
 
+      // Founding event check: skip AFAS draws that match founding events
+      const { data: foundingEvents } = await supabase
+        .from('loan_events')
+        .select('amount')
+        .eq('loan_id', input.loanUuid)
+        .eq('effective_date', input.effectiveDate.substring(0, 10))
+        .contains('metadata', { founding_event: true })
+        .in('event_type', ['principal_draw', 'fee_invoice']);
+
+      if (foundingEvents && foundingEvents.length > 0) {
+        const amounts = foundingEvents.map(e => Number(e.amount));
+        const total = amounts.reduce((a, b) => a + b, 0);
+        if (amounts.some(a => Math.abs(a - input.amount) < 0.01) || Math.abs(total - input.amount) < 0.01) {
+          throw new Error('This transaction matches a founding event and does not need to be confirmed');
+        }
+      }
+
       const { data: event, error } = await supabase
         .from('loan_events')
         .insert([{

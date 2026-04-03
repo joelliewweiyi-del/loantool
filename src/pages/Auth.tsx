@@ -31,11 +31,11 @@ export default function Auth() {
     }
   }, [user, navigate]);
 
-  const validateForm = () => {
+  const validateForm = (): { email?: string; password?: string } | null => {
     try {
       authSchema.parse({ email, password });
       setErrors({});
-      return true;
+      return null;
     } catch (error) {
       if (error instanceof z.ZodError) {
         const fieldErrors: { email?: string; password?: string } = {};
@@ -44,15 +44,24 @@ export default function Auth() {
           if (err.path[0] === 'password') fieldErrors.password = err.message;
         });
         setErrors(fieldErrors);
+        return fieldErrors;
       }
-      return false;
+      return {};
     }
   };
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
-    
+    const fieldErrors = validateForm();
+    if (fieldErrors) {
+      if (fieldErrors.email) {
+        document.getElementById('signin-email')?.focus();
+      } else if (fieldErrors.password) {
+        document.getElementById('signin-password')?.focus();
+      }
+      return;
+    }
+
     setIsLoading(true);
     const { error } = await signIn(email, password);
     setIsLoading(false);
@@ -70,7 +79,15 @@ export default function Auth() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) return;
+    const fieldErrors = validateForm();
+    if (fieldErrors) {
+      if (fieldErrors.email) {
+        document.getElementById('signup-email')?.focus();
+      } else if (fieldErrors.password) {
+        document.getElementById('signup-password')?.focus();
+      }
+      return;
+    }
     
     setIsLoading(true);
     const { error } = await signUp(email, password);

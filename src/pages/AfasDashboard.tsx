@@ -168,6 +168,34 @@ function useLoanIds() {
   });
 }
 
+function useFoundingEvents() {
+  return useQuery({
+    queryKey: ['founding-events'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('loan_events')
+        .select('loan_id, effective_date, amount')
+        .contains('metadata', { founding_event: true })
+        .in('event_type', ['principal_draw', 'fee_invoice']);
+      if (error) throw error;
+      // Map<loanUuid, { date, amounts[], total }>
+      const map = new Map<string, { date: string; amounts: number[]; total: number }>();
+      for (const e of data) {
+        const existing = map.get(e.loan_id);
+        const amt = Number(e.amount);
+        if (existing) {
+          existing.amounts.push(amt);
+          existing.total += amt;
+        } else {
+          map.set(e.loan_id, { date: e.effective_date, amounts: [amt], total: amt });
+        }
+      }
+      return map;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 function useAfasDrawConfirmations() {
   return useQuery({
     queryKey: ['afas-draw-confirmations'],
@@ -197,6 +225,7 @@ export default function AfasDashboard({ embedded, selectedMonth }: { embedded?: 
   const connection = useAfasConnection();
   const loanIds = useLoanIds();
   const drawConfirmations = useAfasDrawConfirmations();
+  const foundingEvents = useFoundingEvents();
   const confirmDraw = useConfirmDraw();
   const { isController } = useAuth();
   const queryClient = useQueryClient();
@@ -337,6 +366,17 @@ export default function AfasDashboard({ embedded, selectedMonth }: { embedded?: 
     depot.refetch();
     loanIds.refetch();
     drawConfirmations.refetch();
+  }
+
+  function isFoundingMatch(row: AfasRow & { amount: number }, loanId: string): boolean {
+    const uuid = numericToUuid?.get(loanId);
+    if (!uuid || !foundingEvents.data) return false;
+    const founding = foundingEvents.data.get(uuid);
+    if (!founding) return false;
+    const afasDate = row.EntryDate.substring(0, 10);
+    if (afasDate !== founding.date) return false;
+    const amt = row.amount;
+    return founding.amounts.some(a => Math.abs(a - amt) < 0.01) || Math.abs(founding.total - amt) < 0.01;
   }
 
   function handleConfirmDraw(row: AfasRow & { amount: number }, loanId: string) {
@@ -707,7 +747,7 @@ export default function AfasDashboard({ embedded, selectedMonth }: { embedded?: 
                     <TableBody>
                       {filteredDrawGroups.map(group => {
                         const isExpanded = expandedDraws.has(group.loanId);
-                        const groupConfirmed = group.rows.filter(r => drawConfirmations.data?.has(`${r.EntryNo}-${r.SeqNo}`)).length;
+                        const groupConfirmed = group.rows.filter(r => drawConfirmations.data?.has(`${r.EntryNo}-${r.SeqNo}`) || isFoundingMatch(r, group.loanId)).length;
                         return (
                           <>
                             <TableRow
@@ -758,6 +798,11 @@ export default function AfasDashboard({ embedded, selectedMonth }: { embedded?: 
                                       <span className="inline-flex items-center gap-1 text-xs text-accent-amber">
                                         <Clock className="h-3.5 w-3.5" />
                                         Draft
+                                      </span>
+                                    ) : isFoundingMatch(row, group.loanId) ? (
+                                      <span className="inline-flex items-center gap-1 text-xs text-foreground-muted">
+                                        <Landmark className="h-3.5 w-3.5" />
+                                        Founding
                                       </span>
                                     ) : isController && numericToUuid?.has(group.loanId) ? (
                                       <Button
