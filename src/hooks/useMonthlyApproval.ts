@@ -15,43 +15,6 @@ export interface MonthlyApprovalWithPeriods extends MonthlyApproval {
   periods: PeriodWithLoan[];
 }
 
-export function useMonthlyApprovals() {
-  return useQuery({
-    queryKey: ['monthly-approvals'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('monthly_approvals')
-        .select('*')
-        .order('year_month', { ascending: false });
-      
-      if (error) throw error;
-      return data as MonthlyApproval[];
-    },
-  });
-}
-
-export function useEnsureMonthlyApproval() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (yearMonth: string) => {
-      const { data, error } = await supabase
-        .from('monthly_approvals')
-        .upsert(
-          { year_month: yearMonth },
-          { onConflict: 'year_month' }
-        )
-        .select()
-        .single();
-      if (error) throw error;
-      return data as MonthlyApproval;
-    },
-    onSuccess: (_, yearMonth) => {
-      queryClient.invalidateQueries({ queryKey: ['monthly-approval', yearMonth] });
-    },
-  });
-}
-
 export function useMonthlyApprovalDetails(yearMonth: string | undefined) {
   return useQuery({
     queryKey: ['monthly-approval', yearMonth],
@@ -208,22 +171,6 @@ export function useApproveMonth() {
         description: error instanceof Error ? error.message : 'Unknown error',
         variant: 'destructive',
       });
-    },
-  });
-}
-
-export function useProcessingJobs() {
-  return useQuery({
-    queryKey: ['processing-jobs'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('processing_jobs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
-      
-      if (error) throw error;
-      return data;
     },
   });
 }

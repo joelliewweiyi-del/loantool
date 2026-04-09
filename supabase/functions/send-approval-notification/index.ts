@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface NotificationRequest {
-  item_type: 'event_approval' | 'draw_confirmation' | 'payment_confirmation' | 'period_approval' | 'pik_rollup';
+  item_type: 'event_approval' | 'draw_confirmation' | 'period_approval' | 'pik_rollup';
   item_id: string;
   loan_id?: string;
   loan_numeric_id?: string;
@@ -21,7 +21,6 @@ interface NotificationRequest {
 const typeLabels: Record<string, string> = {
   event_approval: 'Event Approval',
   draw_confirmation: 'Draw Confirmation',
-  payment_confirmation: 'Payment Confirmation',
   period_approval: 'Period Approval',
   pik_rollup: 'PIK Roll-Up',
 };
@@ -29,7 +28,6 @@ const typeLabels: Record<string, string> = {
 const recipientRole: Record<string, string> = {
   event_approval: 'controller',
   draw_confirmation: 'pm',
-  payment_confirmation: 'controller',
   period_approval: 'controller',
   pik_rollup: 'pm',
 };

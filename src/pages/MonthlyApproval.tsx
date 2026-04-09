@@ -12,6 +12,7 @@ import {
 import {
   useMonthlyApprovalDraws,
   useConfirmDrawFromApproval,
+  type GroupedLoanDraws,
 } from '@/hooks/useMonthlyApprovalDraws';
 import { useApproveMonth } from '@/hooks/useMonthlyApproval';
 import { useAuth } from '@/hooks/useAuth';
@@ -63,7 +64,9 @@ export default function MonthlyApproval() {
   const confirmDraw = useConfirmDrawFromApproval(currentMonth);
   const { isController } = useAuth();
   const [expandedAfas, setExpandedAfas] = useState<Set<string>>(new Set());
+  const [expandedDrawLoans, setExpandedDrawLoans] = useState<Set<string>>(new Set());
   const [expandedDrawAfas, setExpandedDrawAfas] = useState<Set<string>>(new Set());
+  const [typeOverrides, setTypeOverrides] = useState<Map<string, 'draw' | 'repayment'>>(new Map());
 
   const toggleAfas = (id: string) => {
     setExpandedAfas(prev => {
@@ -72,10 +75,25 @@ export default function MonthlyApproval() {
       return next;
     });
   };
+  const toggleDrawLoan = (loanId: string) => {
+    setExpandedDrawLoans(prev => {
+      const next = new Set(prev);
+      if (next.has(loanId)) next.delete(loanId); else next.add(loanId);
+      return next;
+    });
+  };
   const toggleDrawAfas = (ref: string) => {
     setExpandedDrawAfas(prev => {
       const next = new Set(prev);
       if (next.has(ref)) next.delete(ref); else next.add(ref);
+      return next;
+    });
+  };
+  const toggleTypeOverride = (afasRef: string, currentType: 'draw' | 'repayment') => {
+    setTypeOverrides(prev => {
+      const next = new Map(prev);
+      const newType = (next.get(afasRef) ?? currentType) === 'draw' ? 'repayment' : 'draw';
+      next.set(afasRef, newType);
       return next;
     });
   };
@@ -118,9 +136,10 @@ export default function MonthlyApproval() {
 
   const handleConfirmDraw = (tx: AfasDrawTransaction) => {
     if (!tx.loanUuid) return;
+    const effectiveType = typeOverrides.get(tx.afasRef) ?? tx.type;
     confirmDraw.mutate({
       loanUuid: tx.loanUuid,
-      eventType: tx.type === 'draw' ? 'principal_draw' : 'principal_repayment',
+      eventType: effectiveType === 'draw' ? 'principal_draw' : 'principal_repayment',
       effectiveDate: tx.entryDate,
       amount: tx.amount,
       afasRef: tx.afasRef,
@@ -149,15 +168,15 @@ export default function MonthlyApproval() {
     });
   }, [data?.periods]);
 
-  // Group draws by vehicle
+  // Group draws by vehicle (using loan-grouped data)
   const drawsByVehicle = useMemo(() => {
-    if (!drawsData?.transactions) return [];
-    const groups = new Map<string, AfasDrawTransaction[]>();
-    for (const tx of drawsData.transactions) {
-      const v = tx.vehicle || 'Other';
+    if (!drawsData?.groupedByLoan) return [];
+    const groups = new Map<string, GroupedLoanDraws[]>();
+    for (const group of drawsData.groupedByLoan) {
+      const v = group.vehicle || 'Other';
       const existing = groups.get(v);
-      if (existing) existing.push(tx);
-      else groups.set(v, [tx]);
+      if (existing) existing.push(group);
+      else groups.set(v, [group]);
     }
     const order = VEHICLES.map(v => v.value);
     return [...groups.entries()].sort(([a], [b]) => {
@@ -165,7 +184,7 @@ export default function MonthlyApproval() {
       const bi = order.indexOf(b);
       return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
     });
-  }, [drawsData?.transactions]);
+  }, [drawsData?.groupedByLoan]);
 
   if (isLoading) {
     return (
@@ -505,10 +524,10 @@ export default function MonthlyApproval() {
                 { label: 'Pending', value: String(drawsData.summary.pendingCount), accent: drawsData.summary.pendingCount > 0 ? 'amber' : undefined, mono: false },
               ]} />
 
-              {/* Tables grouped by vehicle */}
-              {drawsByVehicle.map(([vehicle, transactions]) => {
-                const vehicleDrawTotal = transactions.filter(t => t.type === 'draw').reduce((s, t) => s + t.amount, 0);
-                const vehicleRepayTotal = transactions.filter(t => t.type === 'repayment').reduce((s, t) => s + t.amount, 0);
+              {/* Tables grouped by vehicle → loan */}
+              {drawsByVehicle.map(([vehicle, loanGroups]) => {
+                const vehicleDrawTotal = loanGroups.reduce((s, g) => s + g.totalDrawAmount, 0);
+                const vehicleRepayTotal = loanGroups.reduce((s, g) => s + g.totalRepaymentAmount, 0);
 
                 return (
                   <Card key={vehicle}>
@@ -520,7 +539,6 @@ export default function MonthlyApproval() {
                         <thead>
                           <tr>
                             <th className="text-left">Loan</th>
-                            <th className="text-left">Date</th>
                             <th className="text-center">Type</th>
                             <th className="text-right">Amount</th>
                             <th className="text-center">Status</th>
@@ -528,115 +546,189 @@ export default function MonthlyApproval() {
                           </tr>
                         </thead>
                         <tbody>
-                          {transactions.map(tx => {
-                            const isAfasExpanded = expandedDrawAfas.has(tx.afasRef);
+                          {loanGroups.map(group => {
+                            const isExpanded = expandedDrawLoans.has(group.loanId);
+                            const txCount = group.transactions.length;
+                            const totalAmount = group.totalDrawAmount + group.totalRepaymentAmount;
+
                             return (
-                              <React.Fragment key={tx.afasRef}>
-                                <tr>
-                                  <td className="font-mono font-medium">#{tx.loanId}</td>
-                                  <td className="font-mono text-xs text-muted-foreground whitespace-nowrap">
-                                    {formatDate(tx.entryDate)}
+                              <React.Fragment key={group.loanId}>
+                                {/* Loan group summary row */}
+                                <tr
+                                  className="cursor-pointer hover:bg-muted/20"
+                                  onClick={() => toggleDrawLoan(group.loanId)}
+                                >
+                                  <td className="font-mono font-medium">
+                                    <div className="flex items-center gap-1.5">
+                                      {isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />}
+                                      #{group.loanId}
+                                      <span className="text-xs text-foreground-secondary font-normal ml-1">{group.borrowerName}</span>
+                                    </div>
                                   </td>
                                   <td className="text-center">
-                                    {tx.type === 'draw' ? (
-                                      <Badge className="bg-accent-amber/10 text-accent-amber border-accent-amber/30 text-xs">Draw</Badge>
+                                    {group.dominantType === 'draw' ? (
+                                      <Badge className="bg-accent-amber/10 text-accent-amber border-accent-amber/30 text-xs">
+                                        {txCount === 1 ? 'Draw' : `${txCount} Draws`}
+                                      </Badge>
+                                    ) : group.dominantType === 'repayment' ? (
+                                      <Badge className="bg-primary/10 text-primary border-primary/30 text-xs">
+                                        {txCount === 1 ? 'Repayment' : `${txCount} Repayments`}
+                                      </Badge>
                                     ) : (
-                                      <Badge className="bg-primary/10 text-primary border-primary/30 text-xs">Repayment</Badge>
+                                      <Badge className="bg-muted text-foreground-secondary border-border text-xs">
+                                        {txCount} Mixed
+                                      </Badge>
                                     )}
                                   </td>
-                                  <td className="numeric font-medium">{formatCurrency(tx.amount)}</td>
+                                  <td className="numeric font-medium">{formatCurrency(totalAmount)}</td>
                                   <td className="text-center">
-                                    {tx.isConfirmed && tx.eventStatus === 'approved' ? (
+                                    {group.pendingCount === 0 ? (
                                       <span className="inline-flex items-center gap-1 text-xs text-accent-sage">
                                         <CheckCircle2 className="h-3.5 w-3.5" />
-                                        Approved
-                                      </span>
-                                    ) : tx.isConfirmed ? (
-                                      <span className="inline-flex items-center gap-1 text-xs text-accent-amber">
-                                        <Clock className="h-3.5 w-3.5" />
-                                        Draft
+                                        {group.confirmedCount}/{txCount}
                                       </span>
                                     ) : (
-                                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                      <span className="inline-flex items-center gap-1 text-xs text-accent-amber">
                                         <CircleDashed className="h-3.5 w-3.5" />
-                                        Pending
+                                        {group.confirmedCount}/{txCount}
                                       </span>
                                     )}
                                   </td>
                                   <td className="text-right">
-                                    <div className="flex items-center justify-end gap-1.5">
-                                      {!tx.isConfirmed && tx.loanUuid && isController && (
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => handleConfirmDraw(tx)}
-                                          disabled={confirmDraw.isPending}
-                                          className="h-7 text-xs border-accent-sage/40 text-accent-sage hover:bg-accent-sage/10"
-                                        >
-                                          Confirm
+                                    {group.loanUuid && (
+                                      <Link to={`/loans/${group.loanUuid}`} onClick={e => e.stopPropagation()}>
+                                        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1">
+                                          View <ChevronRight className="h-3 w-3" />
                                         </Button>
-                                      )}
-                                      <Button
-                                        size="sm"
-                                        variant={isAfasExpanded ? 'secondary' : 'ghost'}
-                                        onClick={() => toggleDrawAfas(tx.afasRef)}
-                                        className="h-7 text-xs gap-1"
-                                      >
-                                        <Database className="h-3 w-3" />
-                                        AFAS
-                                        {isAfasExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                                      </Button>
-                                      {tx.loanUuid && (
-                                        <Link to={`/loans/${tx.loanUuid}`}>
-                                          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1">
-                                            View <ChevronRight className="h-3 w-3" />
-                                          </Button>
-                                        </Link>
-                                      )}
-                                    </div>
+                                      </Link>
+                                    )}
                                   </td>
                                 </tr>
-                                {isAfasExpanded && (
-                                  <tr>
-                                    <td colSpan={7} className="p-0">
-                                      <div className="bg-muted/30 border-b px-6 py-3">
-                                        <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
-                                          AFAS Transaction Detail — Ref {tx.afasRef}
-                                        </div>
-                                        <div className="grid grid-cols-4 gap-4 text-xs">
-                                          <div>
-                                            <div className="text-muted-foreground mb-0.5">Date</div>
-                                            <div className="font-mono">{formatDate(tx.entryDate)}</div>
+                                {/* Expanded: individual transaction rows */}
+                                {isExpanded && group.transactions.map(tx => {
+                                  const isAfasExpanded = expandedDrawAfas.has(tx.afasRef);
+                                  const effectiveType = typeOverrides.get(tx.afasRef) ?? tx.type;
+                                  const isOverridden = typeOverrides.has(tx.afasRef) && typeOverrides.get(tx.afasRef) !== tx.type;
+                                  return (
+                                    <React.Fragment key={tx.afasRef}>
+                                      <tr className="bg-muted/10">
+                                        <td className="pl-10 font-mono text-xs text-muted-foreground whitespace-nowrap">
+                                          {formatDate(tx.entryDate)}
+                                        </td>
+                                        <td className="text-center">
+                                          {!tx.isConfirmed ? (
+                                            <button
+                                              onClick={() => toggleTypeOverride(tx.afasRef, tx.type)}
+                                              className="cursor-pointer"
+                                              title="Click to toggle Draw/Repayment"
+                                            >
+                                              {effectiveType === 'draw' ? (
+                                                <Badge className={cn('text-xs', isOverridden ? 'bg-accent-amber/20 text-accent-amber border-accent-amber/50 ring-1 ring-accent-amber/30' : 'bg-accent-amber/10 text-accent-amber border-accent-amber/30')}>
+                                                  Draw {isOverridden && '(edited)'}
+                                                </Badge>
+                                              ) : (
+                                                <Badge className={cn('text-xs', isOverridden ? 'bg-primary/20 text-primary border-primary/50 ring-1 ring-primary/30' : 'bg-primary/10 text-primary border-primary/30')}>
+                                                  Repayment {isOverridden && '(edited)'}
+                                                </Badge>
+                                              )}
+                                            </button>
+                                          ) : (
+                                            effectiveType === 'draw' ? (
+                                              <Badge className="bg-accent-amber/10 text-accent-amber border-accent-amber/30 text-xs">Draw</Badge>
+                                            ) : (
+                                              <Badge className="bg-primary/10 text-primary border-primary/30 text-xs">Repayment</Badge>
+                                            )
+                                          )}
+                                        </td>
+                                        <td className="numeric text-sm">{formatCurrency(tx.amount)}</td>
+                                        <td className="text-center">
+                                          {tx.isConfirmed && tx.eventStatus === 'approved' ? (
+                                            <span className="inline-flex items-center gap-1 text-xs text-accent-sage">
+                                              <CheckCircle2 className="h-3.5 w-3.5" />
+                                              Approved
+                                            </span>
+                                          ) : tx.isConfirmed ? (
+                                            <span className="inline-flex items-center gap-1 text-xs text-accent-amber">
+                                              <Clock className="h-3.5 w-3.5" />
+                                              Draft
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                              <CircleDashed className="h-3.5 w-3.5" />
+                                              Pending
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className="text-right">
+                                          <div className="flex items-center justify-end gap-1.5">
+                                            {!tx.isConfirmed && tx.loanUuid && isController && (
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => handleConfirmDraw(tx)}
+                                                disabled={confirmDraw.isPending}
+                                                className="h-7 text-xs border-accent-sage/40 text-accent-sage hover:bg-accent-sage/10"
+                                              >
+                                                Confirm
+                                              </Button>
+                                            )}
+                                            <Button
+                                              size="sm"
+                                              variant={isAfasExpanded ? 'secondary' : 'ghost'}
+                                              onClick={() => toggleDrawAfas(tx.afasRef)}
+                                              className="h-7 text-xs gap-1"
+                                            >
+                                              <Database className="h-3 w-3" />
+                                              AFAS
+                                              {isAfasExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                                            </Button>
                                           </div>
-                                          <div>
-                                            <div className="text-muted-foreground mb-0.5">Amount</div>
-                                            <div className="font-mono font-medium">{formatCurrency(tx.amount)}</div>
-                                          </div>
-                                          <div>
-                                            <div className="text-muted-foreground mb-0.5">Type</div>
-                                            <div>{tx.type === 'draw' ? 'Draw (Debit)' : 'Repayment (Credit)'}</div>
-                                          </div>
-                                          <div>
-                                            <div className="text-muted-foreground mb-0.5">AFAS Ref</div>
-                                            <div className="font-mono">{tx.afasRef}</div>
-                                          </div>
-                                        </div>
-                                        {tx.description && (
-                                          <div className="mt-2 text-xs">
-                                            <span className="text-muted-foreground">Description: </span>
-                                            <span>{tx.description}</span>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                )}
+                                        </td>
+                                      </tr>
+                                      {isAfasExpanded && (
+                                        <tr>
+                                          <td colSpan={6} className="p-0">
+                                            <div className="bg-muted/30 border-b px-6 py-3">
+                                              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-2">
+                                                AFAS Transaction Detail — Ref {tx.afasRef}
+                                              </div>
+                                              <div className="grid grid-cols-4 gap-4 text-xs">
+                                                <div>
+                                                  <div className="text-muted-foreground mb-0.5">Date</div>
+                                                  <div className="font-mono">{formatDate(tx.entryDate)}</div>
+                                                </div>
+                                                <div>
+                                                  <div className="text-muted-foreground mb-0.5">Amount</div>
+                                                  <div className="font-mono font-medium">{formatCurrency(tx.amount)}</div>
+                                                </div>
+                                                <div>
+                                                  <div className="text-muted-foreground mb-0.5">Type</div>
+                                                  <div>{tx.type === 'draw' ? 'Draw (Debit)' : 'Repayment (Credit)'}</div>
+                                                </div>
+                                                <div>
+                                                  <div className="text-muted-foreground mb-0.5">AFAS Ref</div>
+                                                  <div className="font-mono">{tx.afasRef}</div>
+                                                </div>
+                                              </div>
+                                              {tx.description && (
+                                                <div className="mt-2 text-xs">
+                                                  <span className="text-muted-foreground">Description: </span>
+                                                  <span>{tx.description}</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </React.Fragment>
+                                  );
+                                })}
                               </React.Fragment>
                             );
                           })}
                           {/* Totals */}
                           <tr className="bg-muted/30 font-medium border-t-2">
-                            <td colSpan={4} className="text-right text-xs text-muted-foreground uppercase tracking-wide">
+                            <td colSpan={3} className="text-right text-xs text-muted-foreground uppercase tracking-wide">
                               {vehicle} Total
                             </td>
                             <td className="numeric">

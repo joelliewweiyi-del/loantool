@@ -10,7 +10,6 @@ import type { LoanEvent } from '@/types/loan';
 export type ApprovalCategory =
   | 'event_approval'
   | 'draw_confirmation'
-  | 'payment_confirmation'
   | 'period_approval'
   | 'pik_rollup';
 
@@ -33,7 +32,6 @@ export interface OutstandingItem {
 export interface OutstandingApprovalsSummary {
   draftEvents: number;
   pendingDraws: number;
-  pendingPayments: number;
   pendingPeriods: number;
   pikRollups: number;
   total: number;
@@ -159,54 +157,103 @@ export function useOutstandingApprovals() {
       return labels[type] || type;
     };
 
-    // 1. Draft events
+    // 1. Draft events — aggregate by loan+month+event_type
     if (draftEvents) {
+      const eventGroups = new Map<string, {
+        eventIds: string[]; loanUuid: string; loanNumericId: string; borrowerName: string;
+        vehicle: string; yearMonth: string; latestDate: string; eventType: string;
+        totalAmount: number; count: number;
+      }>();
       for (const event of draftEvents) {
         const loan = loanMap.get(event.loan_id);
         if (!loan) continue;
+        const key = `${event.loan_id}|${event.effective_date.slice(0, 7)}|${event.event_type}`;
+        const existing = eventGroups.get(key);
+        if (existing) {
+          existing.eventIds.push(event.id);
+          existing.totalAmount += event.amount ?? 0;
+          existing.count += 1;
+          if (event.effective_date > existing.latestDate) existing.latestDate = event.effective_date;
+        } else {
+          eventGroups.set(key, {
+            eventIds: [event.id],
+            loanUuid: event.loan_id,
+            loanNumericId: loan.loan_id,
+            borrowerName: loan.borrower_name,
+            vehicle: loan.vehicle ?? '',
+            yearMonth: event.effective_date.slice(0, 7),
+            latestDate: event.effective_date,
+            eventType: event.event_type,
+            totalAmount: event.amount ?? 0,
+            count: 1,
+          });
+        }
+      }
+      for (const [, group] of eventGroups) {
+        const typeLabel = formatEventType(group.eventType);
+        const label = group.count === 1 ? typeLabel : `${group.count}× ${typeLabel}`;
         items.push({
-          id: `event-${event.id}`,
+          id: `event-${group.eventIds[0]}`,
           category: 'event_approval',
-          loanUuid: event.loan_id,
-          loanNumericId: loan.loan_id,
-          borrowerName: loan.borrower_name,
-          vehicle: loan.vehicle ?? '',
-          yearMonth: event.effective_date.slice(0, 7),
-          effectiveDate: event.effective_date,
-          label: formatEventType(event.event_type),
-          amount: event.amount,
+          loanUuid: group.loanUuid,
+          loanNumericId: group.loanNumericId,
+          borrowerName: group.borrowerName,
+          vehicle: group.vehicle,
+          yearMonth: group.yearMonth,
+          effectiveDate: group.latestDate,
+          label,
+          amount: group.totalAmount,
           initiatedBy: 'pm',
           waitingOn: 'controller',
-          actionPayload: { eventId: event.id, loanId: event.loan_id },
+          actionPayload: { eventIds: group.eventIds, eventId: group.eventIds[0], loanId: group.loanUuid },
         });
       }
     }
 
-    // 2. Unconfirmed AFAS draws/repayments
+    // 2. Unconfirmed AFAS draws/repayments — aggregate by loan+month
     if (drawsData?.transactions) {
+      const pendingByLoanMonth = new Map<string, {
+        loanUuid: string; loanId: string; borrowerName: string; vehicle: string;
+        yearMonth: string; latestDate: string; totalAmount: number; count: number;
+        draws: number; repayments: number;
+      }>();
       for (const tx of drawsData.transactions) {
         if (tx.isConfirmed) continue;
+        const key = `${tx.loanId}|${tx.entryDate.slice(0, 7)}`;
+        const existing = pendingByLoanMonth.get(key);
+        if (existing) {
+          existing.totalAmount += tx.amount;
+          existing.count += 1;
+          if (tx.type === 'draw') existing.draws += 1; else existing.repayments += 1;
+          if (tx.entryDate > existing.latestDate) existing.latestDate = tx.entryDate;
+        } else {
+          pendingByLoanMonth.set(key, {
+            loanUuid: tx.loanUuid ?? '', loanId: tx.loanId,
+            borrowerName: tx.borrowerName, vehicle: tx.vehicle,
+            yearMonth: tx.entryDate.slice(0, 7), latestDate: tx.entryDate,
+            totalAmount: tx.amount, count: 1,
+            draws: tx.type === 'draw' ? 1 : 0, repayments: tx.type === 'repayment' ? 1 : 0,
+          });
+        }
+      }
+      for (const [, group] of pendingByLoanMonth) {
+        const typeLabel = group.draws > 0 && group.repayments > 0 ? 'Mixed'
+          : group.draws > 0 ? (group.count === 1 ? 'Draw' : `${group.count} Draws`)
+          : (group.count === 1 ? 'Repayment' : `${group.count} Repayments`);
         items.push({
-          id: `draw-${tx.afasRef}`,
+          id: `draw-${group.loanId}-${group.yearMonth}`,
           category: 'draw_confirmation',
-          loanUuid: tx.loanUuid ?? '',
-          loanNumericId: tx.loanId,
-          borrowerName: tx.borrowerName,
-          vehicle: tx.vehicle,
-          yearMonth: tx.entryDate.slice(0, 7),
-          effectiveDate: tx.entryDate,
-          label: tx.type === 'draw' ? 'Draw (AFAS)' : 'Repayment (AFAS)',
-          amount: tx.amount,
+          loanUuid: group.loanUuid,
+          loanNumericId: group.loanId,
+          borrowerName: group.borrowerName,
+          vehicle: group.vehicle,
+          yearMonth: group.yearMonth,
+          effectiveDate: group.latestDate,
+          label: `${typeLabel} (AFAS)`,
+          amount: group.totalAmount,
           initiatedBy: 'afas',
           waitingOn: 'pm',
-          actionPayload: {
-            loanUuid: tx.loanUuid,
-            eventType: tx.type === 'draw' ? 'principal_draw' : 'principal_repayment',
-            effectiveDate: tx.entryDate,
-            amount: tx.amount,
-            afasRef: tx.afasRef,
-            afasDescription: tx.description,
-          },
+          actionPayload: { yearMonth: group.yearMonth },
         });
       }
     }
@@ -293,7 +340,6 @@ export function useOutstandingApprovals() {
     const summary: OutstandingApprovalsSummary = {
       draftEvents: deduped.filter(i => i.category === 'event_approval').length,
       pendingDraws: deduped.filter(i => i.category === 'draw_confirmation').length,
-      pendingPayments: deduped.filter(i => i.category === 'payment_confirmation').length,
       pendingPeriods: deduped.filter(i => i.category === 'period_approval').length,
       pikRollups: deduped.filter(i => i.category === 'pik_rollup').length,
       total: deduped.length,

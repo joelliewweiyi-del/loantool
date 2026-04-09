@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { AFAS_FOUNDING_MATCH_WINDOW_DAYS } from '@/lib/constants';
 import type { AfasDrawTransaction, LoanEvent } from '@/types/loan';
 
 export interface DrawsSummary {
@@ -12,8 +13,22 @@ export interface DrawsSummary {
   pendingCount: number;
 }
 
+export interface GroupedLoanDraws {
+  loanId: string;
+  loanUuid: string | null;
+  borrowerName: string;
+  vehicle: string;
+  transactions: AfasDrawTransaction[];
+  totalDrawAmount: number;
+  totalRepaymentAmount: number;
+  confirmedCount: number;
+  pendingCount: number;
+  dominantType: 'draw' | 'repayment' | 'mixed';
+}
+
 export interface MonthlyApprovalDraws {
   transactions: AfasDrawTransaction[];
+  groupedByLoan: GroupedLoanDraws[];
   summary: DrawsSummary;
 }
 
@@ -63,15 +78,14 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch all approved draw/repayment events (for matching against AFAS transactions)
+  // Fetch all draw/repayment events (draft + approved) for matching against AFAS transactions
   const { data: confirmedEvents, isLoading: eventsLoading } = useQuery({
     queryKey: ['afas-draw-confirmations'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('loan_events')
         .select('id, loan_id, event_type, effective_date, amount, status, metadata')
-        .in('event_type', ['principal_draw', 'principal_repayment'])
-        .eq('status', 'approved');
+        .in('event_type', ['principal_draw', 'principal_repayment']);
       if (error) throw error;
       return data as LoanEvent[];
     },
@@ -84,10 +98,13 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
     // Build maps
     const numericToLoan = new Map(loansData.map(l => [l.loan_id, l]));
 
-    // Map afas_ref → event info
+    // 1. Map afas_ref → event info (exact ref match)
     const refToEvent = new Map<string, { id: string; status: string }>();
-    // Founding events by loan UUID for proximity matching
-    const foundingByLoan = new Map<string, Array<{ date: string; id: string; status: string }>>();
+    // 2. Founding events by loan UUID for proximity matching + amount matching
+    const foundingByLoan = new Map<string, Array<{ date: string; amount: number; id: string; status: string }>>();
+    // 3. Amount+date index for dedup: loan_uuid|date|amount|event_type → available matches
+    const amountDateIndex = new Map<string, Array<{ id: string; status: string }>>();
+
     for (const event of confirmedEvents) {
       const meta = event.metadata as Record<string, unknown> | null;
       const ref = meta?.afas_ref;
@@ -96,21 +113,45 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
       }
       if (meta?.founding_event === true) {
         const arr = foundingByLoan.get(event.loan_id) ?? [];
-        arr.push({ date: event.effective_date, id: event.id, status: event.status });
+        arr.push({ date: event.effective_date, amount: event.amount ?? 0, id: event.id, status: event.status });
         foundingByLoan.set(event.loan_id, arr);
       }
+      // Build amount+date index (round to 2 decimals for tolerance)
+      const roundedAmt = Math.round((event.amount ?? 0) * 100) / 100;
+      const key = `${event.loan_id}|${event.effective_date}|${roundedAmt}|${event.event_type}`;
+      const existing = amountDateIndex.get(key) ?? [];
+      existing.push({ id: event.id, status: event.status });
+      amountDateIndex.set(key, existing);
     }
 
-    // Match founding event within ±2 days of AFAS entry
-    function findFoundingMatch(loanUuid: string, afasDate: string) {
+    // Match founding event: first by date proximity, then by amount (date-agnostic)
+    function findFoundingMatch(loanUuid: string, afasDate: string, amount: number) {
       const entries = foundingByLoan.get(loanUuid);
       if (!entries) return undefined;
       const afasTime = new Date(afasDate).getTime();
+      // Tier 2a: date proximity
       for (const e of entries) {
         const diff = Math.abs(new Date(e.date).getTime() - afasTime);
-        if (diff <= 2 * 86400000) return { id: e.id, status: e.status };
+        if (diff <= AFAS_FOUNDING_MATCH_WINDOW_DAYS * 86400000) return { id: e.id, status: e.status };
+      }
+      // Tier 2b: same loan + same amount (founding draws often have different AFAS booking date)
+      const roundedAmount = Math.round(amount * 100) / 100;
+      for (const e of entries) {
+        const roundedEventAmt = Math.round(e.amount * 100) / 100;
+        if (roundedEventAmt === roundedAmount) return { id: e.id, status: e.status };
       }
       return undefined;
+    }
+
+    // Consume one match from the amount+date index (prevents one event matching multiple AFAS rows)
+    function findAmountDateMatch(loanUuid: string | undefined, date: string, amount: number, isDraw: boolean) {
+      if (!loanUuid) return undefined;
+      const eventType = isDraw ? 'principal_draw' : 'principal_repayment';
+      const roundedAmt = Math.round(amount * 100) / 100;
+      const key = `${loanUuid}|${date}|${roundedAmt}|${eventType}`;
+      const matches = amountDateIndex.get(key);
+      if (!matches || matches.length === 0) return undefined;
+      return matches.shift(); // consume one match
     }
 
     // Filter to selected month and enrich
@@ -122,19 +163,22 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
 
       // Filter by month
       if (yearMonth) {
-        const entryMonth = row.EntryDate.slice(0, 7); // 'YYYY-MM'
+        const entryMonth = row.EntryDate.slice(0, 7);
         if (entryMonth !== yearMonth) continue;
       }
 
       const loan = numericToLoan.get(loanId);
       const afasRef = `${row.EntryNo}-${row.SeqNo}`;
-      const existing = refToEvent.get(afasRef)
-        || (loan ? findFoundingMatch(loan.id, row.EntryDate) : undefined);
       const isDraw = row.AmtDebit > 0;
       const amount = isDraw ? row.AmtDebit : row.AmtCredit;
 
       // Skip trivial test transactions (e.g. €1 bank verification)
       if (amount <= 1) continue;
+
+      // 4-tier matching: exact ref → founding (date+amount) → amount+date dedup
+      const existing = refToEvent.get(afasRef)
+        || (loan ? findFoundingMatch(loan.id, row.EntryDate, amount) : undefined)
+        || findAmountDateMatch(loan?.id, row.EntryDate, amount, isDraw);
 
       transactions.push({
         loanId,
@@ -155,6 +199,35 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
     // Sort by date descending
     transactions.sort((a, b) => b.entryDate.localeCompare(a.entryDate));
 
+    // Group transactions by loan
+    const loanGroups = new Map<string, AfasDrawTransaction[]>();
+    for (const tx of transactions) {
+      const arr = loanGroups.get(tx.loanId) ?? [];
+      arr.push(tx);
+      loanGroups.set(tx.loanId, arr);
+    }
+
+    const groupedByLoan: GroupedLoanDraws[] = [...loanGroups.entries()].map(([lid, txs]) => {
+      const first = txs[0];
+      const draws = txs.filter(t => t.type === 'draw');
+      const repayments = txs.filter(t => t.type === 'repayment');
+      const dominantType: 'draw' | 'repayment' | 'mixed' =
+        draws.length > 0 && repayments.length > 0 ? 'mixed'
+        : draws.length > 0 ? 'draw' : 'repayment';
+      return {
+        loanId: lid,
+        loanUuid: first.loanUuid,
+        borrowerName: first.borrowerName,
+        vehicle: first.vehicle,
+        transactions: txs,
+        totalDrawAmount: draws.reduce((s, t) => s + t.amount, 0),
+        totalRepaymentAmount: repayments.reduce((s, t) => s + t.amount, 0),
+        confirmedCount: txs.filter(t => t.isConfirmed).length,
+        pendingCount: txs.filter(t => !t.isConfirmed).length,
+        dominantType,
+      };
+    });
+
     const summary: DrawsSummary = {
       totalTransactions: transactions.length,
       totalDrawAmount: transactions.filter(t => t.type === 'draw').reduce((s, t) => s + t.amount, 0),
@@ -163,7 +236,7 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
       pendingCount: transactions.filter(t => !t.isConfirmed).length,
     };
 
-    return { transactions, summary };
+    return { transactions, groupedByLoan, summary };
   }, [afasData, loansData, confirmedEvents, yearMonth]);
 
   return {

@@ -1,7 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useOutstandingApprovals, type OutstandingItem, type ApprovalCategory } from '@/hooks/useOutstandingApprovals';
 import { useApproveEvent } from '@/hooks/useLoans';
-import { useConfirmDrawFromApproval } from '@/hooks/useMonthlyApprovalDraws';
 import { useAuth } from '@/hooks/useAuth';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { FinancialStrip } from '@/components/loans/FinancialStrip';
@@ -12,39 +11,27 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   Check,
   ArrowUpRight,
-  Banknote,
-  FileText,
-  Clock,
   ClipboardCheck,
   ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, parse } from 'date-fns';
 
-const categoryConfig: Record<ApprovalCategory, { label: string; shortLabel: string; className: string }> = {
+const categoryConfig: Record<ApprovalCategory, { shortLabel: string; className: string }> = {
   event_approval: {
-    label: 'Event Approval',
-    shortLabel: 'Event',
+    shortLabel: 'Approve',
     className: 'bg-primary/10 text-primary',
   },
   draw_confirmation: {
-    label: 'Draw Confirmation',
-    shortLabel: 'Draw',
+    shortLabel: 'Confirm',
     className: 'bg-accent-amber/10 text-accent-amber',
   },
-  payment_confirmation: {
-    label: 'Payment Confirmation',
-    shortLabel: 'Payment',
-    className: 'bg-accent-sage/10 text-accent-sage',
-  },
   period_approval: {
-    label: 'Period Approval',
-    shortLabel: 'Period',
+    shortLabel: 'Approve',
     className: 'bg-primary/10 text-primary',
   },
   pik_rollup: {
-    label: 'PIK Roll-Up',
-    shortLabel: 'PIK',
+    shortLabel: 'Roll Up',
     className: 'bg-accent-amber/10 text-accent-amber',
   },
 };
@@ -73,7 +60,6 @@ function getActionLink(item: OutstandingItem): string {
     case 'pik_rollup':
       return `/loans/${item.loanUuid}`;
     case 'draw_confirmation':
-    case 'payment_confirmation':
     case 'period_approval':
       return `/monthly-approval`;
     default:
@@ -85,24 +71,13 @@ export default function OutstandingApprovals() {
   const { groupedByMonth, summary, isLoading } = useOutstandingApprovals();
   const { isController, isPM } = useAuth();
   const approveEvent = useApproveEvent();
-  // Use a dummy yearMonth for the draw confirmation mutation — it invalidates all relevant queries
-  const confirmDraw = useConfirmDrawFromApproval('');
 
   const handleApproveEvent = async (item: OutstandingItem) => {
-    const { eventId, loanId } = item.actionPayload as { eventId: string; loanId: string };
-    await approveEvent.mutateAsync({ eventId, loanId });
-  };
-
-  const handleConfirmDraw = async (item: OutstandingItem) => {
-    const payload = item.actionPayload as {
-      loanUuid: string;
-      eventType: 'principal_draw' | 'principal_repayment';
-      effectiveDate: string;
-      amount: number;
-      afasRef: string;
-      afasDescription: string;
-    };
-    await confirmDraw.mutateAsync(payload);
+    const { eventIds, eventId, loanId } = item.actionPayload as { eventIds?: string[]; eventId: string; loanId: string };
+    const ids = eventIds ?? [eventId];
+    for (const id of ids) {
+      await approveEvent.mutateAsync({ eventId: id, loanId });
+    }
   };
 
   if (isLoading) {
@@ -191,7 +166,9 @@ export default function OutstandingApprovals() {
                         <CategoryBadge category={item.category} />
                       </td>
                       <td className="py-3">
-                        <span className="text-sm">{item.label}</span>
+                        <Link to={`/loans/${item.loanUuid}`} className="text-sm hover:underline">
+                          {item.label}
+                        </Link>
                         <div className="text-xs text-foreground-tertiary font-mono">
                           {formatDate(item.effectiveDate)}
                         </div>
@@ -206,38 +183,23 @@ export default function OutstandingApprovals() {
                         />
                       </td>
                       <td className="py-3 text-right pr-4">
-                        {item.category === 'event_approval' && isController && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleApproveEvent(item)}
-                            disabled={approveEvent.isPending}
-                            className="h-7 text-xs"
-                          >
-                            <Check className="h-3 w-3 mr-1" />
-                            Approve
-                          </Button>
-                        )}
-                        {item.category === 'draw_confirmation' && isPM && item.actionPayload.loanUuid && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleConfirmDraw(item)}
-                            disabled={confirmDraw.isPending}
-                            className="h-7 text-xs"
-                          >
-                            <Banknote className="h-3 w-3 mr-1" />
-                            Confirm
-                          </Button>
-                        )}
-                        {item.category === 'period_approval' && isController && (
-                          <Link to={`/monthly-approval`}>
-                            <Button size="sm" variant="ghost" className="h-7 text-xs">
-                              <ExternalLink className="h-3 w-3 mr-1" />
-                              Review
+                        {item.category === 'event_approval' && isController && (() => {
+                          const ids = (item.actionPayload as { eventIds?: string[] }).eventIds;
+                          const isMultiple = ids && ids.length > 1;
+                          return (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleApproveEvent(item)}
+                              disabled={approveEvent.isPending}
+                              className="h-7 text-xs"
+                            >
+                              <Check className="h-3 w-3 mr-1" />
+                              {isMultiple ? `Approve ${ids.length}` : 'Approve'}
                             </Button>
-                          </Link>
-                        )}
+                          );
+                        })()}
+
                         {item.category === 'pik_rollup' && isPM && (
                           <Link to={`/loans/${item.loanUuid}`}>
                             <Button size="sm" variant="outline" className="h-7 text-xs">

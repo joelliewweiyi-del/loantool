@@ -13,6 +13,7 @@ import { useTriggerDailyAccruals } from '@/hooks/useMonthlyApproval';
 import { useAfasCashPayments, useAfasDepotPayments, AfasCashPayment } from '@/hooks/useAfasCashPayments';
 import { useConfirmPayment } from '@/hooks/useConfirmPayment';
 import { useAuth } from '@/hooks/useAuth';
+import { AFAS_PAYMENT_MATCH_WINDOW_DAYS } from '@/lib/constants';
 import {
   ChevronDown,
   ChevronRight,
@@ -91,7 +92,7 @@ export function AccrualsTab({ periodAccruals, summary, isLoading, loanId, loanNu
 
       const windowStart = new Date(period.periodStart);
       const windowEnd = new Date(period.periodEnd);
-      windowEnd.setDate(windowEnd.getDate() + 14);
+      windowEnd.setDate(windowEnd.getDate() + AFAS_PAYMENT_MATCH_WINDOW_DAYS);
 
       let bestMatch: AfasCashPayment | null = null;
       let bestDelta = Infinity;

@@ -30,3 +30,16 @@ export type PipelineStage = (typeof PIPELINE_STAGES)[number]['value'];
 export function getPipelineStage(value: string | null | undefined) {
   return PIPELINE_STAGES.find(s => s.value === value) || null;
 }
+
+/** AFAS payment matching: days after period end to search for payments */
+export const AFAS_PAYMENT_MATCH_WINDOW_DAYS = 14;
+
+/** AFAS founding event proximity match window in days */
+export const AFAS_FOUNDING_MATCH_WINDOW_DAYS = 2;
+
+/** AFAS GL Account → Vehicle mapping for loan receivable accounts */
+export const AFAS_ACCOUNT_VEHICLE: Record<string, string> = {
+  '1750': 'RED IV',  // Principal
+  '1751': 'RED IV',  // PIK/accrued interest
+  '1752': 'TLF',     // TLF loan receivable
+};

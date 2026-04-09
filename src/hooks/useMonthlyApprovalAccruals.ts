@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useMonthlyApprovalDetails } from '@/hooks/useMonthlyApproval';
 import { useToast } from '@/hooks/use-toast';
 import { calculatePeriodAccruals } from '@/lib/loanCalculations';
+import { AFAS_PAYMENT_MATCH_WINDOW_DAYS } from '@/lib/constants';
 import type { LoanEvent, InterestType, Period } from '@/types/loan';
 
 export interface AfasMatch {
@@ -327,7 +328,7 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
         const loanDepot = depotByLoan.get(period.loan_id) ?? [];
         const windowStart = new Date(period.period_start);
         const windowEnd = new Date(period.period_end);
-        windowEnd.setDate(windowEnd.getDate() + 14);
+        windowEnd.setDate(windowEnd.getDate() + AFAS_PAYMENT_MATCH_WINDOW_DAYS);
 
         let bestDelta = Infinity;
         for (const payment of loanDepot) {
@@ -359,7 +360,7 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
         const loanAfas = afasByLoan.get(period.loan_id) ?? [];
         const windowStart = new Date(period.period_start);
         const windowEnd = new Date(period.period_end);
-        windowEnd.setDate(windowEnd.getDate() + 14);
+        windowEnd.setDate(windowEnd.getDate() + AFAS_PAYMENT_MATCH_WINDOW_DAYS);
 
         let bestDelta = Infinity;
         for (const payment of loanAfas) {
