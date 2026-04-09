@@ -26,10 +26,6 @@ const categoryConfig: Record<ApprovalCategory, { shortLabel: string; className: 
     shortLabel: 'Confirm',
     className: 'bg-accent-amber/10 text-accent-amber',
   },
-  period_approval: {
-    shortLabel: 'Approve',
-    className: 'bg-primary/10 text-primary',
-  },
   pik_rollup: {
     shortLabel: 'Roll Up',
     className: 'bg-accent-amber/10 text-accent-amber',
@@ -60,7 +56,6 @@ function getActionLink(item: OutstandingItem): string {
     case 'pik_rollup':
       return `/loans/${item.loanUuid}`;
     case 'draw_confirmation':
-    case 'period_approval':
       return `/monthly-approval`;
     default:
       return `/loans/${item.loanUuid}`;
@@ -100,7 +95,6 @@ export default function OutstandingApprovals() {
       <FinancialStrip items={[
         { label: 'Draft Events', value: String(summary.draftEvents), accent: summary.draftEvents > 0 ? 'amber' : undefined },
         { label: 'AFAS Draws', value: String(summary.pendingDraws), accent: summary.pendingDraws > 0 ? 'amber' : undefined },
-        { label: 'Periods', value: String(summary.pendingPeriods), accent: summary.pendingPeriods > 0 ? 'amber' : undefined },
         { label: 'PIK Roll-Ups', value: String(summary.pikRollups), accent: summary.pikRollups > 0 ? 'amber' : undefined },
         { label: 'Total', value: String(summary.total), accent: summary.total > 0 ? 'primary' : undefined },
       ]} />

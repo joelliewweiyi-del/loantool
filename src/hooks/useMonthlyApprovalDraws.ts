@@ -78,14 +78,15 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch all draw/repayment events (draft + approved) for matching against AFAS transactions
+  // Fetch draw/repayment + fee events for matching against AFAS transactions
+  // fee_invoice needed for date-total matching (draw + fee = one AFAS bank entry)
   const { data: confirmedEvents, isLoading: eventsLoading } = useQuery({
     queryKey: ['afas-draw-confirmations'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('loan_events')
         .select('id, loan_id, event_type, effective_date, amount, status, metadata')
-        .in('event_type', ['principal_draw', 'principal_repayment']);
+        .in('event_type', ['principal_draw', 'principal_repayment', 'fee_invoice']);
       if (error) throw error;
       return data as LoanEvent[];
     },
@@ -100,10 +101,18 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
 
     // 1. Map afas_ref → event info (exact ref match)
     const refToEvent = new Map<string, { id: string; status: string }>();
-    // 2. Founding events by loan UUID for proximity matching + amount matching
-    const foundingByLoan = new Map<string, Array<{ date: string; amount: number; id: string; status: string }>>();
-    // 3. Amount+date index for dedup: loan_uuid|date|amount|event_type → available matches
+    // 2. Amount+date index for dedup: loan_uuid|date|amount|event_type → available matches
     const amountDateIndex = new Map<string, Array<{ id: string; status: string }>>();
+    // 3. Date-total index: loan_uuid|date → sum of all event amounts (handles draw+fee bundles)
+    const dateTotalIndex = new Map<string, { total: number; id: string; status: string; matched: boolean }>();
+
+    // First pass: collect dates that have a principal_draw (closing/funding dates)
+    const drawDates = new Set<string>();
+    for (const event of confirmedEvents) {
+      if (event.event_type === 'principal_draw') {
+        drawDates.add(`${event.loan_id}|${event.effective_date}`);
+      }
+    }
 
     for (const event of confirmedEvents) {
       const meta = event.metadata as Record<string, unknown> | null;
@@ -111,36 +120,30 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
       if (typeof ref === 'string') {
         refToEvent.set(ref, { id: event.id, status: event.status });
       }
-      if (meta?.founding_event === true) {
-        const arr = foundingByLoan.get(event.loan_id) ?? [];
-        arr.push({ date: event.effective_date, amount: event.amount ?? 0, id: event.id, status: event.status });
-        foundingByLoan.set(event.loan_id, arr);
+      // Build amount+date index for draw/repayment events only (not fees)
+      if (event.event_type === 'principal_draw' || event.event_type === 'principal_repayment') {
+        const roundedAmt = Math.round((event.amount ?? 0) * 100) / 100;
+        const key = `${event.loan_id}|${event.effective_date}|${roundedAmt}|${event.event_type}`;
+        const existing = amountDateIndex.get(key) ?? [];
+        existing.push({ id: event.id, status: event.status });
+        amountDateIndex.set(key, existing);
       }
-      // Build amount+date index (round to 2 decimals for tolerance)
-      const roundedAmt = Math.round((event.amount ?? 0) * 100) / 100;
-      const key = `${event.loan_id}|${event.effective_date}|${roundedAmt}|${event.event_type}`;
-      const existing = amountDateIndex.get(key) ?? [];
-      existing.push({ id: event.id, status: event.status });
-      amountDateIndex.set(key, existing);
-    }
-
-    // Match founding event: first by date proximity, then by amount (date-agnostic)
-    function findFoundingMatch(loanUuid: string, afasDate: string, amount: number) {
-      const entries = foundingByLoan.get(loanUuid);
-      if (!entries) return undefined;
-      const afasTime = new Date(afasDate).getTime();
-      // Tier 2a: date proximity
-      for (const e of entries) {
-        const diff = Math.abs(new Date(e.date).getTime() - afasTime);
-        if (diff <= AFAS_FOUNDING_MATCH_WINDOW_DAYS * 86400000) return { id: e.id, status: e.status };
+      // Build date-total index ONLY for dates that have a principal_draw
+      // (closing dates where draw + fee = one AFAS bank entry)
+      const dateKey = `${event.loan_id}|${event.effective_date}`;
+      if (drawDates.has(dateKey)) {
+        const dateEntry = dateTotalIndex.get(dateKey);
+        if (dateEntry) {
+          dateEntry.total += event.amount ?? 0;
+        } else {
+          dateTotalIndex.set(dateKey, {
+            total: event.amount ?? 0,
+            id: event.id,
+            status: event.status,
+            matched: false,
+          });
+        }
       }
-      // Tier 2b: same loan + same amount (founding draws often have different AFAS booking date)
-      const roundedAmount = Math.round(amount * 100) / 100;
-      for (const e of entries) {
-        const roundedEventAmt = Math.round(e.amount * 100) / 100;
-        if (roundedEventAmt === roundedAmount) return { id: e.id, status: e.status };
-      }
-      return undefined;
     }
 
     // Consume one match from the amount+date index (prevents one event matching multiple AFAS rows)
@@ -152,6 +155,30 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
       const matches = amountDateIndex.get(key);
       if (!matches || matches.length === 0) return undefined;
       return matches.shift(); // consume one match
+    }
+
+    // Match AFAS amount against sum of all events for a loan on a date (e.g. draw + fee = one bank entry)
+    function findDateTotalMatch(loanUuid: string | undefined, afasDate: string, amount: number) {
+      if (!loanUuid) return undefined;
+      // Try exact date first, then ±2 day window
+      const dates = [afasDate];
+      for (let d = 1; d <= AFAS_FOUNDING_MATCH_WINDOW_DAYS; d++) {
+        const dt = new Date(afasDate);
+        dt.setDate(dt.getDate() - d);
+        dates.push(dt.toISOString().slice(0, 10));
+        const dt2 = new Date(afasDate);
+        dt2.setDate(dt2.getDate() + d);
+        dates.push(dt2.toISOString().slice(0, 10));
+      }
+      const roundedAmount = Math.round(amount * 100) / 100;
+      for (const date of dates) {
+        const entry = dateTotalIndex.get(`${loanUuid}|${date}`);
+        if (entry && !entry.matched && Math.abs(Math.round(entry.total * 100) / 100 - roundedAmount) <= 5) {
+          entry.matched = true;
+          return { id: entry.id, status: entry.status };
+        }
+      }
+      return undefined;
     }
 
     // Filter to selected month and enrich
@@ -175,10 +202,10 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
       // Skip trivial test transactions (e.g. €1 bank verification)
       if (amount <= 1) continue;
 
-      // 4-tier matching: exact ref → founding (date+amount) → amount+date dedup
+      // 3-tier matching: exact ref → exact amount+date → date-total (draw+fee bundles)
       const existing = refToEvent.get(afasRef)
-        || (loan ? findFoundingMatch(loan.id, row.EntryDate, amount) : undefined)
-        || findAmountDateMatch(loan?.id, row.EntryDate, amount, isDraw);
+        || findAmountDateMatch(loan?.id, row.EntryDate, amount, isDraw)
+        || findDateTotalMatch(loan?.id, row.EntryDate, amount);
 
       transactions.push({
         loanId,
