@@ -33,29 +33,18 @@ export function useAfasCashPayments(loanNumericId: string | undefined, enabled =
     queryKey: ['afas-cash-payments', loanNumericId],
     queryFn: async (): Promise<AfasCashPayment[]> => {
       // Fetch J50 credits on the loan's debtor account AND J50 debits on 1751
-      const [payRes, depotRes] = await Promise.all([
-        supabase.functions.invoke('test-afas-draws', {
-          body: {
-            filterFieldIds: 'UnitId,JournalId,AccountNo',
-            filterValues: `5,50,${loanNumericId}`,
-            operatorTypes: '1,1,1',
-            take: 500,
-          },
-        }),
-        supabase.functions.invoke('test-afas-draws', {
-          body: {
-            filterFieldIds: 'UnitId,JournalId,AccountNo',
-            filterValues: '5,50,1751',
-            operatorTypes: '1,1,1',
-            take: 500,
-          },
-        }),
+      // Query both unit 5 (RED IV) and unit 6 (TLF) and merge
+      const [payRes5, payRes6, depotRes5, depotRes6] = await Promise.all([
+        supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: `5,50,${loanNumericId}`, operatorTypes: '1,1,1', take: 500 } }),
+        supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: `6,50,${loanNumericId}`, operatorTypes: '1,1,1', take: 500 } }),
+        supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: '5,50,1751', operatorTypes: '1,1,1', take: 500 } }),
+        supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: '6,50,1751', operatorTypes: '1,1,1', take: 500 } }),
       ]);
-      if (payRes.error) throw payRes.error;
-      if (depotRes.error) throw depotRes.error;
+      if (payRes5.error) throw payRes5.error;
+      if (depotRes5.error) throw depotRes5.error;
 
-      const payRows = (payRes.data?.allData?.rows ?? []) as AfasPaymentRow[];
-      const depotRows = (depotRes.data?.allData?.rows ?? []) as AfasPaymentRow[];
+      const payRows = [...(payRes5.data?.allData?.rows ?? []), ...(payRes6.data?.allData?.rows ?? [])] as AfasPaymentRow[];
+      const depotRows = [...(depotRes5.data?.allData?.rows ?? []), ...(depotRes6.data?.allData?.rows ?? [])] as AfasPaymentRow[];
 
       // Build map: EntryNo → depot debit amount (only debits whose description
       // mentions this loan, to avoid cross-matching with other loans in the same
@@ -99,31 +88,18 @@ export function useAfasDepotPayments(loanNumericId: string | undefined, enabled 
   return useQuery({
     queryKey: ['afas-depot-payments', loanNumericId],
     queryFn: async (): Promise<AfasCashPayment[]> => {
-      const [j90Res, j50_1751Res] = await Promise.all([
-        // Method 2: J90 credits on debtor account
-        supabase.functions.invoke('test-afas-draws', {
-          body: {
-            filterFieldIds: 'UnitId,JournalId,AccountNo',
-            filterValues: `5,90,${loanNumericId}`,
-            operatorTypes: '1,1,1',
-            take: 500,
-          },
-        }),
-        // Method 1: J50 debits on account 1751
-        supabase.functions.invoke('test-afas-draws', {
-          body: {
-            filterFieldIds: 'UnitId,JournalId,AccountNo',
-            filterValues: '5,50,1751',
-            operatorTypes: '1,1,1',
-            take: 500,
-          },
-        }),
+      // Query both unit 5 (RED IV) and unit 6 (TLF) and merge
+      const [j90Res5, j90Res6, j50_1751Res5, j50_1751Res6] = await Promise.all([
+        supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: `5,90,${loanNumericId}`, operatorTypes: '1,1,1', take: 500 } }),
+        supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: `6,90,${loanNumericId}`, operatorTypes: '1,1,1', take: 500 } }),
+        supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: '5,50,1751', operatorTypes: '1,1,1', take: 500 } }),
+        supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: '6,50,1751', operatorTypes: '1,1,1', take: 500 } }),
       ]);
-      if (j90Res.error) throw j90Res.error;
-      if (j50_1751Res.error) throw j50_1751Res.error;
+      if (j90Res5.error) throw j90Res5.error;
+      if (j50_1751Res5.error) throw j50_1751Res5.error;
 
-      const j90Rows = (j90Res.data?.allData?.rows ?? []) as AfasPaymentRow[];
-      const j50_1751Rows = (j50_1751Res.data?.allData?.rows ?? []) as AfasPaymentRow[];
+      const j90Rows = [...(j90Res5.data?.allData?.rows ?? []), ...(j90Res6.data?.allData?.rows ?? [])] as AfasPaymentRow[];
+      const j50_1751Rows = [...(j50_1751Res5.data?.allData?.rows ?? []), ...(j50_1751Res6.data?.allData?.rows ?? [])] as AfasPaymentRow[];
 
       // J90 credits on the debtor account
       const j90Payments: AfasCashPayment[] = j90Rows

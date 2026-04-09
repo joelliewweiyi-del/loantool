@@ -33,20 +33,25 @@ export interface MonthlyApprovalDraws {
 }
 
 export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
-  // Fetch AFAS draws (connector #4: accounts 1750-1752)
+  // Fetch AFAS draws (connector #4: accounts 1750-1752) from both unit 5 and unit 6
   const { data: afasData, isLoading: afasLoading } = useQuery({
     queryKey: ['monthly-approval-draws-afas'],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('test-afas-draws', {
-        body: {
-          filterFieldIds: 'UnitId,JournalId,AccountNo',
-          filterValues: '5,50,1750..1752',
-          operatorTypes: '1,1,15',
-          take: 500,
-        },
-      });
-      if (error) throw error;
-      return (data?.allData?.rows ?? []) as Array<{
+      const baseBody = {
+        filterFieldIds: 'UnitId,JournalId,AccountNo',
+        operatorTypes: '1,1,15',
+        take: 500,
+      };
+      const [res5, res6] = await Promise.all([
+        supabase.functions.invoke('test-afas-draws', { body: { ...baseBody, filterValues: '5,50,1750..1752' } }),
+        supabase.functions.invoke('test-afas-draws', { body: { ...baseBody, filterValues: '6,50,1750..1752' } }),
+      ]);
+      if (res5.error) throw res5.error;
+      if (res6.error) throw res6.error;
+      return [
+        ...(res5.data?.allData?.rows ?? []),
+        ...(res6.data?.allData?.rows ?? []),
+      ] as Array<{
         AccountNo: number;
         EntryDate: string;
         AmtDebit: number;

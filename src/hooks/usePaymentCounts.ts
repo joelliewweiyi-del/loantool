@@ -25,19 +25,13 @@ export function usePaymentCounts() {
       const AFAS_GO_LIVE = '2025-12-01';
 
       // Fetch periods and AFAS payments in parallel
-      const [periodsResult, afasResult, loansResult] = await Promise.all([
+      const [periodsResult, afasRes5, afasRes6, loansResult] = await Promise.all([
         supabase
           .from('periods')
           .select('loan_id, status, payment_afas_ref, period_start')
           .lt('period_end', today),
-        supabase.functions.invoke('test-afas-draws', {
-          body: {
-            filterFieldIds: 'UnitId,JournalId,AccountNo',
-            filterValues: '5,50,400..599',
-            operatorTypes: '1,1,15',
-            take: 500,
-          },
-        }),
+        supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: '5,50,400..599', operatorTypes: '1,1,15', take: 500 } }),
+        supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: '6,50,400..599', operatorTypes: '1,1,15', take: 500 } }),
         supabase
           .from('loans')
           .select('id, loan_id'),
@@ -55,7 +49,7 @@ export function usePaymentCounts() {
 
       // Count AFAS payment refs per loan UUID
       const afasRefsByLoan = new Map<string, Set<string>>();
-      const afasRows = afasResult.data?.allData?.rows ?? [];
+      const afasRows = [...(afasRes5.data?.allData?.rows ?? []), ...(afasRes6.data?.allData?.rows ?? [])];
       for (const row of afasRows as Array<{ AccountNo: number; EntryNo: number; SeqNo: number; AmtCredit: number }>) {
         const uuid = loanIdToUuid.get(String(row.AccountNo));
         if (!uuid) continue;

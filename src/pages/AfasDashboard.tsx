@@ -69,11 +69,14 @@ function useAfasConnector(key: string, filters: { filterFieldIds: string; filter
   return useQuery({
     queryKey: ['afas-connector', key],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('test-afas-draws', {
-        body: { ...filters, take: 5000 },
-      });
-      if (error) throw error;
-      return (data?.allData?.rows ?? []) as AfasRow[];
+      // Query both unit 5 (RED IV) and unit 6 (TLF) and merge
+      const filterValues6 = filters.filterValues.replace(/^5,/, '6,');
+      const [res5, res6] = await Promise.all([
+        supabase.functions.invoke('test-afas-draws', { body: { ...filters, take: 5000 } }),
+        supabase.functions.invoke('test-afas-draws', { body: { ...filters, filterValues: filterValues6, take: 5000 } }),
+      ]);
+      if (res5.error) throw res5.error;
+      return [...(res5.data?.allData?.rows ?? []), ...(res6.data?.allData?.rows ?? [])] as AfasRow[];
     },
     staleTime: 5 * 60 * 1000,
     enabled,

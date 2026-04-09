@@ -145,54 +145,30 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
   });
 
   // AFAS cash payments (journal 50 — bank)
+  // Helper: query both AFAS units (5 = RED IV, 6 = TLF) and merge results
+  async function fetchAfasBothUnits(filterValues5: string, operatorTypes: string, take = 5000) {
+    const filterValues6 = filterValues5.replace(/^5,/, '6,');
+    const [res5, res6] = await Promise.all([
+      supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: filterValues5, operatorTypes, take } }),
+      supabase.functions.invoke('test-afas-draws', { body: { filterFieldIds: 'UnitId,JournalId,AccountNo', filterValues: filterValues6, operatorTypes, take } }),
+    ]);
+    if (res5.error) throw res5.error;
+    if (res6.error) throw res6.error;
+    return [...(res5.data?.allData?.rows ?? []), ...(res6.data?.allData?.rows ?? [])];
+  }
+
+  type AfasRow = { AccountNo: number; EntryDate: string; AmtCredit: number; AmtDebit: number; Description: string; EntryNo: number; SeqNo: number };
+
   const { data: afasData, isLoading: afasLoading } = useQuery({
     queryKey: ['monthly-approval-afas'],
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('test-afas-draws', {
-        body: {
-          filterFieldIds: 'UnitId,JournalId,AccountNo',
-          filterValues: '5,50,400..599',
-          operatorTypes: '1,1,15',
-          take: 5000,
-        },
-      });
-      if (error) throw error;
-      return (data?.allData?.rows ?? []) as Array<{
-        AccountNo: number;
-        EntryDate: string;
-        AmtCredit: number;
-        AmtDebit: number;
-        Description: string;
-        EntryNo: number;
-        SeqNo: number;
-      }>;
-    },
+    queryFn: async () => fetchAfasBothUnits('5,50,400..599', '1,1,15') as Promise<AfasRow[]>,
     staleTime: 5 * 60 * 1000,
   });
 
   // AFAS depot payments (journal 90 — memorial) — for loans with depot split
   const { data: afasDepotData, isLoading: afasDepotLoading } = useQuery({
     queryKey: ['monthly-approval-afas-depot'],
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('test-afas-draws', {
-        body: {
-          filterFieldIds: 'UnitId,JournalId,AccountNo',
-          filterValues: '5,90,400..599',
-          operatorTypes: '1,1,15',
-          take: 5000,
-        },
-      });
-      if (error) throw error;
-      return (data?.allData?.rows ?? []) as Array<{
-        AccountNo: number;
-        EntryDate: string;
-        AmtCredit: number;
-        AmtDebit: number;
-        Description: string;
-        EntryNo: number;
-        SeqNo: number;
-      }>;
-    },
+    queryFn: async () => fetchAfasBothUnits('5,90,400..599', '1,1,15') as Promise<AfasRow[]>,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -203,26 +179,7 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
   // See CLAUDE.md → "Depot Split Accounting in AFAS".
   const { data: afas1751Data, isLoading: afas1751Loading } = useQuery({
     queryKey: ['monthly-approval-afas-1751'],
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('test-afas-draws', {
-        body: {
-          filterFieldIds: 'UnitId,JournalId,AccountNo',
-          filterValues: '5,50,1751',
-          operatorTypes: '1,1,1',
-          take: 5000,
-        },
-      });
-      if (error) throw error;
-      return (data?.allData?.rows ?? []) as Array<{
-        AccountNo: number;
-        EntryDate: string;
-        AmtCredit: number;
-        AmtDebit: number;
-        Description: string;
-        EntryNo: number;
-        SeqNo: number;
-      }>;
-    },
+    queryFn: async () => fetchAfasBothUnits('5,50,1751', '1,1,1') as Promise<AfasRow[]>,
     staleTime: 5 * 60 * 1000,
   });
 
