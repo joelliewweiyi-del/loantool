@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useMonthlyApprovalDetails } from '@/hooks/useMonthlyApproval';
 import { useToast } from '@/hooks/use-toast';
-import { calculatePeriodAccruals } from '@/lib/loanCalculations';
+import { calculatePeriodAccruals, type AmortizationParams } from '@/lib/loanCalculations';
 import { AFAS_PAYMENT_MATCH_WINDOW_DAYS } from '@/lib/constants';
 import type { LoanEvent, InterestType, Period } from '@/types/loan';
 
@@ -84,7 +84,7 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
       if (loanIds.length === 0) return [];
       const { data, error } = await supabase
         .from('loans')
-        .select('id, loan_id, borrower_name, total_commitment, commitment_fee_rate, interest_type, vehicle, cash_interest_percentage')
+        .select('id, loan_id, borrower_name, total_commitment, commitment_fee_rate, interest_type, vehicle, cash_interest_percentage, amortization_amount, amortization_frequency, amortization_start_date')
         .in('id', loanIds);
       if (error) throw error;
       return data as Array<{
@@ -96,6 +96,9 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
         interest_type: InterestType;
         vehicle: string | null;
         cash_interest_percentage: number | null;
+        amortization_amount: number | null;
+        amortization_frequency: string | null;
+        amortization_start_date: string | null;
       }>;
     },
     enabled: loanIds.length > 0,
@@ -308,17 +311,26 @@ export function useMonthlyApprovalAccruals(yearMonth: string | undefined) {
     for (const period of sorted) {
       const loan = loanMap.get(period.loan_id);
       const events = eventsByLoan.get(period.loan_id) ?? [];
+      const amortizationParams: AmortizationParams | null =
+        loan?.amortization_amount && loan?.amortization_frequency && loan?.amortization_start_date
+          ? {
+              amount: loan.amortization_amount,
+              frequency: loan.amortization_frequency as AmortizationParams['frequency'],
+              startDate: loan.amortization_start_date,
+            }
+          : null;
       const accruals = calculatePeriodAccruals(
         period as Period,
         events,
         loan?.commitment_fee_rate ?? 0,
         loan?.total_commitment ?? 0,
-        loan?.interest_type ?? 'cash_pay'
+        loan?.interest_type ?? 'cash_pay',
+        amortizationParams
       );
 
       const isConfirmed = period.status === 'paid' && !!period.payment_date;
       const cashPct = (loan?.cash_interest_percentage ?? 100) / 100;
-      const expectedCashDue = accruals.interestAccrued * cashPct + accruals.commitmentFeeAccrued + accruals.feesInvoiced;
+      const expectedCashDue = accruals.interestAccrued * cashPct + accruals.commitmentFeeAccrued + accruals.feesInvoiced + accruals.amortizationDue;
       const expectedDepotDue = cashPct < 1 ? accruals.interestAccrued * (1 - cashPct) : 0;
       totalDue += accruals.totalDue;
 
