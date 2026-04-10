@@ -1,4 +1,4 @@
--- Remove Status field from get_loans_for_portal() — Portal manages status independently
+-- Facility fallback: use vehicle when facility is null/empty (e.g. RED IV loans without explicit facility)
 
 CREATE OR REPLACE FUNCTION public.get_loans_for_portal()
 RETURNS json
@@ -11,7 +11,7 @@ AS $$
   FROM (
     SELECT
       lps.loan_id                                        AS "Loan ID",
-      COALESCE(NULLIF(lps.facility, ''), lps.vehicle)     AS "Facility",
+      COALESCE(NULLIF(lps.facility, ''), lps.vehicle)    AS "Facility",
       lps.city                                           AS "City",
       lps.category                                       AS "Category",
       REPLACE(TO_CHAR(ROUND(lps.effective_commitment, 2), 'FM999999999990D00'), '.', ',')

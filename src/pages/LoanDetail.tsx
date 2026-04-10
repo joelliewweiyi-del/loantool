@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useLoan, useLoanEvents, useLoanPeriods, useLoanFacilities, useCreateLoanEvent, useApproveEvent, useDeleteLoan } from '@/hooks/useLoans';
+import { useLoan, useLoanEvents, useLoanPeriods, useLoanFacilities, useCreateLoanEvent, useApproveEvent, useDeleteLoan, useCloseOutLoan } from '@/hooks/useLoans';
 import { useAccruals } from '@/hooks/useAccruals';
 import { useAfasDepotPayments } from '@/hooks/useAfasCashPayments';
 import { useAuth } from '@/hooks/useAuth';
@@ -81,6 +81,7 @@ export default function LoanDetail() {
   const createEvent = useCreateLoanEvent();
   const approveEvent = useApproveEvent();
   const deleteLoan = useDeleteLoan();
+  const closeOutLoan = useCloseOutLoan();
 
   const [isEventOpen, setIsEventOpen] = useState(false);
   const [eventType, setEventType] = useState<EventType>('principal_draw');
@@ -279,21 +280,59 @@ export default function LoanDetail() {
         </div>
       )}
 
+      {/* Close-Out Banner — when loan is repaid but periods need cleanup */}
+      {!isMobile && (() => {
+        const isRepaid = loan.status === 'repaid' || accrualsSummary.currentPrincipal === 0;
+        const lastRepayment = events?.filter(e => e.event_type === 'principal_repayment' && e.status === 'approved')
+          .sort((a, b) => b.effective_date.localeCompare(a.effective_date))[0];
+        const hasOpenFuturePeriods = lastRepayment && periods?.some(
+          p => p.period_start > lastRepayment.effective_date && (p.status === 'open' || p.status === 'submitted')
+        );
+        if (!isRepaid || !hasOpenFuturePeriods) return null;
+        return (
+          <div className="flex items-center justify-between rounded-lg border border-accent-sage/40 bg-accent-sage/5 px-4 py-3">
+            <p className="text-sm text-foreground-secondary">
+              This loan is <span className="font-semibold text-accent-sage">repaid</span> but has uncancelled future periods.
+              Close out to truncate the final period and cancel remaining ones.
+            </p>
+            {isController && (
+              <Button
+                size="sm"
+                onClick={() => closeOutLoan.mutate({ loanId: loan.id })}
+                disabled={closeOutLoan.isPending}
+              >
+                {closeOutLoan.isPending ? 'Closing out...' : 'Close Out Loan'}
+              </Button>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Key Loan Metrics Strip */}
-      <FinancialStrip items={isMobile ? [
-        { label: 'Outstanding', value: formatCurrencyShort(accrualsSummary.currentPrincipal), accent: 'primary' },
-        { label: 'Rate', value: formatPercent(accrualsSummary.currentRate, 2) },
-        { label: 'Commitment', value: formatCurrencyShort(accrualsSummary.totalCommitment) },
-      ] : [
-        { label: 'Outstanding', value: formatCurrency(accrualsSummary.currentPrincipal), accent: 'primary' },
-        { label: 'Commitment', value: formatCurrency(accrualsSummary.totalCommitment) },
-        { label: 'Rate', value: formatPercent(accrualsSummary.currentRate, 2) },
-        { label: 'PIK Capitalized', value: formatCurrency(periodAccruals.reduce((sum, p) => sum + p.pikCapitalized, 0)), accent: 'amber' },
-        { label: `Undrawn${accrualsSummary.commitmentFeeRate > 0 ? ` @ ${formatPercent(accrualsSummary.commitmentFeeRate, 2)}` : ''}`, value: formatCurrency(accrualsSummary.currentUndrawn), accent: 'sage' },
-        { label: 'Start', value: formatDate(loan.loan_start_date) || '—' },
-        { label: 'Maturity', value: formatDate(loan.maturity_date) || '—' },
-        ...(loan.walt != null ? [{ label: 'WALT', value: `${loan.walt}y` }] : []),
-      ]} />
+      <FinancialStrip items={(() => {
+        const showInitial = accrualsSummary.initialLoanAmount > 0 && Math.abs(accrualsSummary.initialLoanAmount - accrualsSummary.currentPrincipal) > 1;
+        const hasCommitment = accrualsSummary.totalCommitment > 0;
+        return isMobile ? [
+          ...(showInitial ? [{ label: 'Initial Loan', value: formatCurrencyShort(accrualsSummary.initialLoanAmount) }] : []),
+          { label: 'Outstanding', value: formatCurrencyShort(accrualsSummary.currentPrincipal), accent: 'primary' as const },
+          { label: 'Rate', value: formatPercent(accrualsSummary.currentRate, 2) },
+          ...(hasCommitment ? [{ label: 'Commitment', value: formatCurrencyShort(accrualsSummary.totalCommitment) }] : []),
+        ] : [
+          ...(showInitial ? [{ label: 'Initial Loan', value: formatCurrency(accrualsSummary.initialLoanAmount) }] : []),
+          { label: 'Outstanding', value: formatCurrency(accrualsSummary.currentPrincipal), accent: 'primary' as const },
+          ...(hasCommitment ? [
+            { label: 'Commitment', value: formatCurrency(accrualsSummary.totalCommitment) },
+          ] : []),
+          { label: 'Rate', value: formatPercent(accrualsSummary.currentRate, 2) },
+          { label: 'PIK Capitalized', value: formatCurrency(periodAccruals.reduce((sum, p) => sum + p.pikCapitalized, 0)), accent: 'amber' as const },
+          ...(hasCommitment ? [
+            { label: `Undrawn${accrualsSummary.commitmentFeeRate > 0 ? ` @ ${formatPercent(accrualsSummary.commitmentFeeRate, 2)}` : ''}`, value: formatCurrency(accrualsSummary.currentUndrawn), accent: 'sage' as const },
+          ] : []),
+          { label: 'Start', value: formatDate(loan.loan_start_date) || '—' },
+          { label: 'Maturity', value: formatDate(loan.maturity_date) || '—' },
+          ...(loan.walt != null ? [{ label: 'WALT', value: `${loan.walt}y` }] : []),
+        ];
+      })()} />
 
       {/* Depot Balance Strip — only for loans with a depot reserve event */}
       {depotReserve > 0 && (

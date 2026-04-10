@@ -92,7 +92,9 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
       const loanId = (loan as any).loan_id || loan.id;
       const periodMonth = String(new Date(selectedPeriod.periodEnd).getMonth() + 1).padStart(2, '0');
       const year = new Date(selectedPeriod.periodEnd).getFullYear();
-      pdf.save(`RAX Finance Interest Notice - ${loanId} - P${periodMonth} ${year}.pdf`);
+      const isAflosnota = selectedPeriod.closingPrincipal === 0 && selectedPeriod.principalRepaid > 0;
+      const docLabel = isAflosnota ? 'Aflosnota' : 'Interest Notice';
+      pdf.save(`RAX Finance ${docLabel} - ${loanId} - P${periodMonth} ${year}.pdf`);
     } catch (err) {
       console.error('PDF generation failed:', err);
     } finally {
@@ -109,10 +111,13 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
     return <div className="animate-pulse h-96 bg-muted rounded-lg" />;
   }
 
-  // Sort periods oldest to newest
-  const sortedPeriods = [...periodAccruals].sort(
-    (a, b) => new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
-  );
+  // Sort periods oldest to newest (exclude cancelled)
+  const sortedPeriods = [...periodAccruals]
+    .filter(p => p.status !== 'cancelled')
+    .sort((a, b) => new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime());
+
+  // Detect if selected period is a repayment/aflosnota (closing principal = 0 after repayment)
+  const isRepaymentNotice = selectedPeriod != null && selectedPeriod.closingPrincipal === 0 && selectedPeriod.principalRepaid > 0;
 
   // Get events for selected period
   const periodEvents = selectedPeriod 
@@ -149,6 +154,11 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
                     </div>
                     <div className="flex items-center gap-2 mt-1">
                       <NoticeStatusBadge status={period.status} />
+                      {period.closingPrincipal === 0 && period.principalRepaid > 0 && (
+                        <span className="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-semibold bg-accent-sage/10 text-accent-sage">
+                          Aflosnota
+                        </span>
+                      )}
                       <span className="text-xs text-muted-foreground">
                         {formatCurrency(period.interestAccrued + period.commitmentFeeAccrued)}
                       </span>
@@ -186,8 +196,13 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
             {/* Notice Header Actions */}
             <div className="bg-muted/50 border-b px-6 py-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="font-medium">Interest Notice Preview</span>
+                <span className="font-medium">{isRepaymentNotice ? 'Aflosnota / Repayment Notice' : 'Interest Notice Preview'}</span>
                 <NoticeStatusBadge status={selectedPeriod.status} />
+                {isRepaymentNotice && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-accent-sage/10 text-accent-sage">
+                    Final
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" onClick={handlePrint}>
@@ -217,6 +232,7 @@ export function NoticePreviewTab({ loan, periodAccruals, summary, isLoading, eve
                 bankConfig={bankConfig}
                 bankIncomplete={bankIncomplete}
                 whiteLogo={whiteLogo}
+                isRepaymentNotice={isRepaymentNotice}
               />
               </div>
             </CardContent>
@@ -241,9 +257,10 @@ interface NoticeDocumentProps {
   bankConfig?: Record<string, string>;
   bankIncomplete: boolean;
   whiteLogo: string;
+  isRepaymentNotice: boolean;
 }
 
-function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncomplete, whiteLogo }: NoticeDocumentProps) {
+function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncomplete, whiteLogo, isRepaymentNotice }: NoticeDocumentProps) {
   const endDate = new Date(period.periodEnd);
   const startDate = new Date(period.periodStart);
   const isInAdvance = loan.payment_timing === 'in_advance';
@@ -265,6 +282,14 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
   const periodMonth = String(new Date(period.periodEnd).getMonth() + 1).padStart(2, '0');
   const periodYear = new Date(period.periodEnd).getFullYear();
   const paymentRef = `${loanId}_P${periodMonth}_${periodYear}`;
+
+  // Settlement breakdown: separate exit fees from other fees
+  const exitFeeAmount = events
+    .filter(e => e.event_type === 'fee_invoice' && (e.metadata as Record<string, unknown>)?.fee_type === 'exit')
+    .reduce((sum, e) => sum + (e.amount || 0), 0);
+  const otherFeesAmount = period.feesInvoiced - exitFeeAmount;
+  const repaymentEvent = events.find(e => e.event_type === 'principal_repayment');
+  const repaymentDateStr = repaymentEvent ? formatDate(repaymentEvent.effective_date) : formatDate(period.periodEnd);
 
   return (
     <div className="text-[13px] leading-relaxed text-foreground" style={{ fontFamily: "'Barlow', sans-serif" }}>
@@ -304,6 +329,7 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
 
           {/* Subject block */}
           <div>
+            <p className="font-semibold text-[14px]">{isRepaymentNotice ? 'Aflosnota / Repayment Notice' : 'Interest Notice'}</p>
             <p><span className="font-semibold">Reference:</span> {paymentRef}</p>
             <p>{loan.borrower_name}</p>
             <p>Loan number: {loanId}</p>
@@ -312,71 +338,134 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
           {/* Salutation + body */}
           <div>
             <p className="mb-2">Dear Sir / Madam,</p>
-            <p>
-              We hereby provide you with a statement of the outstanding amounts for the current period
-              regarding the above-mentioned loan.
-            </p>
+            {isRepaymentNotice ? (
+              <p>
+                We hereby confirm receipt of the full repayment of the above-mentioned loan facility
+                on {repaymentDateStr}. Please find below the final settlement statement. With this
+                repayment, all obligations under this facility are discharged.
+              </p>
+            ) : (
+              <p>
+                We hereby provide you with a statement of the outstanding amounts for the current period
+                regarding the above-mentioned loan.
+              </p>
+            )}
           </div>
 
-          {/* ── Charges block ── */}
-          <div>
-            {/* Interest lines */}
-            <div className="mb-1">
-              {period.interestSegments.map((segment, idx) => (
-                <p key={idx}>
-                  Interest {formatPercent(segment.rate)}, {segment.days} day(s) ({formatDate(segment.startDate)} – {formatDate(segment.endDate)})
-                </p>
-              ))}
-              <div className="flex justify-between items-baseline">
-                <span>over EUR {formatAmountBare(period.openingPrincipal)} (30/360)</span>
-                <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.interestAccrued)}</span>
+          {/* ── Charges / Settlement block ── */}
+          {isRepaymentNotice ? (
+            /* ── Settlement Summary (repayment notice) ── */
+            <div>
+              <p className="text-[11px] tracking-[0.12em] uppercase font-semibold mb-3" style={{ color: RAX_NAVY }}>
+                Settlement Summary
+              </p>
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-baseline">
+                  <span>Principal repaid</span>
+                  <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.principalRepaid)}</span>
+                </div>
+                <div className="flex justify-between items-baseline">
+                  <span>Accrued interest ({formatDate(period.periodStart)} – {formatDate(period.periodEnd)}, 30/360)</span>
+                  <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.interestAccrued)}</span>
+                </div>
+                {period.commitmentFeeAccrued > 0 && (
+                  <div className="flex justify-between items-baseline">
+                    <span>Commitment fee</span>
+                    <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.commitmentFeeAccrued)}</span>
+                  </div>
+                )}
+                {exitFeeAmount > 0 && (
+                  <div className="flex justify-between items-baseline">
+                    <span>Exit fee</span>
+                    <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(exitFeeAmount)}</span>
+                  </div>
+                )}
+                {otherFeesAmount > 0 && (
+                  <div className="flex justify-between items-baseline">
+                    <span>Other fees</span>
+                    <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(otherFeesAmount)}</span>
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-between items-baseline mt-3 py-2.5 px-3 -mx-3" style={{ backgroundColor: `${RAX_NAVY}0D` }}>
+                <span className="font-semibold">Total settlement</span>
+                <span className="tabular-nums text-right font-semibold">
+                  EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.totalDue + period.principalRepaid)}
+                </span>
               </div>
             </div>
-
-            {/* Commitment fee */}
-            {period.commitmentFeeAccrued > 0 && (
+          ) : (
+            /* ── Regular charges block (interest notice) ── */
+            <div>
+              {/* Interest lines */}
               <div className="mb-1">
-                {period.commitmentFeeSegments.map((segment, idx) => (
+                {period.interestSegments.map((segment, idx) => (
                   <p key={idx}>
-                    Commitment fee {formatPercent(segment.feeRate)}, {segment.days} day(s)
+                    Interest {formatPercent(segment.rate)}, {segment.days} day(s) ({formatDate(segment.startDate)} – {formatDate(segment.endDate)})
                   </p>
                 ))}
                 <div className="flex justify-between items-baseline">
-                  <span>over EUR {formatAmountBare(period.commitmentFeeSegments[0]?.undrawn || 0)} undrawn (30/360)</span>
-                  <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.commitmentFeeAccrued)}</span>
+                  <span>over EUR {formatAmountBare(period.openingPrincipal)} (30/360)</span>
+                  <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.interestAccrued)}</span>
                 </div>
               </div>
-            )}
 
-            {/* Fees invoiced */}
-            {period.feesInvoiced > 0 && (
-              <div className="mb-1">
-                <div className="flex justify-between items-baseline">
-                  <span>Fees invoiced</span>
-                  <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.feesInvoiced)}</span>
+              {/* Commitment fee */}
+              {period.commitmentFeeAccrued > 0 && (
+                <div className="mb-1">
+                  {period.commitmentFeeSegments.map((segment, idx) => (
+                    <p key={idx}>
+                      Commitment fee {formatPercent(segment.feeRate)}, {segment.days} day(s)
+                    </p>
+                  ))}
+                  <div className="flex justify-between items-baseline">
+                    <span>over EUR {formatAmountBare(period.commitmentFeeSegments[0]?.undrawn || 0)} undrawn (30/360)</span>
+                    <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.commitmentFeeAccrued)}</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Scheduled amortization */}
-            {period.amortizationDue > 0 && (
-              <div className="mb-1">
-                <div className="flex justify-between items-baseline">
-                  <span>Scheduled repayment</span>
-                  <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.amortizationDue)}</span>
+              {/* Fees invoiced */}
+              {period.feesInvoiced > 0 && (
+                <div className="mb-1">
+                  <div className="flex justify-between items-baseline">
+                    <span>Fees invoiced</span>
+                    <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.feesInvoiced)}</span>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* Total amount due */}
-            <div className="flex justify-between items-baseline mt-3 py-2.5 px-3 -mx-3" style={{ backgroundColor: `${RAX_NAVY}0D` }}>
-              <span className="font-semibold">{isPik ? 'Total interest capitalised' : 'Total amount due'}</span>
-              <span className="tabular-nums text-right font-semibold">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.totalDue)}</span>
+              {/* Scheduled amortization */}
+              {period.amortizationDue > 0 && (
+                <div className="mb-1">
+                  <div className="flex justify-between items-baseline">
+                    <span>Scheduled repayment</span>
+                    <span className="tabular-nums text-right">EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.amortizationDue)}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Total amount due */}
+              <div className="flex justify-between items-baseline mt-3 py-2.5 px-3 -mx-3" style={{ backgroundColor: `${RAX_NAVY}0D` }}>
+                <span className="font-semibold">
+                  {isPik ? 'Total interest capitalised' : 'Total amount due'}
+                </span>
+                <span className="tabular-nums text-right font-semibold">
+                  EUR{'\u00A0\u00A0\u00A0\u00A0'}{formatAmountBare(period.totalDue)}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* ── Payment instructions (cash-pay) ── */}
-          {!isPik && (
+          {/* ── Payment instructions (cash-pay) / Settlement confirmation (repayment) ── */}
+          {isRepaymentNotice ? (
+            <div>
+              <p>
+                The above settlement was received on {repaymentDateStr}. With this repayment,
+                the loan facility has been fully discharged. No further obligations remain.
+              </p>
+            </div>
+          ) : !isPik && (
             <div>
               {bankIncomplete && (
                 <div className="flex items-start gap-2 text-xs text-foreground-secondary border border-border rounded-sm px-3 py-2 mb-3 print:hidden">
@@ -428,7 +517,7 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
           ═══════════════════════════════════════════════════════════ */}
       <div className="my-10 flex items-center gap-3 print:hidden">
         <div className="flex-1 border-t border-dashed border-foreground/15" />
-        <span className="text-[11px] text-foreground-muted tracking-widest uppercase">Page 2 — Calculation Detail</span>
+        <span className="text-[11px] text-foreground-muted tracking-widest uppercase">Page 2 — {isRepaymentNotice ? 'Repayment Calculation Detail' : 'Calculation Detail'}</span>
         <div className="flex-1 border-t border-dashed border-foreground/15" />
       </div>
       <div data-pdf-page="2" className="max-w-[640px] mx-auto break-before-page" style={{ pageBreakBefore: 'always' }}>
@@ -437,7 +526,7 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
           <div className="flex justify-between items-center px-5 py-4" style={{ backgroundColor: RAX_NAVY }}>
             <img src={whiteLogo} alt="RAX Finance" className="h-8" />
             <div className="text-right text-[11px] text-white/70">
-              <p className="font-medium text-white">Calculation Detail</p>
+              <p className="font-medium text-white">{isRepaymentNotice ? 'Repayment Calculation Detail' : 'Calculation Detail'}</p>
               <p className="tabular-nums">{loan.borrower_name} — {loanId}</p>
               <p className="tabular-nums">{formatDate(period.periodStart)} – {formatDate(period.periodEnd)}</p>
             </div>
@@ -643,9 +732,15 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
             </div>
           )}
 
-          {/* ── Charge Summary ── */}
+          {/* ─��� Charge Summary ── */}
           <div className="pt-4 px-4 pb-4" style={{ backgroundColor: `${RAX_NAVY}0D` }}>
             <div className="space-y-1 text-[11px]">
+              {isRepaymentNotice && (
+                <div className="flex justify-between">
+                  <span className="text-foreground-tertiary">Principal repaid</span>
+                  <span className="tabular-nums text-foreground-secondary">{formatCurrency(period.principalRepaid)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-foreground-tertiary">Interest accrued</span>
                 <span className="tabular-nums text-foreground-secondary">{formatCurrency(period.interestAccrued)}</span>
@@ -656,22 +751,41 @@ function NoticeDocument({ loan, period, summary, events, bankConfig, bankIncompl
                   <span className="tabular-nums text-foreground-secondary">{formatCurrency(period.commitmentFeeAccrued)}</span>
                 </div>
               )}
-              {period.feesInvoiced > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-foreground-tertiary">Fees invoiced</span>
-                  <span className="tabular-nums text-foreground-secondary">{formatCurrency(period.feesInvoiced)}</span>
-                </div>
-              )}
-              {period.amortizationDue > 0 && (
-                <div className="flex justify-between">
-                  <span className="text-foreground-tertiary">Scheduled repayment</span>
-                  <span className="tabular-nums text-foreground-secondary">{formatCurrency(period.amortizationDue)}</span>
-                </div>
+              {isRepaymentNotice ? (
+                <>
+                  {exitFeeAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-foreground-tertiary">Exit fee</span>
+                      <span className="tabular-nums text-foreground-secondary">{formatCurrency(exitFeeAmount)}</span>
+                    </div>
+                  )}
+                  {otherFeesAmount > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-foreground-tertiary">Other fees</span>
+                      <span className="tabular-nums text-foreground-secondary">{formatCurrency(otherFeesAmount)}</span>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {period.feesInvoiced > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-foreground-tertiary">Fees invoiced</span>
+                      <span className="tabular-nums text-foreground-secondary">{formatCurrency(period.feesInvoiced)}</span>
+                    </div>
+                  )}
+                  {period.amortizationDue > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-foreground-tertiary">Scheduled repayment</span>
+                      <span className="tabular-nums text-foreground-secondary">{formatCurrency(period.amortizationDue)}</span>
+                    </div>
+                  )}
+                </>
               )}
               <div className="flex justify-between pt-2 text-[13px] font-semibold">
-                <span>{isPik ? 'Total capitalised' : 'Total due'}</span>
+                <span>{isRepaymentNotice ? 'Total settlement' : isPik ? 'Total capitalised' : 'Total due'}</span>
                 <span className="tabular-nums text-primary">
-                  {formatCurrency(period.totalDue)}
+                  {formatCurrency(isRepaymentNotice ? period.totalDue + period.principalRepaid : period.totalDue)}
                 </span>
               </div>
             </div>

@@ -710,6 +710,7 @@ export interface AccrualsSummary {
   totalPikCapitalized: number;
   totalAmortizationDue: number;
   totalDue: number;
+  initialLoanAmount: number;
   currentPrincipal: number;
   currentRate: number;
   averageRate: number;
@@ -737,6 +738,7 @@ export function calculateAccrualsSummary(
       totalPikCapitalized: 0,
       totalAmortizationDue: 0,
       totalDue: 0,
+      initialLoanAmount: 0,
       currentPrincipal: 0,
       currentRate: 0,
       averageRate: 0,
@@ -767,8 +769,10 @@ export function calculateAccrualsSummary(
   let currentPrincipal = 0;
   
   if (approvedEvents && approvedEvents.length > 0) {
+    // Sort chronologically — events may arrive in DESC order from the query
+    const sorted = sortEventsByDate(approvedEvents);
     // Calculate outstanding from approved events only
-    for (const event of approvedEvents) {
+    for (const event of sorted) {
       if (event.status !== 'approved') continue;
       
       switch (event.event_type) {
@@ -803,6 +807,7 @@ export function calculateAccrualsSummary(
     totalPikCapitalized: periodAccruals.reduce((sum, pa) => sum + pa.pikCapitalized, 0),
     totalAmortizationDue: periodAccruals.reduce((sum, pa) => sum + pa.amortizationDue, 0),
     totalDue: periodAccruals.reduce((sum, pa) => sum + pa.totalDue, 0),
+    initialLoanAmount: periodAccruals[0].closingPrincipal,
     currentPrincipal,
     currentRate: lastPeriod.closingRate,
     averageRate,

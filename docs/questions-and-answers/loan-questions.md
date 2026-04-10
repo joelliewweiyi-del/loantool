@@ -170,6 +170,14 @@ Interest costs for the Mogelijk and Prospr loans can be funded from rental incom
 
 The site is a redevelopment location for the construction of four residential towers. Prior to redevelopment, the ground lease canon will be bought out — this is included in the development budget. Planning permission is expected by end of 2027.
 
+**Follow-up (7 April 2026) — How much will the buyouts be and how will the cash be sourced?**
+
+The ground lease buyout is budgeted at EUR 28m in the development budget and will be financed with a construction financing facility and potentially (partial) forward sale of the project.
+
+**Follow-up — Is that figure variable based on a formula around the development or is it just the expected fixed amount to buy out the lease?**
+
+It is an assumption; part of the negotiation arrangements with the municipality and also dependent on the final programme.
+
 ---
 
 ### Q2: Do you have visibility of updated rent roll / leasing activity?
@@ -364,6 +372,14 @@ Vacant value confirmed significantly above current rent (EUR 124k p.a. gross). N
 Ground lease canon will be bought out prior to redevelopment (in development budget). Planning permission expected end 2027.
 
 > **Source:** Cerberus Q&A (answered previously)
+
+**Follow-up (7 April 2026) — How much will the buyouts be and how will the cash be sourced?**
+
+The ground lease buyout is budgeted at EUR 28m in the development budget and will be financed with a construction financing facility and potentially (partial) forward sale of the project.
+
+**Follow-up — Is that figure variable based on a formula around the development or is it just the expected fixed amount to buy out the lease?**
+
+It is an assumption; part of the negotiation arrangements with the municipality and also dependent on the final programme.
 
 ### Q: What was the updated valuation?
 

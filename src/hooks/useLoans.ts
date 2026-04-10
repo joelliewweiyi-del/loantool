@@ -260,6 +260,11 @@ export function useCreateLoan() {
       additional_info?: string | null;
       google_maps_url?: string | null;
       kadastrale_kaart_url?: string | null;
+      cash_interest_percentage?: number | null;
+      amortization_amount?: number | null;
+      amortization_frequency?: string | null;
+      amortization_start_date?: string | null;
+      payment_timing?: string | null;
     }) => {
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) throw new Error('Not authenticated');
@@ -295,13 +300,18 @@ export function useCreateLoan() {
           await createFoundingEvent('commitment_set', loanData.total_commitment, null, { auto_generated: true, description: 'Initial commitment' });
         if (loanData.interest_rate && loanData.interest_rate > 0)
           await createFoundingEvent('interest_rate_set', null, loanData.interest_rate, { auto_generated: true, description: 'Initial rate' });
-        if (loanData.outstanding && loanData.outstanding > 0)
-          await createFoundingEvent('principal_draw', loanData.outstanding, null, { auto_generated: true, description: 'Opening principal draw' });
+        if (loanData.outstanding && loanData.outstanding > 0) {
+          // When fees are withheld (pik), the actual cash out is outstanding minus the withheld fee.
+          // The fee_invoice (pik) event adds back to principal, so net outstanding = what user entered.
+          const withheldFees = isFeeCapitalized ? (arrangement_fee || 0) : 0;
+          const cashOut = loanData.outstanding - withheldFees;
+          await createFoundingEvent('principal_draw', cashOut, null, { auto_generated: true, description: 'Opening principal draw' });
+        }
         if (arrangement_fee && arrangement_fee > 0)
           await createFoundingEvent('fee_invoice', arrangement_fee, null, {
             auto_generated: true, fee_type: 'arrangement',
             payment_type: isFeeCapitalized ? 'pik' : 'cash',
-            description: 'Arrangement fee (withheld from borrower)',
+            description: isFeeCapitalized ? 'Arrangement fee (withheld)' : 'Arrangement fee',
           });
         if (commitment_fee_oneoff && commitment_fee_oneoff > 0)
           await createFoundingEvent('fee_invoice', commitment_fee_oneoff, null, {
@@ -454,22 +464,137 @@ export function useApproveEvent() {
       if (interestRate !== null) updates.interest_rate = interestRate;
       if (totalCommitment !== null) updates.total_commitment = totalCommitment;
 
+      // Auto-detect full repayment: if outstanding reaches 0, mark loan as repaid
+      const isFullyRepaid = outstanding === 0 && (events || []).some(e => e.event_type === 'principal_repayment');
+      if (isFullyRepaid) {
+        updates.status = 'repaid';
+        updates.repaid_at = new Date().toISOString();
+      }
+
       const { error: updateError } = await supabase
         .from('loans')
         .update(updates)
         .eq('id', loanId);
       if (updateError) throw updateError;
 
-      return { eventId, loanId };
+      // If fully repaid, cancel future periods and truncate the final period
+      if (isFullyRepaid) {
+        // Find the last repayment date
+        const repaymentDate = (events || [])
+          .filter(e => e.event_type === 'principal_repayment')
+          .sort((a, b) => b.effective_date.localeCompare(a.effective_date))[0]?.effective_date;
+
+        if (repaymentDate) {
+          // Cancel all future periods (periods starting after repayment date)
+          await supabase
+            .from('periods')
+            .update({ status: 'cancelled' })
+            .eq('loan_id', loanId)
+            .gt('period_start', repaymentDate)
+            .in('status', ['open', 'submitted']);
+
+          // Truncate the period containing the repayment date (only if open/submitted)
+          await supabase
+            .from('periods')
+            .update({ period_end: repaymentDate })
+            .eq('loan_id', loanId)
+            .lte('period_start', repaymentDate)
+            .gte('period_end', repaymentDate)
+            .in('status', ['open', 'submitted']);
+        }
+      }
+
+      return { eventId, loanId, isFullyRepaid };
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['loan-events', variables.loanId] });
       queryClient.invalidateQueries({ queryKey: ['loans', variables.loanId] });
       queryClient.invalidateQueries({ queryKey: ['loans'] });
-      toast({ title: 'Event approved successfully' });
+      queryClient.invalidateQueries({ queryKey: ['loan-periods', variables.loanId] });
+      if (result.isFullyRepaid) {
+        toast({ title: 'Event approved — loan fully repaid', description: 'Loan status set to repaid. Future periods cancelled.' });
+      } else {
+        toast({ title: 'Event approved successfully' });
+      }
     },
     onError: (error) => {
       toast({ title: 'Failed to approve event', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+/**
+ * Close out a repaid loan: cancel future periods, truncate the final period,
+ * and ensure status is 'repaid'. Idempotent — safe to run multiple times.
+ */
+export function useCloseOutLoan() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ loanId }: { loanId: string }) => {
+      // Fetch all approved events to replay state
+      const { data: events, error: eventsError } = await supabase
+        .from('loan_events')
+        .select('*')
+        .eq('loan_id', loanId)
+        .eq('status', 'approved')
+        .order('effective_date', { ascending: true });
+      if (eventsError) throw eventsError;
+
+      // Verify outstanding is 0
+      let outstanding = 0;
+      for (const e of events || []) {
+        if (e.event_type === 'principal_draw') outstanding += (e.amount || 0);
+        if (e.event_type === 'principal_repayment') outstanding -= (e.amount || 0);
+        if (e.event_type === 'pik_capitalization_posted') outstanding += (e.amount || 0);
+      }
+      if (Math.abs(outstanding) > 0.01) {
+        throw new Error(`Cannot close out: outstanding balance is ${outstanding.toFixed(2)}`);
+      }
+
+      // Find the last repayment date
+      const repaymentDate = (events || [])
+        .filter(e => e.event_type === 'principal_repayment')
+        .sort((a, b) => b.effective_date.localeCompare(a.effective_date))[0]?.effective_date;
+
+      if (!repaymentDate) {
+        throw new Error('No repayment event found');
+      }
+
+      // Set loan status to repaid
+      await supabase
+        .from('loans')
+        .update({ status: 'repaid', repaid_at: repaymentDate, outstanding: 0, updated_at: new Date().toISOString() })
+        .eq('id', loanId);
+
+      // Cancel all future periods
+      await supabase
+        .from('periods')
+        .update({ status: 'cancelled' })
+        .eq('loan_id', loanId)
+        .gt('period_start', repaymentDate)
+        .in('status', ['open', 'submitted']);
+
+      // Truncate the period containing the repayment date
+      await supabase
+        .from('periods')
+        .update({ period_end: repaymentDate })
+        .eq('loan_id', loanId)
+        .lte('period_start', repaymentDate)
+        .gte('period_end', repaymentDate)
+        .in('status', ['open', 'submitted']);
+
+      return { loanId, repaymentDate };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      queryClient.invalidateQueries({ queryKey: ['loans', result.loanId] });
+      queryClient.invalidateQueries({ queryKey: ['loan-periods', result.loanId] });
+      toast({ title: 'Loan closed out', description: `Periods truncated to ${result.repaymentDate}. Future periods cancelled.` });
+    },
+    onError: (error) => {
+      toast({ title: 'Failed to close out loan', description: error.message, variant: 'destructive' });
     },
   });
 }
@@ -564,6 +689,9 @@ export function useUpdateLoan() {
 
   return useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<Loan> }) => {
+      // Fetch old state to diff changes for activity log
+      const { data: oldLoan } = await supabase.from('loans').select('*').eq('id', id).single();
+
       const { data, error } = await supabase
         .from('loans')
         .update({ ...updates, updated_at: new Date().toISOString() })
@@ -571,11 +699,66 @@ export function useUpdateLoan() {
         .select()
         .single();
       if (error) throw error;
+
+      // Log changes to activity feed
+      if (oldLoan) {
+        const changes: string[] = [];
+        const fieldLabels: Record<string, string> = {
+          borrower_name: 'Borrower name', loan_start_date: 'Start date', maturity_date: 'Maturity date',
+          vehicle: 'Vehicle', facility: 'Facility', city: 'City', category: 'Category',
+          property_status: 'Property status', earmarked: 'Earmarked', interest_rate: 'Interest rate',
+          interest_type: 'Interest type', fee_payment_type: 'Fee payment type',
+          interest_payment_type: 'Interest payment type', total_commitment: 'Total commitment',
+          commitment_fee_rate: 'Commitment fee rate', commitment_fee_basis: 'Commitment fee basis',
+          notice_frequency: 'Notice frequency', payment_due_rule: 'Payment due rule',
+          cash_interest_percentage: 'Cash interest %', guarantor: 'Guarantor',
+          valuation: 'Valuation', valuation_date: 'Valuation date', rental_income: 'Rental income',
+          remarks: 'Remarks', photo_url: 'Photo', borrower_email: 'Borrower email',
+          borrower_address: 'Borrower address', property_address: 'Property address',
+          google_maps_url: 'Google Maps link', kadastrale_kaart_url: 'Kadastrale kaart link',
+          additional_info: 'Additional info', pipeline_stage: 'Pipeline stage',
+          walt: 'WALT', walt_comment: 'WALT comment', occupancy: 'Occupancy',
+          payment_timing: 'Payment timing', amortization_amount: 'Amortization amount',
+          amortization_frequency: 'Amortization frequency', amortization_start_date: 'Amortization start',
+          exit_fee_terms: 'Exit fee terms', initial_facility: 'Initial facility',
+          red_iv_start_date: 'RED IV start date', afas_debtor_account: 'AFAS debtor account',
+        };
+        const skip = new Set(['id', 'created_at', 'updated_at', 'outstanding', 'ltv', 'status']);
+        for (const [key, newVal] of Object.entries(updates)) {
+          if (skip.has(key)) continue;
+          const oldVal = (oldLoan as any)[key];
+          const norm = (v: unknown) => (v === null || v === undefined || v === '') ? null : String(v);
+          if (norm(oldVal) !== norm(newVal)) {
+            const label = fieldLabels[key] || key;
+            changes.push(label);
+          }
+        }
+        if (changes.length > 0) {
+          try {
+            const { data: user } = await supabase.auth.getUser();
+            if (user.user) {
+              await supabase.from('loan_activity_log' as any).insert([{
+                loan_id: id,
+                content: `Edited loan: ${changes.join(', ')}`,
+                activity_type: 'other',
+                activity_date: new Date().toISOString().split('T')[0],
+                created_by: user.user.id,
+                created_by_email: user.user.email || null,
+              }]);
+            }
+          } catch (err) {
+            console.error('Failed to log loan edit activity:', err);
+          }
+        }
+      }
+
       return data as Loan;
     },
     onSuccess: (loan) => {
       queryClient.invalidateQueries({ queryKey: ['loans'] });
       queryClient.invalidateQueries({ queryKey: ['loans', loan.id] });
+      queryClient.invalidateQueries({ queryKey: ['loan-activity-log', loan.id] });
+      queryClient.invalidateQueries({ queryKey: ['all-activity-log'] });
       toast({ title: 'Loan updated successfully' });
     },
     onError: (error) => {
@@ -655,13 +838,16 @@ export function useActivatePipelineLoan() {
         await createFoundingEvent('commitment_set', loanUpdates.total_commitment, null, { auto_generated: true, description: 'Initial commitment' });
       if (loanUpdates.interest_rate > 0)
         await createFoundingEvent('interest_rate_set', null, loanUpdates.interest_rate, { auto_generated: true, description: 'Initial rate' });
-      if (loanUpdates.outstanding > 0)
-        await createFoundingEvent('principal_draw', loanUpdates.outstanding, null, { auto_generated: true, description: 'Opening principal draw' });
+      if (loanUpdates.outstanding > 0) {
+        const withheldFees = isFeeCapitalized ? (arrangement_fee || 0) : 0;
+        const cashOut = loanUpdates.outstanding - withheldFees;
+        await createFoundingEvent('principal_draw', cashOut, null, { auto_generated: true, description: 'Opening principal draw' });
+      }
       if (arrangement_fee && arrangement_fee > 0)
         await createFoundingEvent('fee_invoice', arrangement_fee, null, {
           auto_generated: true, fee_type: 'arrangement',
           payment_type: isFeeCapitalized ? 'pik' : 'cash',
-          description: isFeeCapitalized ? 'Arrangement fee (capitalised)' : 'Arrangement fee (withheld from borrower)',
+          description: isFeeCapitalized ? 'Arrangement fee (withheld)' : 'Arrangement fee',
         });
 
       // Generate periods

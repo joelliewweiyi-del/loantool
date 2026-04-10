@@ -17,6 +17,11 @@ import {
 import { cn } from '@/lib/utils';
 import { format, parse } from 'date-fns';
 
+interface OutstandingApprovalsProps {
+  embedded?: boolean;
+  onNavigateToMonth?: (yearMonth: string) => void;
+}
+
 const categoryConfig: Record<ApprovalCategory, { shortLabel: string; className: string }> = {
   event_approval: {
     shortLabel: 'Approve',
@@ -56,13 +61,13 @@ function getActionLink(item: OutstandingItem): string {
     case 'pik_rollup':
       return `/loans/${item.loanUuid}`;
     case 'draw_confirmation':
-      return `/monthly-approval`;
+      return `/approvals?tab=monthly`;
     default:
       return `/loans/${item.loanUuid}`;
   }
 }
 
-export default function OutstandingApprovals() {
+export default function OutstandingApprovals({ embedded, onNavigateToMonth }: OutstandingApprovalsProps = {}) {
   const { groupedByMonth, summary, isLoading } = useOutstandingApprovals();
   const { isController, isPM } = useAuth();
   const approveEvent = useApproveEvent();
@@ -86,11 +91,13 @@ export default function OutstandingApprovals() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold">Outstanding Approvals</h1>
-        <p className="text-sm text-foreground-secondary">All items requiring action across the portfolio</p>
-      </div>
+    <div className={cn("space-y-6", !embedded && "p-6")}>
+      {!embedded && (
+        <div>
+          <h1 className="text-lg font-semibold">Outstanding Approvals</h1>
+          <p className="text-sm text-foreground-secondary">All items requiring action across the portfolio</p>
+        </div>
+      )}
 
       <FinancialStrip items={[
         { label: 'Draft Events', value: String(summary.draftEvents), accent: summary.draftEvents > 0 ? 'amber' : undefined },
@@ -111,7 +118,12 @@ export default function OutstandingApprovals() {
         <Card key={yearMonth}>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base">{formatMonthLabel(yearMonth)}</CardTitle>
+              <CardTitle
+                className={cn("text-base", onNavigateToMonth && "cursor-pointer hover:text-primary transition-colors")}
+                onClick={() => onNavigateToMonth?.(yearMonth)}
+              >
+                {formatMonthLabel(yearMonth)}
+              </CardTitle>
               <span className="text-xs text-foreground-tertiary font-mono">
                 {items.length} item{items.length !== 1 ? 's' : ''}
               </span>
@@ -157,7 +169,14 @@ export default function OutstandingApprovals() {
                         </div>
                       </td>
                       <td className="py-3">
-                        <CategoryBadge category={item.category} />
+                        <div className="flex items-center gap-1.5">
+                          <CategoryBadge category={item.category} />
+                          {item.isFullRepayment && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-accent-sage/10 text-accent-sage">
+                              Full Repayment
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3">
                         <Link to={`/loans/${item.loanUuid}`} className="text-sm hover:underline">
@@ -202,7 +221,17 @@ export default function OutstandingApprovals() {
                             </Button>
                           </Link>
                         )}
-                        {!canAct && (
+                        {!canAct && item.category === 'draw_confirmation' && onNavigateToMonth ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs text-foreground-tertiary"
+                            onClick={() => onNavigateToMonth(item.yearMonth)}
+                          >
+                            <ExternalLink className="h-3 w-3 mr-1" />
+                            View
+                          </Button>
+                        ) : !canAct && (
                           <Link to={getActionLink(item)}>
                             <Button size="sm" variant="ghost" className="h-7 text-xs text-foreground-tertiary">
                               <ExternalLink className="h-3 w-3 mr-1" />

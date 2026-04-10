@@ -17,7 +17,6 @@ import Collateral from "./pages/Collateral";
 import Compliance from "./pages/Compliance";
 import Funding from "./pages/Funding";
 import CalculationSheet from "./pages/CalculationSheet";
-import OutstandingApprovals from "./pages/OutstandingApprovals";
 import NotFound from "./pages/NotFound";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -75,18 +74,12 @@ function AppRoutes() {
         path="/approvals"
         element={
           <ProtectedRoute>
-            <OutstandingApprovals />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/monthly-approval"
-        element={
-          <ProtectedRoute>
             <MonthlyApproval />
           </ProtectedRoute>
         }
       />
+      {/* Redirect from old route */}
+      <Route path="/monthly-approval" element={<Navigate to="/approvals" replace />} />
       <Route
         path="/afas"
         element={

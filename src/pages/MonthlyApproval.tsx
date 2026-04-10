@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { format, startOfMonth, subMonths, addMonths } from 'date-fns';
 import { getCurrentDate } from '@/lib/simulatedDate';
 import { VEHICLES } from '@/lib/constants';
+import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
 import {
   useMonthlyApprovalAccruals,
@@ -67,6 +68,7 @@ export default function MonthlyApproval() {
   const [expandedDrawLoans, setExpandedDrawLoans] = useState<Set<string>>(new Set());
   const [expandedDrawAfas, setExpandedDrawAfas] = useState<Set<string>>(new Set());
   const [typeOverrides, setTypeOverrides] = useState<Map<string, 'draw' | 'repayment'>>(new Map());
+  const [exitFeeDialog, setExitFeeDialog] = useState<{ tx: AfasDrawTransaction; exitFee: string } | null>(null);
 
   const toggleAfas = (id: string) => {
     setExpandedAfas(prev => {
@@ -136,6 +138,11 @@ export default function MonthlyApproval() {
 
   const handleConfirmDraw = (tx: AfasDrawTransaction) => {
     if (!tx.loanUuid) return;
+    // For full repayments, show exit fee dialog first
+    if (tx.isFullRepayment) {
+      setExitFeeDialog({ tx, exitFee: '' });
+      return;
+    }
     const effectiveType = typeOverrides.get(tx.afasRef) ?? tx.type;
     confirmDraw.mutate({
       loanUuid: tx.loanUuid,
@@ -145,6 +152,46 @@ export default function MonthlyApproval() {
       afasRef: tx.afasRef,
       afasDescription: tx.description,
     });
+  };
+
+  const handleConfirmFullRepayment = async () => {
+    if (!exitFeeDialog) return;
+    const { tx, exitFee } = exitFeeDialog;
+    if (!tx.loanUuid) return;
+
+    // Create repayment event
+    confirmDraw.mutate({
+      loanUuid: tx.loanUuid,
+      eventType: 'principal_repayment',
+      effectiveDate: tx.entryDate,
+      amount: tx.amount,
+      afasRef: tx.afasRef,
+      afasDescription: tx.description,
+    });
+
+    // Create exit fee event if amount provided
+    const feeAmount = parseFloat(exitFee);
+    if (feeAmount > 0) {
+      const { data: user } = await supabase.auth.getUser();
+      if (user.user) {
+        await supabase.from('loan_events').insert([{
+          loan_id: tx.loanUuid,
+          event_type: 'fee_invoice',
+          effective_date: tx.entryDate,
+          amount: feeAmount,
+          status: 'draft',
+          created_by: user.user.id,
+          metadata: {
+            fee_type: 'exit',
+            payment_type: 'cash',
+            description: 'Exit fee on full repayment',
+            source: 'afas_confirmation',
+          },
+        }]);
+      }
+    }
+
+    setExitFeeDialog(null);
   };
 
   const isApproved = data?.status === 'approved';
@@ -200,7 +247,7 @@ export default function MonthlyApproval() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold">Monthly Approval</h1>
+          <h1 className="text-xl font-semibold">Approvals</h1>
           <p className="text-sm text-foreground-secondary">
             Reconcile calculated interest with AFAS payments
           </p>
@@ -566,7 +613,12 @@ export default function MonthlyApproval() {
                                     </div>
                                   </td>
                                   <td className="text-center">
-                                    {group.dominantType === 'draw' ? (
+                                    <div className="flex items-center gap-1.5 justify-center">
+                                    {group.hasFullRepayment ? (
+                                      <Badge className="bg-accent-sage/10 text-accent-sage border-accent-sage/30 text-xs font-semibold">
+                                        Full Repayment
+                                      </Badge>
+                                    ) : group.dominantType === 'draw' ? (
                                       <Badge className="bg-accent-amber/10 text-accent-amber border-accent-amber/30 text-xs">
                                         {txCount === 1 ? 'Draw' : `${txCount} Draws`}
                                       </Badge>
@@ -579,6 +631,7 @@ export default function MonthlyApproval() {
                                         {txCount} Mixed
                                       </Badge>
                                     )}
+                                    </div>
                                   </td>
                                   <td className="numeric font-medium">{formatCurrency(totalAmount)}</td>
                                   <td className="text-center">
@@ -611,9 +664,14 @@ export default function MonthlyApproval() {
                                   const isOverridden = typeOverrides.has(tx.afasRef) && typeOverrides.get(tx.afasRef) !== tx.type;
                                   return (
                                     <React.Fragment key={tx.afasRef}>
-                                      <tr className="bg-muted/10">
+                                      <tr className={cn("bg-muted/10", tx.isFullRepayment && !tx.isConfirmed && "bg-accent-sage/5")}>
                                         <td className="pl-10 font-mono text-xs text-muted-foreground whitespace-nowrap">
-                                          {formatDate(tx.entryDate)}
+                                          <div className="flex items-center gap-1.5">
+                                            {formatDate(tx.entryDate)}
+                                            {tx.isFullRepayment && (
+                                              <span className="text-[10px] font-semibold text-accent-sage uppercase tracking-wide">Payoff</span>
+                                            )}
+                                          </div>
                                         </td>
                                         <td className="text-center">
                                           {!tx.isConfirmed ? (
@@ -834,6 +892,48 @@ export default function MonthlyApproval() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Exit Fee Dialog for Full Repayments */}
+      <Dialog open={!!exitFeeDialog} onOpenChange={(open) => !open && setExitFeeDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Full Repayment</DialogTitle>
+            <DialogDescription>
+              #{exitFeeDialog?.tx.loanId} — {exitFeeDialog?.tx.borrowerName}
+              <br />
+              Repayment: {exitFeeDialog ? formatCurrency(exitFeeDialog.tx.amount) : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-sm font-medium text-foreground-secondary">Exit Fee (optional)</label>
+              <div className="relative mt-1">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">€</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={exitFeeDialog?.exitFee ?? ''}
+                  onChange={(e) => setExitFeeDialog(prev => prev ? { ...prev, exitFee: e.target.value } : null)}
+                  className="w-full rounded-md border border-input bg-background pl-7 pr-3 py-2 text-sm font-mono"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Leave blank if no exit fee applies.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExitFeeDialog(null)}>Cancel</Button>
+            <Button
+              onClick={handleConfirmFullRepayment}
+              disabled={confirmDraw.isPending}
+              className="bg-accent-sage text-white hover:bg-accent-sage/90"
+            >
+              Confirm Repayment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

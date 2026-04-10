@@ -10,7 +10,6 @@ import type { LoanEvent } from '@/types/loan';
 export type ApprovalCategory =
   | 'event_approval'
   | 'draw_confirmation'
-  | 'period_approval'
   | 'pik_rollup';
 
 export interface OutstandingItem {
@@ -27,12 +26,12 @@ export interface OutstandingItem {
   initiatedBy: 'pm' | 'controller' | 'system' | 'afas';
   waitingOn: 'pm' | 'controller';
   actionPayload: Record<string, unknown>;
+  isFullRepayment?: boolean;
 }
 
 export interface OutstandingApprovalsSummary {
   draftEvents: number;
   pendingDraws: number;
-  pendingPeriods: number;
   pikRollups: number;
   total: number;
 }
@@ -215,7 +214,7 @@ export function useOutstandingApprovals() {
       const pendingByLoanMonth = new Map<string, {
         loanUuid: string; loanId: string; borrowerName: string; vehicle: string;
         yearMonth: string; latestDate: string; totalAmount: number; count: number;
-        draws: number; repayments: number;
+        draws: number; repayments: number; hasFullRepayment: boolean;
       }>();
       for (const tx of drawsData.transactions) {
         if (tx.isConfirmed) continue;
@@ -226,6 +225,7 @@ export function useOutstandingApprovals() {
           existing.count += 1;
           if (tx.type === 'draw') existing.draws += 1; else existing.repayments += 1;
           if (tx.entryDate > existing.latestDate) existing.latestDate = tx.entryDate;
+          if (tx.isFullRepayment) existing.hasFullRepayment = true;
         } else {
           pendingByLoanMonth.set(key, {
             loanUuid: tx.loanUuid ?? '', loanId: tx.loanId,
@@ -233,11 +233,13 @@ export function useOutstandingApprovals() {
             yearMonth: tx.entryDate.slice(0, 7), latestDate: tx.entryDate,
             totalAmount: tx.amount, count: 1,
             draws: tx.type === 'draw' ? 1 : 0, repayments: tx.type === 'repayment' ? 1 : 0,
+            hasFullRepayment: !!tx.isFullRepayment,
           });
         }
       }
       for (const [, group] of pendingByLoanMonth) {
-        const typeLabel = group.draws > 0 && group.repayments > 0 ? 'Mixed'
+        const typeLabel = group.hasFullRepayment ? 'Full Repayment'
+          : group.draws > 0 && group.repayments > 0 ? 'Mixed'
           : group.draws > 0 ? (group.count === 1 ? 'Draw' : `${group.count} Draws`)
           : (group.count === 1 ? 'Repayment' : `${group.count} Repayments`);
         items.push({
@@ -254,43 +256,12 @@ export function useOutstandingApprovals() {
           initiatedBy: 'afas',
           waitingOn: 'pm',
           actionPayload: { yearMonth: group.yearMonth },
+          isFullRepayment: group.hasFullRepayment,
         });
       }
     }
 
-    // 3. Payment confirmations — periods that are sent/approved but not paid
-    // We detect these from pendingPeriods where status is not 'paid' and period has ended
-    // The actual AFAS match data comes from the monthly approval hooks per month
-    // For the overview, we just show periods that are past due and not paid
-    if (pendingPeriods && loansData) {
-      const cashLoans = new Set(loansData.filter(l => l.interest_type === 'cash_pay').map(l => l.id));
-      for (const period of pendingPeriods) {
-        if (!cashLoans.has(period.loan_id)) continue;
-        const loan = loanMap.get(period.loan_id);
-        if (!loan) continue;
-
-        // Period approval items (periods that haven't been approved yet)
-        if (period.status === 'open' || period.status === 'submitted') {
-          items.push({
-            id: `period-${period.id}`,
-            category: 'period_approval',
-            loanUuid: period.loan_id,
-            loanNumericId: loan.loan_id,
-            borrowerName: loan.borrower_name,
-            vehicle: loan.vehicle ?? '',
-            yearMonth: period.period_start.slice(0, 7),
-            effectiveDate: period.period_end,
-            label: `Period ${period.period_start.slice(5, 7)}/${period.period_start.slice(0, 4)}`,
-            amount: null,
-            initiatedBy: 'system',
-            waitingOn: 'controller',
-            actionPayload: { periodId: period.id, yearMonth: period.period_start.slice(0, 7) },
-          });
-        }
-      }
-    }
-
-    // 4. PIK periods needing roll-up
+    // 3. PIK periods needing roll-up
     if (pendingPeriods && loansData) {
       const pikLoans = new Set(loansData.filter(l => l.interest_type === 'pik').map(l => l.id));
       const pikCapByLoan = new Map<string, Set<string>>();
@@ -327,12 +298,7 @@ export function useOutstandingApprovals() {
       }
     }
 
-    // Deduplicate: period_approval items for PIK loans that already have a pik_rollup item
-    const pikPeriodIds = new Set(items.filter(i => i.category === 'pik_rollup').map(i => i.actionPayload.periodId));
-    const deduped = items.filter(i => {
-      if (i.category === 'period_approval' && pikPeriodIds.has(i.actionPayload.periodId)) return false;
-      return true;
-    });
+    const deduped = items;
 
     // Sort by date descending
     deduped.sort((a, b) => b.effectiveDate.localeCompare(a.effectiveDate));
@@ -340,7 +306,6 @@ export function useOutstandingApprovals() {
     const summary: OutstandingApprovalsSummary = {
       draftEvents: deduped.filter(i => i.category === 'event_approval').length,
       pendingDraws: deduped.filter(i => i.category === 'draw_confirmation').length,
-      pendingPeriods: deduped.filter(i => i.category === 'period_approval').length,
       pikRollups: deduped.filter(i => i.category === 'pik_rollup').length,
       total: deduped.length,
     };

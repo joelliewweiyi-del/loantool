@@ -16,7 +16,7 @@ AS $$
   FROM (
     SELECT
       lps.loan_id                                        AS "Loan ID",
-      lps.vehicle                                        AS "Facility",
+      COALESCE(NULLIF(lps.facility, ''), lps.vehicle)     AS "Facility",
       lps.city                                           AS "City",
       lps.category                                       AS "Category",
       -- European number format: comma as decimal separator
@@ -58,7 +58,7 @@ AS $$
       l.additional_info                                  AS "Additional Information"
     FROM loan_portfolio_summary lps
     JOIN loans l ON l.id = lps.id
-    WHERE lps.vehicle = 'RED IV'
+    WHERE lps.vehicle IN ('RED IV', 'TLF')
       AND lps.loan_status = 'active'
     ORDER BY lps.loan_id
   ) t;

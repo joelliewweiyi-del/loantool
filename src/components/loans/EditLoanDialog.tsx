@@ -6,11 +6,16 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
-import { Pencil, Plus, Minus, Loader2, X, ImageIcon } from 'lucide-react';
+import { Pencil, Plus, Minus, Loader2, X, ImageIcon, FileUp } from 'lucide-react';
 import { useUpdateLoan } from '@/hooks/useLoans';
 import { uploadLoanPhoto } from '@/lib/uploadLoanPhoto';
+import { supabase } from '@/integrations/supabase/client';
 import { Loan, InterestType, PaymentType, CommitmentFeeBasis, PaymentTiming, AmortizationFrequency } from '@/types/loan';
 import { VEHICLES, DEFAULT_VEHICLE, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
+import { extractTextFromPdf } from '@/lib/pdfExtract';
+import { parseLoanDocument, cleanBorrowerName, type ParsedDocumentResult } from '@/lib/parseKredietbrief';
+import { cn } from '@/lib/utils';
+import { addMonths, format } from 'date-fns';
 
 interface EditLoanDialogProps {
   loan: Loan;
@@ -67,7 +72,18 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
   const [propertyAddresses, setPropertyAddresses] = useState<string[]>(['']);
   const [photoUploading, setPhotoUploading] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
-  
+
+  // PDF upload & parsing state
+  const [pdfFilledFields, setPdfFilledFields] = useState<Set<keyof LoanFormData>>(new Set());
+  const [pdfStatus, setPdfStatus] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
+  const [pdfParsing, setPdfParsing] = useState(false);
+  const durationMonthsRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [parsedResult, setParsedResult] = useState<ParsedDocumentResult | null>(null);
+  const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const dragCounterRef = useRef(0);
+
   const [formData, setFormData] = useState<LoanFormData>({
     borrower_name: '',
     loan_start_date: '',
@@ -169,6 +185,171 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  // Auto-compute maturity_date when loan_start_date changes and duration was parsed from PDF
+  useEffect(() => {
+    if (durationMonthsRef.current && formData.loan_start_date) {
+      const start = new Date(formData.loan_start_date);
+      if (!isNaN(start.getTime())) {
+        const maturity = addMonths(start, durationMonthsRef.current);
+        setFormData(prev => ({ ...prev, maturity_date: format(maturity, 'yyyy-MM-dd') }));
+        setPdfFilledFields(prev => new Set([...prev, 'maturity_date']));
+      }
+    }
+  }, [formData.loan_start_date]);
+
+  const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (event.target.value) event.target.value = '';
+
+    setPendingPdfFile(file);
+    setPdfStatus(null);
+    setPdfFilledFields(new Set());
+    setParsedResult(null);
+    durationMonthsRef.current = null;
+    setPdfParsing(true);
+
+    try {
+      const text = await extractTextFromPdf(file);
+      const result = await parseLoanDocument(text);
+
+      if (result.documentType === 'unknown') {
+        const errorMsg = result.warnings.length > 0
+          ? result.warnings[0]
+          : 'Document not recognised as a kredietbrief or credit proposal.';
+        setPdfStatus({ type: 'error', message: errorMsg });
+        setPdfParsing(false);
+        return;
+      }
+
+      setParsedResult(result);
+
+      const filled = new Set<keyof LoanFormData>();
+      const newFormData = { ...formData };
+
+      for (const [key, value] of Object.entries(result.fields)) {
+        if (key === '_duration_months') {
+          durationMonthsRef.current = parseInt(value, 10);
+          continue;
+        }
+        if (key === 'vehicle') continue;
+        if (key === 'earmarked') {
+          newFormData.earmarked = value === 'true';
+          filled.add('earmarked');
+          continue;
+        }
+        if (value && key in newFormData) {
+          (newFormData as any)[key] = value;
+          filled.add(key as keyof LoanFormData);
+        }
+      }
+
+      if (durationMonthsRef.current && newFormData.loan_start_date) {
+        const start = new Date(newFormData.loan_start_date);
+        if (!isNaN(start.getTime())) {
+          newFormData.maturity_date = format(addMonths(start, durationMonthsRef.current), 'yyyy-MM-dd');
+          filled.add('maturity_date');
+        }
+      }
+
+      setFormData(newFormData);
+      if (newFormData.property_address) {
+        setPropertyAddresses(newFormData.property_address.split('\n').filter(Boolean));
+      }
+      setPdfFilledFields(filled);
+
+      const docLabel = result.documentType === 'credit_proposal' ? 'credit proposal' : 'kredietbrief';
+      const fieldCount = filled.size;
+      const warnCount = result.warnings.length;
+      if (warnCount > 0) {
+        setPdfStatus({
+          type: 'warning',
+          message: `Filled ${fieldCount} fields from ${docLabel}. ${warnCount} could not be parsed.`,
+        });
+      } else {
+        setPdfStatus({
+          type: 'success',
+          message: `Filled ${fieldCount} fields from ${docLabel}.`,
+        });
+      }
+    } catch (err) {
+      console.error('PDF parsing failed:', err);
+      const detail = err instanceof Error ? err.message : String(err);
+      setPdfStatus({ type: 'error', message: `Failed to read PDF: ${detail}` });
+    } finally {
+      setPdfParsing(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current = 0;
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file?.type === 'application/pdf') {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      if (fileInputRef.current) {
+        fileInputRef.current.files = dt.files;
+        fileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        handlePdfUpload({ target: { files: dt.files } } as any);
+      }
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.types.includes('Files')) setDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) setDragOver(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const pdfFieldClass = (field: keyof LoanFormData) =>
+    pdfFilledFields.has(field) ? 'border-l-2 border-l-accent-sage pl-2.5' : '';
+
+  const PdfPill = ({ field }: { field: keyof LoanFormData }) =>
+    pdfFilledFields.has(field) ? (
+      <span className="text-[10px] bg-accent-sage/15 text-accent-sage px-1 rounded ml-1 font-normal">PDF</span>
+    ) : null;
+
+  const parsedFieldLabels: Record<string, string> = {
+    loan_number: 'Loan ID', vehicle: 'Vehicle', borrower_name: 'Borrower',
+    borrower_address: 'Borrower Address', total_commitment: 'Commitment',
+    interest_rate: 'Interest Rate', arrangement_fee: 'Arr. Fee',
+    commitment_fee_rate: 'Commit. Fee', city: 'City', category: 'Category',
+    property_status: 'Property Status', earmarked: 'Earmarked',
+    property_address: 'Property Address', notice_frequency: 'Frequency',
+    payment_due_rule: 'Due Rule', rental_income: 'Rental Income',
+    valuation: 'Valuation', ltv: 'LTV', walt: 'WALT', occupancy: 'Occupancy',
+    additional_info: 'Description', remarks: 'Remarks',
+  };
+
+  const formatParsedValue = (key: string, value: string): string => {
+    if (['total_commitment', 'arrangement_fee', 'rental_income', 'valuation'].includes(key)) {
+      const num = parseFloat(value);
+      if (!isNaN(num)) return `€${num.toLocaleString('nl-NL')}`;
+    }
+    if (['interest_rate', 'commitment_fee_rate', 'ltv', 'occupancy'].includes(key)) return `${value}%`;
+    if (key === 'walt') return `${value} yrs`;
+    if (key === 'earmarked') return value === 'true' ? 'Yes' : 'No';
+    if (key === 'additional_info' && value.length > 80) return value.slice(0, 80) + '…';
+    return value;
+  };
+
   const handleSave = async () => {
     const payload = {
       id: loan.id,
@@ -224,25 +405,136 @@ export function EditLoanDialog({ loan }: EditLoanDialogProps) {
     };
 
     await updateLoan.mutateAsync({ id: loan.id, updates: payload as unknown as Partial<Loan> });
+
+    // Upload the parsed PDF to loan-documents storage
+    if (pendingPdfFile) {
+      try {
+        const filePath = `${loan.id}/${pendingPdfFile.name}`;
+        await supabase.storage
+          .from('loan-documents')
+          .upload(filePath, pendingPdfFile, { upsert: true });
+        const { data: user } = await supabase.auth.getUser();
+        await supabase.from('loan_documents').insert({
+          loan_id: loan.id,
+          file_name: pendingPdfFile.name,
+          file_path: filePath,
+          file_size: pendingPdfFile.size,
+          content_type: pendingPdfFile.type || 'application/pdf',
+          uploaded_by: user.user!.id,
+        });
+      } catch (err) {
+        console.error('Failed to upload PDF to documents:', err);
+      }
+    }
+
     setIsOpen(false);
   };
 
   const isTLF = vehicleRequiresFacility(formData.vehicle);
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      setIsOpen(open);
+      if (!open) {
+        setPdfFilledFields(new Set());
+        setPdfStatus(null);
+        setParsedResult(null);
+        durationMonthsRef.current = null;
+        setPendingPdfFile(null);
+        setDragOver(false);
+        dragCounterRef.current = 0;
+      }
+    }}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Pencil className="h-4 w-4 mr-2" />
           Edit Loan
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        className="max-w-2xl max-h-[90vh] overflow-y-auto"
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {dragOver && (
+          <div className="absolute inset-0 z-50 bg-primary/5 border-2 border-dashed border-primary rounded-lg flex items-center justify-center pointer-events-none">
+            <div className="text-center">
+              <FileUp className="h-10 w-10 text-primary mx-auto mb-2" />
+              <p className="text-sm font-medium text-primary">Drop PDF here</p>
+            </div>
+          </div>
+        )}
         <DialogHeader>
           <DialogTitle>Edit Loan</DialogTitle>
           <DialogDescription>
             Update the loan details. Note: Loan ID cannot be changed.
           </DialogDescription>
+          <div className="flex items-center gap-3 pt-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              onChange={handlePdfUpload}
+              className="hidden"
+              id="edit-loan-pdf-upload"
+            />
+            <label
+              htmlFor="edit-loan-pdf-upload"
+              className={cn(
+                'inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border cursor-pointer hover:bg-muted transition-colors',
+                pdfParsing && 'opacity-50 pointer-events-none'
+              )}
+            >
+              {pdfParsing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileUp className="h-4 w-4" />
+              )}
+              Upload Document
+            </label>
+            <div className="flex flex-col gap-0.5">
+              {pdfStatus && (
+                <span className={cn(
+                  'text-xs',
+                  pdfStatus.type === 'success' && 'text-accent-sage',
+                  pdfStatus.type === 'warning' && 'text-accent-amber',
+                  pdfStatus.type === 'error' && 'text-destructive',
+                )}>
+                  {pdfStatus.message}
+                </span>
+              )}
+              {pendingPdfFile && (
+                <span className="text-[11px] text-foreground-tertiary">
+                  {pendingPdfFile.name} will be stored in documents
+                </span>
+              )}
+            </div>
+          </div>
+          {parsedResult && (
+            <details open className="mt-3 border border-accent-sage/40 rounded-lg overflow-hidden">
+              <summary className="px-4 py-2.5 bg-accent-sage/5 cursor-pointer text-sm font-medium select-none hover:bg-accent-sage/10 transition-colors">
+                Parsed from {parsedResult.documentType === 'credit_proposal' ? 'credit proposal' : 'kredietbrief'} — {Object.keys(parsedResult.fields).filter(k => !k.startsWith('_')).length} fields detected
+              </summary>
+              <div className="px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+                {Object.entries(parsedResult.fields)
+                  .filter(([key]) => !key.startsWith('_'))
+                  .map(([key, value]) => (
+                    <div key={key} className="flex justify-between gap-2">
+                      <span className="text-foreground-secondary truncate">{parsedFieldLabels[key] || key}</span>
+                      <span className="font-mono text-xs text-right shrink-0">{formatParsedValue(key, value)}</span>
+                    </div>
+                  ))}
+                {parsedResult.warnings.map((w, i) => (
+                  <div key={`warn-${i}`} className="flex justify-between gap-2 text-accent-amber">
+                    <span className="truncate">{w}</span>
+                    <span>—</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
         </DialogHeader>
 
         <div className="space-y-6 py-4">

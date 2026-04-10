@@ -1,7 +1,7 @@
 export type LoanStatus = 'active' | 'repaid' | 'defaulted';
 export type FacilityType = 'capex' | 'interest_depot' | 'other';
 export type EventStatus = 'draft' | 'approved';
-export type PeriodStatus = 'open' | 'submitted' | 'approved' | 'sent' | 'paid';
+export type PeriodStatus = 'open' | 'submitted' | 'approved' | 'sent' | 'paid' | 'cancelled';
 export type AppRole = 'pm' | 'controller' | 'admin';
 export type ProcessingMode = 'auto' | 'manual';
 export type MonthlyApprovalStatus = 'pending' | 'approved' | 'rejected';
@@ -78,6 +78,7 @@ export interface Loan {
   amortization_start_date: string | null;
   exit_fee_terms: string | null;
   interest_base_fixed: boolean;
+  repaid_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -200,6 +201,7 @@ export interface NoticeSnapshot {
   }>;
   inputs_hash: string;
   pdf_file_reference: string | null;
+  notice_type?: 'interest' | 'repayment';
 }
 
 export interface UserRole {
@@ -306,6 +308,7 @@ export interface AfasDrawTransaction {
   isConfirmed: boolean;
   createdEventId: string | null;
   eventStatus: 'draft' | 'approved' | null;
+  isFullRepayment?: boolean;
 }
 
 // ── Covenant Tracking ──

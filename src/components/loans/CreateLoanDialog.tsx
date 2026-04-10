@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Minus, FileUp, Loader2, ExternalLink, Upload, X, ImageIcon } from 'lucide-react';
+import { Plus, Minus, FileUp, Loader2, ExternalLink, X, ImageIcon, Banknote, Landmark, TrendingUp, CalendarClock, Filter, ChevronRight, ChevronLeft, Check, SkipForward } from 'lucide-react';
 import { useCreateLoan } from '@/hooks/useLoans';
 import { uploadLoanPhoto } from '@/lib/uploadLoanPhoto';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,8 +18,83 @@ import { parseLoanDocument, cleanBorrowerName, type ParsedDocumentResult } from 
 import { cn } from '@/lib/utils';
 import { addMonths, format } from 'date-fns';
 
+// ── Archetype definitions ──
+
+type LoanArchetype = 'standard_bridge' | 'depot' | 'pik' | 'amortizing' | 'pipeline';
+
+interface ArchetypeOption {
+  id: LoanArchetype;
+  label: string;
+  description: string;
+  icon: typeof Banknote;
+  defaults: Partial<LoanFormData>;
+}
+
+const ARCHETYPES: ArchetypeOption[] = [
+  {
+    id: 'standard_bridge',
+    label: 'Bullet Loan',
+    description: 'Interest paid in cash monthly, principal due at maturity',
+    icon: Banknote,
+    defaults: { interest_payment_type: 'cash', cash_interest_percentage: '', amortization_frequency: 'none' },
+  },
+  {
+    id: 'depot',
+    label: 'Depot Loan',
+    description: 'Cash interest, partially from interest reserve',
+    icon: Landmark,
+    defaults: { interest_payment_type: 'cash', amortization_frequency: 'none' },
+  },
+  {
+    id: 'pik',
+    label: 'PIK Loan',
+    description: 'Interest capitalizes into principal (no cash)',
+    icon: TrendingUp,
+    defaults: { interest_payment_type: 'pik', cash_interest_percentage: '', amortization_frequency: 'none' },
+  },
+  {
+    id: 'amortizing',
+    label: 'Amortizing',
+    description: 'Scheduled principal repayments + cash interest',
+    icon: CalendarClock,
+    defaults: { interest_payment_type: 'cash', cash_interest_percentage: '', payment_timing: 'in_arrears' },
+  },
+  {
+    id: 'pipeline',
+    label: 'Pipeline Deal',
+    description: 'Prospect; not live yet',
+    icon: Filter,
+    defaults: { vehicle: 'Pipeline', pipeline_stage: 'prospect' },
+  },
+];
+
+// ── Step definitions ──
+
+interface StepDef { id: string; label: string }
+
+const STEPS_FULL: StepDef[] = [
+  { id: 'type', label: 'Loan Type' },
+  { id: 'identity', label: 'Identity' },
+  { id: 'interest', label: 'Interest' },
+  { id: 'structure', label: 'Structure' },
+  { id: 'property', label: 'Property' },
+  { id: 'review', label: 'Review' },
+];
+
+const STEPS_PIPELINE: StepDef[] = [
+  { id: 'type', label: 'Loan Type' },
+  { id: 'identity', label: 'Identity' },
+  { id: 'review', label: 'Review' },
+];
+
+function getSteps(archetype: LoanArchetype | null): StepDef[] {
+  if (!archetype) return [STEPS_FULL[0]];
+  return archetype === 'pipeline' ? STEPS_PIPELINE : STEPS_FULL;
+}
+
+// ── Form data ──
+
 interface LoanFormData {
-  // Identity
   loan_number: string;
   borrower_name: string;
   loan_start_date: string;
@@ -35,20 +110,16 @@ interface LoanFormData {
   borrower_email: string;
   borrower_address: string;
   property_address: string;
-  // Payment Types
   interest_rate: string;
-  interest_type: InterestType; // Legacy field - keep for backward compatibility
+  interest_type: InterestType;
   fee_payment_type: PaymentType;
   interest_payment_type: PaymentType;
-  // Structure
   outstanding: string;
   total_commitment: string;
   commitment_fee_rate: string;
   commitment_fee_basis: CommitmentFeeBasis;
-  // Fees
   arrangement_fee: string;
   commitment_fee_oneoff: string;
-  // Valuation & Asset
   valuation: string;
   valuation_date: string;
   ltv: string;
@@ -58,17 +129,19 @@ interface LoanFormData {
   occupancy: string;
   guarantor: string;
   photo_url: string;
-  // Pipeline
   pipeline_stage: string;
-  // Payments & Notices
   notice_frequency: string;
   payment_due_rule: string;
   cash_interest_percentage: string;
-  // Notes & Links
   remarks: string;
   additional_info: string;
   google_maps_url: string;
   kadastrale_kaart_url: string;
+  // Amortization (new)
+  amortization_amount: string;
+  amortization_frequency: string;
+  amortization_start_date: string;
+  payment_timing: string;
 }
 
 const initialFormData: LoanFormData = {
@@ -114,17 +187,90 @@ const initialFormData: LoanFormData = {
   additional_info: '',
   google_maps_url: '',
   kadastrale_kaart_url: '',
+  amortization_amount: '',
+  amortization_frequency: 'none',
+  amortization_start_date: '',
+  payment_timing: 'in_arrears',
 };
+
+// ── Step indicator ──
+
+function StepIndicator({ steps, currentIndex }: { steps: StepDef[]; currentIndex: number }) {
+  return (
+    <div className="flex items-center gap-1 w-full">
+      {steps.map((step, i) => {
+        const isCompleted = i < currentIndex;
+        const isCurrent = i === currentIndex;
+        return (
+          <div key={step.id} className="flex items-center flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className={cn(
+                'h-6 w-6 rounded-full flex items-center justify-center text-xs font-medium shrink-0 transition-colors',
+                isCompleted && 'bg-accent-sage text-white',
+                isCurrent && 'bg-primary text-white',
+                !isCompleted && !isCurrent && 'bg-muted text-foreground-muted',
+              )}>
+                {isCompleted ? <Check className="h-3.5 w-3.5" /> : i + 1}
+              </div>
+              <span className={cn(
+                'text-xs truncate transition-colors',
+                isCurrent ? 'font-medium text-foreground' : 'text-foreground-muted',
+              )}>
+                {step.label}
+              </span>
+            </div>
+            {i < steps.length - 1 && (
+              <div className={cn(
+                'h-px flex-1 mx-2 transition-colors',
+                i < currentIndex ? 'bg-accent-sage' : 'bg-border',
+              )} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── PDF helpers ──
+
+const parsedFieldLabels: Record<string, string> = {
+  loan_number: 'Loan ID', vehicle: 'Vehicle', borrower_name: 'Borrower',
+  borrower_address: 'Borrower Address', total_commitment: 'Commitment',
+  interest_rate: 'Interest Rate', arrangement_fee: 'Arr. Fee',
+  commitment_fee_rate: 'Commit. Fee', city: 'City', category: 'Category',
+  property_status: 'Property Status', earmarked: 'Earmarked',
+  property_address: 'Property Address', notice_frequency: 'Frequency',
+  payment_due_rule: 'Due Rule', rental_income: 'Rental Income',
+  valuation: 'Valuation', ltv: 'LTV', walt: 'WALT', occupancy: 'Occupancy',
+  additional_info: 'Description', remarks: 'Remarks',
+};
+
+function formatParsedValue(key: string, value: string): string {
+  if (['total_commitment', 'arrangement_fee', 'rental_income', 'valuation'].includes(key)) {
+    const num = parseFloat(value);
+    if (!isNaN(num)) return `€${num.toLocaleString('nl-NL')}`;
+  }
+  if (['interest_rate', 'commitment_fee_rate', 'ltv', 'occupancy'].includes(key)) return `${value}%`;
+  if (key === 'walt') return `${value} yrs`;
+  if (key === 'earmarked') return value === 'true' ? 'Yes' : 'No';
+  if (key === 'additional_info' && value.length > 80) return value.slice(0, 80) + '…';
+  return value;
+}
+
+// ── Main component ──
 
 export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [archetype, setArchetype] = useState<LoanArchetype | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
   const [formData, setFormData] = useState<LoanFormData>({
     ...initialFormData,
     vehicle: defaultVehicle || DEFAULT_VEHICLE,
   });
   const createLoan = useCreateLoan();
 
-  // PDF upload state
+  // PDF state
   const [pdfFilledFields, setPdfFilledFields] = useState<Set<keyof LoanFormData>>(new Set());
   const [pdfStatus, setPdfStatus] = useState<{ type: 'success' | 'warning' | 'error'; message: string } | null>(null);
   const [pdfParsing, setPdfParsing] = useState(false);
@@ -138,14 +284,20 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
   const [dragOver, setDragOver] = useState(false);
   const dragCounterRef = useRef(0);
   const [pendingPdfFile, setPendingPdfFile] = useState<File | null>(null);
-  // Sync vehicle when tab changes (only when dialog is closed / form is pristine)
+
+  const steps = getSteps(archetype);
+  const currentStep = steps[stepIndex];
+  const isTLF = vehicleRequiresFacility(formData.vehicle);
+  const isPipeline = archetype === 'pipeline';
+
+  // Sync vehicle when tab changes (only when dialog is closed)
   useEffect(() => {
     if (!isOpen && defaultVehicle) {
       setFormData(prev => ({ ...prev, vehicle: defaultVehicle }));
     }
   }, [defaultVehicle, isOpen]);
 
-  // Auto-compute maturity_date when loan_start_date changes and duration was parsed from PDF
+  // Auto-compute maturity when start date changes and duration was parsed
   useEffect(() => {
     if (durationMonthsRef.current && formData.loan_start_date) {
       const start = new Date(formData.loan_start_date);
@@ -157,14 +309,13 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
     }
   }, [formData.loan_start_date]);
 
+  // ── PDF upload ──
+
   const handlePdfUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     if (event.target.value) event.target.value = '';
-
-    // Store file for upload after loan creation
     setPendingPdfFile(file);
-
     setPdfStatus(null);
     setPdfFilledFields(new Set());
     setParsedResult(null);
@@ -174,40 +325,21 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
     try {
       const text = await extractTextFromPdf(file);
       const result = await parseLoanDocument(text);
-
       if (result.documentType === 'unknown') {
-        const errorMsg = result.warnings.length > 0
-          ? result.warnings[0]
-          : 'Document not recognised as a kredietbrief or credit proposal.';
+        const errorMsg = result.warnings.length > 0 ? result.warnings[0] : 'Document not recognised as a kredietbrief or credit proposal.';
         setPdfStatus({ type: 'error', message: errorMsg });
         setPdfParsing(false);
         return;
       }
-
       setParsedResult(result);
-
       const filled = new Set<keyof LoanFormData>();
       const newFormData = { ...formData };
-
       for (const [key, value] of Object.entries(result.fields)) {
-        if (key === '_duration_months') {
-          durationMonthsRef.current = parseInt(value, 10);
-          continue;
-        }
-        // Don't override vehicle — always use the user's default (TLF)
+        if (key === '_duration_months') { durationMonthsRef.current = parseInt(value, 10); continue; }
         if (key === 'vehicle') continue;
-        if (key === 'earmarked') {
-          newFormData.earmarked = value === 'true';
-          filled.add('earmarked');
-          continue;
-        }
-        if (value && key in initialFormData) {
-          (newFormData as any)[key] = value;
-          filled.add(key as keyof LoanFormData);
-        }
+        if (key === 'earmarked') { newFormData.earmarked = value === 'true'; filled.add('earmarked'); continue; }
+        if (value && key in initialFormData) { (newFormData as any)[key] = value; filled.add(key as keyof LoanFormData); }
       }
-
-      // If we have duration and a start date already, compute maturity
       if (durationMonthsRef.current && newFormData.loan_start_date) {
         const start = new Date(newFormData.loan_start_date);
         if (!isNaN(start.getTime())) {
@@ -215,109 +347,77 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
           filled.add('maturity_date');
         }
       }
-
       setFormData(newFormData);
-      if (newFormData.property_address) {
-        setPropertyAddresses(newFormData.property_address.split('\n').filter(Boolean));
-      }
+      if (newFormData.property_address) setPropertyAddresses(newFormData.property_address.split('\n').filter(Boolean));
       setPdfFilledFields(filled);
-
       const docLabel = result.documentType === 'credit_proposal' ? 'credit proposal' : 'kredietbrief';
-      const fieldCount = filled.size;
       const warnCount = result.warnings.length;
-      if (warnCount > 0) {
-        setPdfStatus({
-          type: 'warning',
-          message: `Filled ${fieldCount} fields from ${docLabel}. ${warnCount} could not be parsed.`,
-        });
-      } else {
-        setPdfStatus({
-          type: 'success',
-          message: `Filled ${fieldCount} fields from ${docLabel}.`,
-        });
-      }
+      setPdfStatus({
+        type: warnCount > 0 ? 'warning' : 'success',
+        message: warnCount > 0
+          ? `Filled ${filled.size} fields from ${docLabel}. ${warnCount} could not be parsed.`
+          : `Filled ${filled.size} fields from ${docLabel}.`,
+      });
     } catch (err) {
       console.error('PDF parsing failed:', err);
-      const detail = err instanceof Error ? err.message : String(err);
-      setPdfStatus({ type: 'error', message: `Failed to read PDF: ${detail}` });
+      setPdfStatus({ type: 'error', message: `Failed to read PDF: ${err instanceof Error ? err.message : String(err)}` });
     } finally {
       setPdfParsing(false);
     }
   };
 
   const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current = 0;
-    setDragOver(false);
+    e.preventDefault(); e.stopPropagation();
+    dragCounterRef.current = 0; setDragOver(false);
     const file = e.dataTransfer.files?.[0];
     if (file?.type === 'application/pdf') {
-      // Reuse the same handler by creating a synthetic event
-      const dt = new DataTransfer();
-      dt.items.add(file);
+      const dt = new DataTransfer(); dt.items.add(file);
       if (fileInputRef.current) {
         fileInputRef.current.files = dt.files;
         fileInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
       } else {
-        // Fallback: call handlePdfUpload directly
         handlePdfUpload({ target: { files: dt.files } } as any);
       }
     }
   };
 
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current++;
-    if (e.dataTransfer.types.includes('Files')) setDragOver(true);
-  };
+  const handleDragEnter = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); dragCounterRef.current++; if (e.dataTransfer.types.includes('Files')) setDragOver(true); };
+  const handleDragLeave = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); dragCounterRef.current--; if (dragCounterRef.current === 0) setDragOver(false); };
+  const handleDragOver = (e: React.DragEvent) => { e.preventDefault(); e.stopPropagation(); };
 
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dragCounterRef.current--;
-    if (dragCounterRef.current === 0) setDragOver(false);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const pdfFieldClass = (field: keyof LoanFormData) =>
-    pdfFilledFields.has(field) ? 'border-l-2 border-l-accent-sage pl-2.5' : '';
-
+  const pdfFieldClass = (field: keyof LoanFormData) => pdfFilledFields.has(field) ? 'border-l-2 border-l-accent-sage pl-2.5' : '';
   const PdfPill = ({ field }: { field: keyof LoanFormData }) =>
-    pdfFilledFields.has(field) ? (
-      <span className="text-[10px] bg-accent-sage/15 text-accent-sage px-1 rounded ml-1 font-normal">PDF</span>
-    ) : null;
+    pdfFilledFields.has(field) ? <span className="text-[10px] bg-accent-sage/15 text-accent-sage px-1 rounded ml-1 font-normal">PDF</span> : null;
 
-  const parsedFieldLabels: Record<string, string> = {
-    loan_number: 'Loan ID', vehicle: 'Vehicle', borrower_name: 'Borrower',
-    borrower_address: 'Borrower Address', total_commitment: 'Commitment',
-    interest_rate: 'Interest Rate', arrangement_fee: 'Arr. Fee',
-    commitment_fee_rate: 'Commit. Fee', city: 'City', category: 'Category',
-    property_status: 'Property Status', earmarked: 'Earmarked',
-    property_address: 'Property Address', notice_frequency: 'Frequency',
-    payment_due_rule: 'Due Rule', rental_income: 'Rental Income',
-    valuation: 'Valuation', ltv: 'LTV', walt: 'WALT', occupancy: 'Occupancy',
-    additional_info: 'Description', remarks: 'Remarks',
-  };
-
-  const formatParsedValue = (key: string, value: string): string => {
-    if (['total_commitment', 'arrangement_fee', 'rental_income', 'valuation'].includes(key)) {
-      const num = parseFloat(value);
-      if (!isNaN(num)) return `€${num.toLocaleString('nl-NL')}`;
-    }
-    if (['interest_rate', 'commitment_fee_rate', 'ltv', 'occupancy'].includes(key)) return `${value}%`;
-    if (key === 'walt') return `${value} yrs`;
-    if (key === 'earmarked') return value === 'true' ? 'Yes' : 'No';
-    if (key === 'additional_info' && value.length > 80) return value.slice(0, 80) + '…';
-    return value;
-  };
+  // ── Handlers ──
 
   const handleChange = (field: keyof LoanFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSelectArchetype = (a: LoanArchetype) => {
+    const config = ARCHETYPES.find(x => x.id === a)!;
+    setArchetype(a);
+    setFormData(prev => ({
+      ...prev,
+      ...config.defaults,
+      vehicle: a === 'pipeline' ? 'Pipeline' : prev.vehicle === 'Pipeline' ? (defaultVehicle && defaultVehicle !== 'Pipeline' ? defaultVehicle : 'RED IV') : prev.vehicle,
+    }));
+    setStepIndex(1);
+  };
+
+  const resetDialog = () => {
+    setArchetype(null);
+    setStepIndex(0);
+    setFormData({ ...initialFormData, vehicle: defaultVehicle || DEFAULT_VEHICLE });
+    setPropertyAddresses(['']);
+    setPdfFilledFields(new Set());
+    setPdfStatus(null);
+    setParsedResult(null);
+    durationMonthsRef.current = null;
+    setPendingPdfFile(null);
+    setPhotoPreview(null);
+    setPhotoUploading(false);
   };
 
   const handleCreate = async () => {
@@ -327,7 +427,7 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
       loan_start_date: formData.loan_start_date || null,
       maturity_date: formData.maturity_date || null,
       interest_rate: formData.interest_rate ? parseFloat(formData.interest_rate) / 100 : null,
-      interest_type: formData.interest_payment_type === 'pik' ? 'pik' : 'cash_pay', // Derive legacy field
+      interest_type: formData.interest_payment_type === 'pik' ? 'pik' : 'cash_pay',
       fee_payment_type: formData.fee_payment_type,
       interest_payment_type: formData.interest_payment_type,
       outstanding: formData.outstanding ? parseFloat(formData.outstanding) : null,
@@ -364,17 +464,19 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
       additional_info: formData.additional_info || null,
       google_maps_url: formData.google_maps_url || null,
       kadastrale_kaart_url: formData.kadastrale_kaart_url || null,
+      amortization_amount: formData.amortization_amount ? parseFloat(formData.amortization_amount) : null,
+      amortization_frequency: formData.amortization_frequency !== 'none' ? formData.amortization_frequency : null,
+      amortization_start_date: formData.amortization_start_date || null,
+      payment_timing: formData.payment_timing || null,
     };
 
     const createdLoan = await createLoan.mutateAsync(payload);
 
-    // Upload the dropped/uploaded PDF to loan-documents storage
+    // Upload PDF to loan-documents storage
     if (pendingPdfFile && createdLoan?.id) {
       try {
         const filePath = `${createdLoan.id}/${pendingPdfFile.name}`;
-        await supabase.storage
-          .from('loan-documents')
-          .upload(filePath, pendingPdfFile, { upsert: true });
+        await supabase.storage.from('loan-documents').upload(filePath, pendingPdfFile, { upsert: true });
         const { data: user } = await supabase.auth.getUser();
         await supabase.from('loan_documents').insert({
           loan_id: createdLoan.id,
@@ -390,38 +492,636 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
     }
 
     setIsOpen(false);
-    setFormData({ ...initialFormData, vehicle: defaultVehicle || DEFAULT_VEHICLE });
-    setPropertyAddresses(['']);
-    setPdfFilledFields(new Set());
-    setPdfStatus(null);
-    setParsedResult(null);
-    durationMonthsRef.current = null;
-    setPendingPdfFile(null);
-    setPhotoPreview(null);
-    setPhotoUploading(false);
+    resetDialog();
   };
 
-  const isTLF = vehicleRequiresFacility(formData.vehicle);
-  const isPipeline = isPipelineVehicle(formData.vehicle);
-  const canSubmit = formData.loan_number && (isPipeline || formData.loan_start_date) && (!isTLF || formData.facility);
+  // ── Step validation ──
+
+  const canProceed = (): boolean => {
+    if (!currentStep) return false;
+    switch (currentStep.id) {
+      case 'type': return archetype !== null;
+      case 'identity':
+        if (!formData.loan_number) return false;
+        if (!isPipeline && !formData.loan_start_date) return false;
+        if (isTLF && !formData.facility) return false;
+        return true;
+      case 'interest': return !!formData.interest_rate;
+      case 'structure': return true; // all optional
+      case 'property': return true; // all optional
+      case 'review': return true;
+      default: return true;
+    }
+  };
+
+  const goNext = () => { if (stepIndex < steps.length - 1) setStepIndex(stepIndex + 1); };
+  const goBack = () => { if (stepIndex > 0) setStepIndex(stepIndex - 1); };
+
+  // ── Render helpers ──
+
+  const archetypeLabel = archetype ? ARCHETYPES.find(a => a.id === archetype)?.label : '';
+
+  const renderStepType = () => (
+    <div className="space-y-4 py-2">
+      <p className="text-sm text-foreground-secondary">What kind of loan are you setting up?</p>
+      <div className="grid grid-cols-1 gap-3">
+        {ARCHETYPES.map(a => {
+          const Icon = a.icon;
+          const isSelected = archetype === a.id;
+          return (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => handleSelectArchetype(a.id)}
+              className={cn(
+                'flex items-center gap-4 p-4 rounded-lg border text-left transition-all',
+                isSelected
+                  ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                  : 'border-border hover:border-primary/40 hover:bg-muted/50',
+              )}
+            >
+              <div className={cn(
+                'h-10 w-10 rounded-lg flex items-center justify-center shrink-0',
+                isSelected ? 'bg-primary text-white' : 'bg-muted text-foreground-secondary',
+              )}>
+                <Icon className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="font-medium text-sm">{a.label}</div>
+                <div className="text-xs text-foreground-tertiary mt-0.5">{a.description}</div>
+              </div>
+              {isSelected && <Check className="h-4 w-4 text-primary ml-auto shrink-0" />}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const renderStepIdentity = () => (
+    <div className="space-y-5 py-2">
+      {/* PDF upload */}
+      <div className="flex items-center gap-3">
+        <input ref={fileInputRef} type="file" accept=".pdf" onChange={handlePdfUpload} className="hidden" id="kredietbrief-upload" />
+        <label
+          htmlFor="kredietbrief-upload"
+          className={cn(
+            'inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border cursor-pointer hover:bg-muted transition-colors',
+            pdfParsing && 'opacity-50 pointer-events-none',
+          )}
+        >
+          {pdfParsing ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
+          Upload Document
+        </label>
+        <div className="flex flex-col gap-0.5">
+          {pdfStatus && (
+            <span className={cn('text-xs', pdfStatus.type === 'success' && 'text-accent-sage', pdfStatus.type === 'warning' && 'text-accent-amber', pdfStatus.type === 'error' && 'text-destructive')}>
+              {pdfStatus.message}
+            </span>
+          )}
+          {pendingPdfFile && <span className="text-[11px] text-foreground-tertiary">{pendingPdfFile.name} will be stored in documents</span>}
+        </div>
+      </div>
+      {parsedResult && (
+        <details open className="border border-accent-sage/40 rounded-lg overflow-hidden">
+          <summary className="px-4 py-2.5 bg-accent-sage/5 cursor-pointer text-sm font-medium select-none hover:bg-accent-sage/10 transition-colors">
+            Parsed from {parsedResult.documentType === 'credit_proposal' ? 'credit proposal' : 'kredietbrief'} — {Object.keys(parsedResult.fields).filter(k => !k.startsWith('_')).length} fields
+          </summary>
+          <div className="px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+            {Object.entries(parsedResult.fields).filter(([key]) => !key.startsWith('_')).map(([key, value]) => (
+              <div key={key} className="flex justify-between gap-2">
+                <span className="text-foreground-secondary truncate">{parsedFieldLabels[key] || key}</span>
+                <span className="font-mono text-xs text-right shrink-0">{formatParsedValue(key, value)}</span>
+              </div>
+            ))}
+            {parsedResult.warnings.map((w, i) => (
+              <div key={`warn-${i}`} className="flex justify-between gap-2 text-accent-amber"><span className="truncate">{w}</span><span>—</span></div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {!isPipeline && (
+          <div className="space-y-2">
+            <Label>Vehicle *</Label>
+            <Select value={formData.vehicle} onValueChange={(v) => handleChange('vehicle', v)}>
+              <SelectTrigger className={pdfFieldClass('vehicle')}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {VEHICLES.filter(v => v.value !== 'Pipeline').map(v => (
+                  <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {isPipeline && (
+          <div className="space-y-2">
+            <Label>Pipeline Stage</Label>
+            <Select value={formData.pipeline_stage} onValueChange={(v) => handleChange('pipeline_stage', v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {PIPELINE_STAGES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {isTLF && (
+          <div className="space-y-2">
+            <Label>Facility Name *</Label>
+            <Input value={formData.facility} onChange={(e) => handleChange('facility', e.target.value)} placeholder="" required />
+          </div>
+        )}
+        {!isTLF && !isPipeline && (
+          <div className="space-y-2">
+            <Label>Initial Facility</Label>
+            <Input value={formData.initial_facility} onChange={(e) => handleChange('initial_facility', e.target.value)} placeholder="e.g., TLFOKT25" />
+          </div>
+        )}
+        <div className="space-y-2">
+          <Label>Loan ID *<PdfPill field="loan_number" /></Label>
+          <Input value={formData.loan_number} onChange={(e) => handleChange('loan_number', e.target.value)} placeholder="e.g., 484" required className={pdfFieldClass('loan_number')} />
+        </div>
+        <div className="space-y-2">
+          <Label>Borrower Legal Name<PdfPill field="borrower_name" /></Label>
+          <Input
+            value={formData.borrower_name}
+            onChange={(e) => handleChange('borrower_name', e.target.value)}
+            onBlur={() => { if (formData.borrower_name) handleChange('borrower_name', cleanBorrowerName(formData.borrower_name)); }}
+            placeholder="Enter borrower name"
+            className={pdfFieldClass('borrower_name')}
+          />
+        </div>
+        {!isPipeline && (
+          <>
+            <div className="space-y-2">
+              <Label>Loan Start Date *</Label>
+              <Input type="date" value={formData.loan_start_date} onChange={(e) => handleChange('loan_start_date', e.target.value)} required />
+            </div>
+            <div className="space-y-2">
+              <Label>Maturity Date<PdfPill field="maturity_date" /></Label>
+              <Input type="date" value={formData.maturity_date} onChange={(e) => handleChange('maturity_date', e.target.value)} className={pdfFieldClass('maturity_date')} />
+            </div>
+          </>
+        )}
+        <div className="space-y-2">
+          <Label>City<PdfPill field="city" /></Label>
+          <Input value={formData.city} onChange={(e) => handleChange('city', e.target.value)} placeholder="e.g., Amsterdam" className={pdfFieldClass('city')} />
+        </div>
+        <div className="space-y-2">
+          <Label>Category<PdfPill field="category" /></Label>
+          <Input value={formData.category} onChange={(e) => handleChange('category', e.target.value)} placeholder="e.g., Office, Residential" className={pdfFieldClass('category')} />
+        </div>
+      </div>
+      {isPipeline && (
+        <div className="space-y-2">
+          <Label>Total Commitment (EUR)<PdfPill field="total_commitment" /></Label>
+          <Input type="number" step="0.01" value={formData.total_commitment} onChange={(e) => handleChange('total_commitment', e.target.value)} placeholder="Optional" className={pdfFieldClass('total_commitment')} />
+        </div>
+      )}
+      {isPipeline && (
+        <div className="space-y-2">
+          <Label>Remarks</Label>
+          <Input value={formData.remarks} onChange={(e) => handleChange('remarks', e.target.value)} placeholder="Short note about this deal..." />
+        </div>
+      )}
+    </div>
+  );
+
+  const renderStepInterest = () => (
+    <div className="space-y-5 py-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Interest Rate (%) *<PdfPill field="interest_rate" /></Label>
+          <Input type="number" step="0.0001" value={formData.interest_rate} onChange={(e) => handleChange('interest_rate', e.target.value)} placeholder="e.g., 8.5000" className={pdfFieldClass('interest_rate')} />
+        </div>
+        <div className="space-y-2">
+          <Label>Interest Payments</Label>
+          <Select value={formData.interest_payment_type} onValueChange={(v) => handleChange('interest_payment_type', v)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="cash">Cash (Invoiced)</SelectItem>
+              <SelectItem value="pik">PIK (Capitalized)</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-foreground-tertiary">
+            {formData.interest_payment_type === 'pik' ? 'Monthly interest rolled into principal' : 'Monthly interest invoiced for payment'}
+          </p>
+        </div>
+      </div>
+
+      {/* Depot: cash interest percentage */}
+      {archetype === 'depot' && (
+        <div className="space-y-2">
+          <Label>Cash Interest %</Label>
+          <Input type="number" step="1" min="0" max="100" value={formData.cash_interest_percentage} onChange={(e) => handleChange('cash_interest_percentage', e.target.value)} placeholder="e.g., 50" />
+          <p className="text-xs text-foreground-tertiary">What % does the borrower pay from cash? Remainder settles from the interest depot.</p>
+        </div>
+      )}
+
+      {/* Amortization fields */}
+      {archetype === 'amortizing' && (
+        <>
+          <Separator />
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-foreground-secondary">Scheduled Repayments</p>
+            <p className="text-xs text-foreground-tertiary">Amount added to each interest notice as a mandatory principal repayment.</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Amount (EUR)</Label>
+              <Input type="number" step="0.01" value={formData.amortization_amount} onChange={(e) => handleChange('amortization_amount', e.target.value)} placeholder="e.g., 67500" />
+            </div>
+            <div className="space-y-2">
+              <Label>Frequency</Label>
+              <Select value={formData.amortization_frequency} onValueChange={(v) => handleChange('amortization_frequency', v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="quarterly">Quarterly</SelectItem>
+                  <SelectItem value="semi_annual">Semi-Annual</SelectItem>
+                  <SelectItem value="annual">Annual</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>First Payment Date</Label>
+              <Input type="date" value={formData.amortization_start_date} onChange={(e) => handleChange('amortization_start_date', e.target.value)} />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Payment Timing</Label>
+            <Select value={formData.payment_timing} onValueChange={(v) => handleChange('payment_timing', v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="in_arrears">In Arrears (after period)</SelectItem>
+                <SelectItem value="in_advance">In Advance (start of period)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </>
+      )}
+
+      <Separator />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Notice Frequency<PdfPill field="notice_frequency" /></Label>
+          <Select value={formData.notice_frequency} onValueChange={(v) => handleChange('notice_frequency', v)}>
+            <SelectTrigger className={pdfFieldClass('notice_frequency')}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="monthly">Monthly</SelectItem>
+              <SelectItem value="quarterly">Quarterly</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Payment Due Date Rule<PdfPill field="payment_due_rule" /></Label>
+          <Input value={formData.payment_due_rule} onChange={(e) => handleChange('payment_due_rule', e.target.value)} placeholder="e.g., 5 business days after period end" className={pdfFieldClass('payment_due_rule')} />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderStepStructure = () => (
+    <div className="space-y-5 py-2">
+      <div className="bg-accent-amber/10 border border-accent-amber/30 rounded-lg p-3">
+        <p className="text-sm font-semibold text-foreground">Opening Balances — As of Start Date Only</p>
+        <p className="text-xs text-foreground-secondary mt-1">
+          Only enter amounts effective on <strong>{formData.loan_start_date || 'the loan start date'}</strong>. Draws, fees, or changes on later dates must be added as events after creation.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Outstanding (EUR)</Label>
+          <Input type="number" step="0.01" value={formData.outstanding} onChange={(e) => handleChange('outstanding', e.target.value)} placeholder="0.00" />
+          {formData.fee_payment_type === 'pik' && formData.arrangement_fee && formData.outstanding && (
+            <p className="text-xs text-foreground-secondary">
+              Cash out to borrower: <span className="font-mono">€{(parseFloat(formData.outstanding) - parseFloat(formData.arrangement_fee)).toLocaleString('nl-NL', { minimumFractionDigits: 2 })}</span>
+            </p>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label>Total Commitment (EUR)<PdfPill field="total_commitment" /></Label>
+          <Input type="number" step="0.01" value={formData.total_commitment} onChange={(e) => handleChange('total_commitment', e.target.value)} placeholder="Optional" className={pdfFieldClass('total_commitment')} />
+        </div>
+        <div className="space-y-2">
+          <Label>Commitment Fee Rate (%)<PdfPill field="commitment_fee_rate" /></Label>
+          <Input type="number" step="0.0001" value={formData.commitment_fee_rate} onChange={(e) => handleChange('commitment_fee_rate', e.target.value)} placeholder="e.g., 1.0000" className={pdfFieldClass('commitment_fee_rate')} />
+        </div>
+        <div className="space-y-2">
+          <Label>Commitment Fee Basis</Label>
+          <Select value={formData.commitment_fee_basis} onValueChange={(v) => handleChange('commitment_fee_basis', v)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="undrawn_only">Undrawn Only</SelectItem>
+              <SelectItem value="total_commitment">Total Commitment</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-foreground-secondary">Fees at Inception</p>
+        <p className="text-xs text-foreground-tertiary">Only fees effective on {formData.loan_start_date || 'the start date'}. Later fees are separate events.</p>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Arrangement Fee (EUR)<PdfPill field="arrangement_fee" /></Label>
+          <Input type="number" step="0.01" value={formData.arrangement_fee} onChange={(e) => handleChange('arrangement_fee', e.target.value)} placeholder="0.00" className={pdfFieldClass('arrangement_fee')} />
+          <Select value={formData.fee_payment_type} onValueChange={(v) => handleChange('fee_payment_type', v)}>
+            <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pik">Withheld</SelectItem>
+              <SelectItem value="cash">Cash Invoice</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-foreground-tertiary">
+            {formData.fee_payment_type === 'pik' ? 'Will be withheld from borrower' : 'Separate cash invoice to borrower'}
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Commitment Fee (EUR)</Label>
+          <Input type="number" step="0.01" value={formData.commitment_fee_oneoff} onChange={(e) => handleChange('commitment_fee_oneoff', e.target.value)} placeholder="0.00" />
+          <p className="text-xs text-foreground-tertiary">One-off pre-drawdown commitment fee (signing to drawdown). Always cash.</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderStepProperty = () => (
+    <div className="space-y-5 py-2">
+      <p className="text-xs text-foreground-tertiary">All fields optional. You can fill these in later from the loan detail page.</p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label>Valuation (EUR)<PdfPill field="valuation" /></Label>
+          <Input type="number" step="0.01" value={formData.valuation} onChange={(e) => handleChange('valuation', e.target.value)} placeholder="0" className={pdfFieldClass('valuation')} />
+        </div>
+        <div className="space-y-2">
+          <Label>Valuation Date</Label>
+          <Input type="date" value={formData.valuation_date} onChange={(e) => handleChange('valuation_date', e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label>LTV (%)<PdfPill field="ltv" /></Label>
+          <Input type="number" step="0.01" value={formData.ltv} onChange={(e) => handleChange('ltv', e.target.value)} placeholder="e.g., 34" className={pdfFieldClass('ltv')} />
+        </div>
+        <div className="space-y-2">
+          <Label>Rental Income (EUR/yr)<PdfPill field="rental_income" /></Label>
+          <Input type="number" step="0.01" value={formData.rental_income} onChange={(e) => handleChange('rental_income', e.target.value)} placeholder="0" className={pdfFieldClass('rental_income')} />
+        </div>
+        <div className="space-y-2">
+          <Label>WALT (years)<PdfPill field="walt" /></Label>
+          <Input type="number" step="0.1" value={formData.walt} onChange={(e) => handleChange('walt', e.target.value)} placeholder="e.g., 4.5" className={pdfFieldClass('walt')} />
+        </div>
+        <div className="space-y-2">
+          <Label>Occupancy (%)<PdfPill field="occupancy" /></Label>
+          <Input type="number" step="1" min="0" max="100" value={formData.occupancy} onChange={(e) => handleChange('occupancy', e.target.value)} placeholder="e.g., 95" className={pdfFieldClass('occupancy')} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Property Status<PdfPill field="property_status" /></Label>
+          <Select value={formData.property_status} onValueChange={(v) => handleChange('property_status', v)}>
+            <SelectTrigger className={pdfFieldClass('property_status')}><SelectValue placeholder="Select status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Leased">Leased</SelectItem>
+              <SelectItem value="Redevelopment">Redevelopment</SelectItem>
+              <SelectItem value="Development">Development</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center space-x-2 pt-6">
+          <Checkbox id="earmarked" checked={formData.earmarked} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, earmarked: checked === true }))} />
+          <Label htmlFor="earmarked" className="cursor-pointer">Earmarked<PdfPill field="earmarked" /></Label>
+        </div>
+        <div className="space-y-2">
+          <Label>WALT Comment</Label>
+          <Input value={formData.walt_comment} onChange={(e) => handleChange('walt_comment', e.target.value)} placeholder="e.g., HEMA anchor tenant until 2035" />
+        </div>
+        <div className="space-y-2">
+          <Label>Guarantor</Label>
+          <Input value={formData.guarantor} onChange={(e) => handleChange('guarantor', e.target.value)} placeholder="e.g., Personal guarantee from sponsor" />
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Borrower Address<PdfPill field="borrower_address" /></Label>
+          <Input value={formData.borrower_address} onChange={(e) => handleChange('borrower_address', e.target.value)} placeholder="e.g., Keizersgracht 127, 1015CJ Amsterdam" className={pdfFieldClass('borrower_address')} />
+        </div>
+        <div className="space-y-2">
+          <Label>Property Addresses<PdfPill field="property_address" /></Label>
+          {propertyAddresses.map((addr, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <Input
+                value={addr}
+                onChange={(e) => { const updated = [...propertyAddresses]; updated[idx] = e.target.value; setPropertyAddresses(updated); }}
+                placeholder="e.g., Oudenoord 330-340, Utrecht"
+                className={idx === 0 ? pdfFieldClass('property_address') : ''}
+              />
+              {propertyAddresses.length > 1 && (
+                <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setPropertyAddresses(propertyAddresses.filter((_, i) => i !== idx))}>
+                  <Minus className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          ))}
+          <Button type="button" variant="outline" size="sm" className="mt-1" onClick={() => setPropertyAddresses([...propertyAddresses, ''])}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Address
+          </Button>
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label>Borrower Email</Label>
+          <Input value={formData.borrower_email} onChange={(e) => handleChange('borrower_email', e.target.value)} placeholder="e.g., contact@borrower.nl; cfo@borrower.nl" />
+        </div>
+      </div>
+
+      {!isPipeline && (
+        <div className="space-y-2">
+          <Label>RED IV Start Date</Label>
+          <Input type="date" value={formData.red_iv_start_date} onChange={(e) => handleChange('red_iv_start_date', e.target.value)} />
+        </div>
+      )}
+
+      {/* Photo */}
+      <div className="space-y-2">
+        <Label>Property Photo</Label>
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            e.target.value = '';
+            setPhotoUploading(true);
+            try {
+              const previewUrl = URL.createObjectURL(file);
+              setPhotoPreview(previewUrl);
+              const publicUrl = await uploadLoanPhoto(file, formData.loan_number || 'new');
+              handleChange('photo_url', publicUrl);
+            } catch (err) {
+              console.error('Photo upload failed:', err);
+              setPhotoPreview(null);
+              handleChange('photo_url', '');
+            } finally { setPhotoUploading(false); }
+          }}
+        />
+        {formData.photo_url || photoPreview ? (
+          <div className="relative w-full h-32 rounded-md overflow-hidden border border-border bg-muted">
+            <img src={formData.photo_url || photoPreview || ''} alt="Property" className="w-full h-full object-cover" />
+            <button type="button" onClick={() => { handleChange('photo_url', ''); setPhotoPreview(null); }} className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80">
+              <X className="h-3.5 w-3.5" />
+            </button>
+            {photoUploading && <div className="absolute inset-0 bg-black/30 flex items-center justify-center"><Loader2 className="h-5 w-5 text-white animate-spin" /></div>}
+          </div>
+        ) : (
+          <button type="button" onClick={() => photoInputRef.current?.click()} disabled={photoUploading} className="w-full h-24 rounded-md border-2 border-dashed border-border hover:border-primary/40 bg-muted/30 flex flex-col items-center justify-center gap-1.5 text-muted-foreground hover:text-foreground-secondary transition-colors cursor-pointer">
+            {photoUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <><ImageIcon className="h-5 w-5" /><span className="text-xs">Click to upload</span></>}
+          </button>
+        )}
+      </div>
+
+      {/* Links */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Google Maps</Label>
+          <div className="flex gap-2">
+            <Input value={formData.google_maps_url} onChange={(e) => handleChange('google_maps_url', e.target.value)} placeholder="Paste Google Maps link" className="flex-1" />
+            {formData.google_maps_url && <a href={formData.google_maps_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border hover:bg-muted"><ExternalLink className="h-4 w-4" /></a>}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>Kadasterkaart</Label>
+          <div className="flex gap-2">
+            <Input value={formData.kadastrale_kaart_url} onChange={(e) => handleChange('kadastrale_kaart_url', e.target.value)} placeholder="Paste Kadasterkaart link" className="flex-1" />
+            {formData.kadastrale_kaart_url && <a href={formData.kadastrale_kaart_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border hover:bg-muted"><ExternalLink className="h-4 w-4" /></a>}
+          </div>
+        </div>
+      </div>
+
+      {/* Notes */}
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Label>Remarks</Label>
+          <Input value={formData.remarks} onChange={(e) => handleChange('remarks', e.target.value)} placeholder="Short note about this loan..." />
+        </div>
+        <div className="space-y-2">
+          <Label>Description<PdfPill field="additional_info" /></Label>
+          <Textarea value={formData.additional_info} onChange={(e) => handleChange('additional_info', e.target.value)} placeholder="Detailed loan description..." rows={3} className={pdfFieldClass('additional_info')} />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderStepReview = () => {
+    const sections: { title: string; rows: [string, string][] }[] = [];
+
+    // Identity
+    const identityRows: [string, string][] = [
+      ['Loan Type', archetypeLabel || '—'],
+      ['Loan ID', formData.loan_number || '—'],
+      ['Borrower', formData.borrower_name || '—'],
+      ['Vehicle', formData.vehicle],
+    ];
+    if (isTLF && formData.facility) identityRows.push(['Facility', formData.facility]);
+    if (isPipeline && formData.pipeline_stage) identityRows.push(['Stage', PIPELINE_STAGES.find(s => s.value === formData.pipeline_stage)?.label || formData.pipeline_stage]);
+    if (formData.loan_start_date) identityRows.push(['Start Date', formData.loan_start_date]);
+    if (formData.maturity_date) identityRows.push(['Maturity', formData.maturity_date]);
+    if (formData.city) identityRows.push(['City', formData.city]);
+    if (formData.category) identityRows.push(['Category', formData.category]);
+    sections.push({ title: 'Identity', rows: identityRows });
+
+    if (!isPipeline) {
+      // Interest
+      const interestRows: [string, string][] = [];
+      if (formData.interest_rate) interestRows.push(['Interest Rate', `${formData.interest_rate}%`]);
+      interestRows.push(['Interest Type', formData.interest_payment_type === 'pik' ? 'PIK (Capitalized)' : 'Cash (Invoiced)']);
+      if (archetype === 'depot' && formData.cash_interest_percentage) interestRows.push(['Cash Interest', `${formData.cash_interest_percentage}%`]);
+      if (formData.notice_frequency) interestRows.push(['Notice Frequency', formData.notice_frequency]);
+      if (formData.payment_due_rule) interestRows.push(['Due Rule', formData.payment_due_rule]);
+      if (archetype === 'amortizing') {
+        if (formData.amortization_amount) interestRows.push(['Amortization', `€${parseFloat(formData.amortization_amount).toLocaleString('nl-NL')} ${formData.amortization_frequency}`]);
+        if (formData.amortization_start_date) interestRows.push(['First Payment', formData.amortization_start_date]);
+        interestRows.push(['Payment Timing', formData.payment_timing === 'in_advance' ? 'In Advance' : 'In Arrears']);
+      }
+      sections.push({ title: 'Interest & Payments', rows: interestRows });
+
+      // Structure
+      const structureRows: [string, string][] = [];
+      if (formData.outstanding) structureRows.push(['Outstanding', `€${parseFloat(formData.outstanding).toLocaleString('nl-NL')}`]);
+      if (formData.total_commitment) structureRows.push(['Commitment', `€${parseFloat(formData.total_commitment).toLocaleString('nl-NL')}`]);
+      if (formData.commitment_fee_rate) structureRows.push(['Commit. Fee Rate', `${formData.commitment_fee_rate}%`]);
+      if (formData.arrangement_fee) structureRows.push(['Arrangement Fee', `€${parseFloat(formData.arrangement_fee).toLocaleString('nl-NL')} (${formData.fee_payment_type === 'pik' ? 'withheld' : 'cash'})`]);
+      if (formData.commitment_fee_oneoff) structureRows.push(['Commitment Fee', `€${parseFloat(formData.commitment_fee_oneoff).toLocaleString('nl-NL')}`]);
+      if (structureRows.length > 0) sections.push({ title: 'Structure & Fees', rows: structureRows });
+
+      // Property
+      const propRows: [string, string][] = [];
+      if (formData.valuation) propRows.push(['Valuation', `€${parseFloat(formData.valuation).toLocaleString('nl-NL')}`]);
+      if (formData.ltv) propRows.push(['LTV', `${formData.ltv}%`]);
+      if (formData.rental_income) propRows.push(['Rental Income', `€${parseFloat(formData.rental_income).toLocaleString('nl-NL')}/yr`]);
+      if (formData.property_status) propRows.push(['Property Status', formData.property_status]);
+      if (formData.guarantor) propRows.push(['Guarantor', formData.guarantor]);
+      if (propRows.length > 0) sections.push({ title: 'Property', rows: propRows });
+    }
+
+    return (
+      <div className="space-y-4 py-2">
+        <div className="flex items-center gap-2">
+          {archetype && (() => { const Icon = ARCHETYPES.find(a => a.id === archetype)!.icon; return <Icon className="h-4 w-4 text-primary" />; })()}
+          <span className="text-sm font-medium">{archetypeLabel}</span>
+          <span className="text-xs text-foreground-tertiary">— {formData.loan_number}</span>
+        </div>
+        {sections.map(section => (
+          <div key={section.title} className="space-y-1.5">
+            <p className="text-xs font-semibold text-foreground-muted uppercase tracking-wide">{section.title}</p>
+            <div className="border rounded-lg divide-y">
+              {section.rows.map(([label, value]) => (
+                <div key={label} className="flex justify-between items-center px-3 py-1.5 text-sm">
+                  <span className="text-foreground-secondary">{label}</span>
+                  <span className="font-mono text-xs">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {formData.remarks && (
+          <div className="text-xs text-foreground-tertiary border-t pt-2 mt-2">{formData.remarks}</div>
+        )}
+      </div>
+    );
+  };
+
+  // ── Render current step content ──
+
+  const renderStep = () => {
+    switch (currentStep?.id) {
+      case 'type': return renderStepType();
+      case 'identity': return renderStepIdentity();
+      case 'interest': return renderStepInterest();
+      case 'structure': return renderStepStructure();
+      case 'property': return renderStepProperty();
+      case 'review': return renderStepReview();
+      default: return null;
+    }
+  };
+
+  const isLastStep = stepIndex === steps.length - 1;
+  const isPropertyStep = currentStep?.id === 'property';
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => {
-      setIsOpen(open);
-      if (!open) {
-        setPdfFilledFields(new Set());
-        setPdfStatus(null);
-        setParsedResult(null);
-        durationMonthsRef.current = null;
-        setPhotoPreview(null);
-        setPhotoUploading(false);
-      }
-    }}>
+    <Dialog open={isOpen} onOpenChange={(open) => { setIsOpen(open); if (!open) resetDialog(); }}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          New Loan
-        </Button>
+        <Button><Plus className="h-4 w-4 mr-2" /> New Loan</Button>
       </DialogTrigger>
       <DialogContent
         className="max-w-2xl max-h-[90vh] overflow-y-auto"
@@ -438,798 +1138,53 @@ export function CreateLoanDialog({ defaultVehicle }: { defaultVehicle?: string }
             </div>
           </div>
         )}
+
         <DialogHeader>
           <DialogTitle>Create New Loan</DialogTitle>
-          <DialogDescription>
-            Enter the key loan details. All monetary values in EUR.
-          </DialogDescription>
-          <div className="flex items-center gap-3 pt-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf"
-              onChange={handlePdfUpload}
-              className="hidden"
-              id="kredietbrief-upload"
-            />
-            <label
-              htmlFor="kredietbrief-upload"
-              className={cn(
-                'inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-border cursor-pointer hover:bg-muted transition-colors',
-                pdfParsing && 'opacity-50 pointer-events-none'
-              )}
-            >
-              {pdfParsing ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <FileUp className="h-4 w-4" />
-              )}
-              Upload Document
-            </label>
-            <div className="flex flex-col gap-0.5">
-              {pdfStatus && (
-                <span className={cn(
-                  'text-xs',
-                  pdfStatus.type === 'success' && 'text-accent-sage',
-                  pdfStatus.type === 'warning' && 'text-accent-amber',
-                  pdfStatus.type === 'error' && 'text-destructive',
-                )}>
-                  {pdfStatus.message}
-                </span>
-              )}
-              {pendingPdfFile && (
-                <span className="text-[11px] text-foreground-tertiary">
-                  {pendingPdfFile.name} will be stored in documents
-                </span>
-              )}
-            </div>
-          </div>
-          {parsedResult && (
-            <details open className="mt-3 border border-accent-sage/40 rounded-lg overflow-hidden">
-              <summary className="px-4 py-2.5 bg-accent-sage/5 cursor-pointer text-sm font-medium select-none hover:bg-accent-sage/10 transition-colors">
-                Parsed from {parsedResult.documentType === 'credit_proposal' ? 'credit proposal' : 'kredietbrief'} — {Object.keys(parsedResult.fields).filter(k => !k.startsWith('_')).length} fields detected
-              </summary>
-              <div className="px-4 py-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
-                {Object.entries(parsedResult.fields)
-                  .filter(([key]) => !key.startsWith('_'))
-                  .map(([key, value]) => (
-                    <div key={key} className="flex justify-between gap-2">
-                      <span className="text-foreground-secondary truncate">{parsedFieldLabels[key] || key}</span>
-                      <span className="font-mono text-xs text-right shrink-0">{formatParsedValue(key, value)}</span>
-                    </div>
-                  ))}
-                {parsedResult.warnings.map((w, i) => (
-                  <div key={`warn-${i}`} className="flex justify-between gap-2 text-accent-amber">
-                    <span className="truncate">{w}</span>
-                    <span>—</span>
-                  </div>
-                ))}
-              </div>
-            </details>
+          {currentStep?.id === 'type' && (
+            <DialogDescription>Choose the loan structure to get started.</DialogDescription>
           )}
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
-          {/* Identity Section */}
-          <fieldset className="space-y-4">
-            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Identity
-            </legend>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Vehicle *<PdfPill field="vehicle" /></Label>
-                <Select
-                  value={formData.vehicle}
-                  onValueChange={(v) => handleChange('vehicle', v)}
-                >
-                  <SelectTrigger className={pdfFieldClass('vehicle')}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {VEHICLES.map(v => (
-                      <SelectItem key={v.value} value={v.value}>{v.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {isPipeline && (
-                  <p className="text-xs text-foreground-tertiary mt-1">
-                    Pipeline loans are prospective deals. Convert to RED IV or TLF when the deal closes.
-                  </p>
-                )}
-              </div>
-              {isTLF && (
-                <div className="space-y-2">
-                  <Label htmlFor="facility">Facility Name *</Label>
-                  <Input
-                    id="facility"
-                    value={formData.facility}
-                    onChange={(e) => handleChange('facility', e.target.value)}
-                    placeholder="e.g., TLF_DEC_A"
-                    required
-                  />
-                </div>
-              )}
-              {isPipeline && (
-                <div className="space-y-2">
-                  <Label>Pipeline Stage</Label>
-                  <Select value={formData.pipeline_stage} onValueChange={(v) => handleChange('pipeline_stage', v)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {PIPELINE_STAGES.map(s => (
-                        <SelectItem key={s.value} value={s.value}>
-                          {s.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {!isTLF && !isPipeline && (
-                <div className="space-y-2">
-                  <Label htmlFor="initial_facility">Initial Facility</Label>
-                  <Input
-                    id="initial_facility"
-                    value={formData.initial_facility}
-                    onChange={(e) => handleChange('initial_facility', e.target.value)}
-                    placeholder="e.g., TLFOKT25"
-                  />
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="loan_number">Loan ID *<PdfPill field="loan_number" /></Label>
-                <Input
-                  id="loan_number"
-                  value={formData.loan_number}
-                  onChange={(e) => handleChange('loan_number', e.target.value)}
-                  placeholder="e.g., 484"
-                  required
-                  className={pdfFieldClass('loan_number')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="borrower_name">Borrower Legal Name<PdfPill field="borrower_name" /></Label>
-                <Input
-                  id="borrower_name"
-                  value={formData.borrower_name}
-                  onChange={(e) => handleChange('borrower_name', e.target.value)}
-                  onBlur={() => {
-                    if (formData.borrower_name) {
-                      handleChange('borrower_name', cleanBorrowerName(formData.borrower_name));
-                    }
-                  }}
-                  placeholder="Enter borrower name"
-                  className={pdfFieldClass('borrower_name')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="loan_start_date">Loan Start Date{!isPipeline && ' *'}</Label>
-                <Input
-                  id="loan_start_date"
-                  type="date"
-                  value={formData.loan_start_date}
-                  onChange={(e) => handleChange('loan_start_date', e.target.value)}
-                  required={!isPipeline}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="red_iv_start_date">RED IV Start Date</Label>
-                <Input
-                  id="red_iv_start_date"
-                  type="date"
-                  value={formData.red_iv_start_date}
-                  onChange={(e) => handleChange('red_iv_start_date', e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="maturity_date">Maturity Date<PdfPill field="maturity_date" /></Label>
-                <Input
-                  id="maturity_date"
-                  type="date"
-                  value={formData.maturity_date}
-                  onChange={(e) => handleChange('maturity_date', e.target.value)}
-                  className={pdfFieldClass('maturity_date')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="city">City<PdfPill field="city" /></Label>
-                <Input
-                  id="city"
-                  value={formData.city}
-                  onChange={(e) => handleChange('city', e.target.value)}
-                  placeholder="e.g., Amsterdam"
-                  className={pdfFieldClass('city')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="category">Category<PdfPill field="category" /></Label>
-                <Input
-                  id="category"
-                  value={formData.category}
-                  onChange={(e) => handleChange('category', e.target.value)}
-                  placeholder="e.g., Office, Residential"
-                  className={pdfFieldClass('category')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Property Status<PdfPill field="property_status" /></Label>
-                <Select
-                  value={formData.property_status}
-                  onValueChange={(v) => handleChange('property_status', v)}
-                >
-                  <SelectTrigger className={pdfFieldClass('property_status')}>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Leased">Leased</SelectItem>
-                    <SelectItem value="Redevelopment">Redevelopment</SelectItem>
-                    <SelectItem value="Development">Development</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center space-x-2 pt-6">
-                <Checkbox
-                  id="earmarked"
-                  checked={formData.earmarked}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, earmarked: checked === true }))}
-                />
-                <Label htmlFor="earmarked" className="cursor-pointer">Earmarked<PdfPill field="earmarked" /></Label>
-              </div>
-            </div>
-          </fieldset>
+        {/* Step indicator */}
+        {steps.length > 1 && (
+          <div className="pt-1 pb-2">
+            <StepIndicator steps={steps} currentIndex={stepIndex} />
+          </div>
+        )}
 
-          <Separator />
+        {/* Step content */}
+        {renderStep()}
 
-          {/* Address Section */}
-          <fieldset className="space-y-4">
-            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Addresses & Contact
-            </legend>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="borrower_address">Borrower Address<PdfPill field="borrower_address" /></Label>
-                <Input
-                  id="borrower_address"
-                  value={formData.borrower_address}
-                  onChange={(e) => handleChange('borrower_address', e.target.value)}
-                  placeholder="e.g., Keizersgracht 127, 1015CJ Amsterdam"
-                  className={pdfFieldClass('borrower_address')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Property Addresses<PdfPill field="property_address" /></Label>
-                {propertyAddresses.map((addr, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <Input
-                      value={addr}
-                      onChange={(e) => {
-                        const updated = [...propertyAddresses];
-                        updated[idx] = e.target.value;
-                        setPropertyAddresses(updated);
-                      }}
-                      placeholder="e.g., Oudenoord 330-340, Utrecht"
-                      className={idx === 0 ? pdfFieldClass('property_address') : ''}
-                    />
-                    {propertyAddresses.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 shrink-0"
-                        onClick={() => setPropertyAddresses(propertyAddresses.filter((_, i) => i !== idx))}
-                      >
-                        <Minus className="h-3.5 w-3.5" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-1"
-                  onClick={() => setPropertyAddresses([...propertyAddresses, ''])}
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Add Address
-                </Button>
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="borrower_email">Borrower Email</Label>
-                <Input
-                  id="borrower_email"
-                  value={formData.borrower_email}
-                  onChange={(e) => handleChange('borrower_email', e.target.value)}
-                  placeholder="e.g., contact@borrower.nl; cfo@borrower.nl"
-                />
-              </div>
-            </div>
-          </fieldset>
-
-          <Separator />
-
-          {/* Payment Types Section */}
-          <fieldset className="space-y-4">
-            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Payment Types
-            </legend>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="interest_rate">Interest Rate (%)<PdfPill field="interest_rate" /></Label>
-                <Input
-                  id="interest_rate"
-                  type="number"
-                  step="0.0001"
-                  value={formData.interest_rate}
-                  onChange={(e) => handleChange('interest_rate', e.target.value)}
-                  placeholder="e.g., 8.5000"
-                  className={pdfFieldClass('interest_rate')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Interest Payments</Label>
-                <Select 
-                  value={formData.interest_payment_type} 
-                  onValueChange={(v) => handleChange('interest_payment_type', v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash (Invoiced)</SelectItem>
-                    <SelectItem value="pik">PIK (Capitalized)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {formData.interest_payment_type === 'pik'
-                    ? 'Monthly interest rolled into principal'
-                    : 'Monthly interest invoiced for payment'}
-                </p>
-              </div>
-            </div>
-            {formData.interest_payment_type === 'cash' && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cash_interest_percentage">Cash Interest %</Label>
-                  <Input
-                    id="cash_interest_percentage"
-                    type="number"
-                    step="1"
-                    min="0"
-                    max="100"
-                    value={formData.cash_interest_percentage}
-                    onChange={(e) => handleChange('cash_interest_percentage', e.target.value)}
-                    placeholder="100 (default)"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    % of interest paid in cash. Leave empty for 100%. Remainder from interest depot.
-                  </p>
-                </div>
-              </div>
+        {/* Footer navigation */}
+        <DialogFooter className="flex items-center gap-2 sm:justify-between">
+          <div>
+            {stepIndex > 0 && (
+              <Button variant="ghost" onClick={goBack}>
+                <ChevronLeft className="h-4 w-4 mr-1" /> Back
+              </Button>
             )}
-          </fieldset>
-
-          <Separator />
-
-          {/* Structure Section */}
-          <fieldset className="space-y-4">
-            {!isPipeline && (
-              <div className="bg-orange-50 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-700 rounded-lg p-3">
-                <h3 className="text-sm font-semibold text-orange-900 dark:text-orange-100 flex items-center gap-2">
-                  ⚠️ Opening Balances — As of Start Date Only
-                </h3>
-                <p className="text-xs text-orange-800 dark:text-orange-200 mt-1">
-                  <strong>Important:</strong> Only enter amounts effective on <strong>{formData.loan_start_date || 'the loan start date'}</strong>.
-                  Draws, fees, or changes occurring on later dates must be added as separate events after loan creation.
-                </p>
-              </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {stepIndex === 0 && (
+              <Button variant="outline" onClick={() => setIsOpen(false)}>Cancel</Button>
             )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {!isPipeline && (
-                <div className="space-y-2">
-                  <Label htmlFor="outstanding">Outstanding (EUR)</Label>
-                  <Input
-                    id="outstanding"
-                    type="number"
-                    step="0.01"
-                    value={formData.outstanding}
-                    onChange={(e) => handleChange('outstanding', e.target.value)}
-                    placeholder="0.00"
-                  />
-                </div>
-              )}
-              <div className="space-y-2">
-                <Label htmlFor="total_commitment">Total Commitment (EUR)<PdfPill field="total_commitment" /></Label>
-                <Input
-                  id="total_commitment"
-                  type="number"
-                  step="0.01"
-                  value={formData.total_commitment}
-                  onChange={(e) => handleChange('total_commitment', e.target.value)}
-                  placeholder="Optional"
-                  className={pdfFieldClass('total_commitment')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="commitment_fee_rate">Commitment Fee Rate (%)<PdfPill field="commitment_fee_rate" /></Label>
-                <Input
-                  id="commitment_fee_rate"
-                  type="number"
-                  step="0.0001"
-                  value={formData.commitment_fee_rate}
-                  onChange={(e) => handleChange('commitment_fee_rate', e.target.value)}
-                  placeholder="e.g., 1.0000"
-                  className={pdfFieldClass('commitment_fee_rate')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Commitment Fee Basis</Label>
-                <Select 
-                  value={formData.commitment_fee_basis} 
-                  onValueChange={(v) => handleChange('commitment_fee_basis', v)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="undrawn_only">Undrawn Only</SelectItem>
-                    <SelectItem value="total_commitment">Total Commitment</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </fieldset>
-
-          <Separator />
-
-          {/* Valuation & Asset Section */}
-          <fieldset className="space-y-4">
-            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Valuation & Asset
-            </legend>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="valuation">Valuation (EUR)<PdfPill field="valuation" /></Label>
-                <Input
-                  id="valuation"
-                  type="number"
-                  step="0.01"
-                  value={formData.valuation}
-                  onChange={(e) => handleChange('valuation', e.target.value)}
-                  placeholder="0"
-                  className={pdfFieldClass('valuation')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="valuation_date">Valuation Date</Label>
-                <Input
-                  id="valuation_date"
-                  type="date"
-                  value={formData.valuation_date}
-                  onChange={(e) => handleChange('valuation_date', e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ltv">LTV (%)<PdfPill field="ltv" /></Label>
-                <Input
-                  id="ltv"
-                  type="number"
-                  step="0.01"
-                  value={formData.ltv}
-                  onChange={(e) => handleChange('ltv', e.target.value)}
-                  placeholder="e.g., 34"
-                  className={pdfFieldClass('ltv')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="rental_income">Rental Income (EUR/yr)<PdfPill field="rental_income" /></Label>
-                <Input
-                  id="rental_income"
-                  type="number"
-                  step="0.01"
-                  value={formData.rental_income}
-                  onChange={(e) => handleChange('rental_income', e.target.value)}
-                  placeholder="0"
-                  className={pdfFieldClass('rental_income')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="walt">WALT (years)<PdfPill field="walt" /></Label>
-                <Input
-                  id="walt"
-                  type="number"
-                  step="0.1"
-                  value={formData.walt}
-                  onChange={(e) => handleChange('walt', e.target.value)}
-                  placeholder="e.g., 4.5"
-                  className={pdfFieldClass('walt')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="occupancy">Occupancy (%)<PdfPill field="occupancy" /></Label>
-                <Input
-                  id="occupancy"
-                  type="number"
-                  step="1"
-                  min="0"
-                  max="100"
-                  value={formData.occupancy}
-                  onChange={(e) => handleChange('occupancy', e.target.value)}
-                  placeholder="e.g., 95"
-                  className={pdfFieldClass('occupancy')}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="walt_comment">WALT Comment</Label>
-                <Input
-                  id="walt_comment"
-                  value={formData.walt_comment}
-                  onChange={(e) => handleChange('walt_comment', e.target.value)}
-                  placeholder="e.g., HEMA anchor tenant until 2035"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="guarantor">Guarantor</Label>
-                <Input
-                  id="guarantor"
-                  value={formData.guarantor}
-                  onChange={(e) => handleChange('guarantor', e.target.value)}
-                  placeholder="e.g., Personal guarantee from sponsor"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Property Photo</Label>
-              <input
-                ref={photoInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  e.target.value = '';
-                  setPhotoUploading(true);
-                  try {
-                    // Show local preview immediately
-                    const previewUrl = URL.createObjectURL(file);
-                    setPhotoPreview(previewUrl);
-                    // Upload to Supabase
-                    const publicUrl = await uploadLoanPhoto(file, formData.loan_number || 'new');
-                    handleChange('photo_url', publicUrl);
-                  } catch (err) {
-                    console.error('Photo upload failed:', err);
-                    setPhotoPreview(null);
-                    handleChange('photo_url', '');
-                  } finally {
-                    setPhotoUploading(false);
-                  }
-                }}
-              />
-              {formData.photo_url || photoPreview ? (
-                <div className="relative w-full h-32 rounded-md overflow-hidden border border-border bg-muted">
-                  <img
-                    src={formData.photo_url || photoPreview || ''}
-                    alt="Property"
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleChange('photo_url', '');
-                      setPhotoPreview(null);
-                    }}
-                    className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-black/80"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                  {photoUploading && (
-                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                      <Loader2 className="h-5 w-5 text-white animate-spin" />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => photoInputRef.current?.click()}
-                  disabled={photoUploading}
-                  className="w-full h-32 rounded-md border-2 border-dashed border-border hover:border-primary/40 bg-muted/30 flex flex-col items-center justify-center gap-2 text-muted-foreground hover:text-foreground-secondary transition-colors cursor-pointer"
-                >
-                  {photoUploading ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <>
-                      <ImageIcon className="h-6 w-6" />
-                      <span className="text-xs">Click to upload photo</span>
-                    </>
-                  )}
-                </button>
-              )}
-              {formData.photo_url && (
-                <Input
-                  value={formData.photo_url}
-                  readOnly
-                  className="text-xs text-muted-foreground"
-                />
-              )}
-            </div>
-          </fieldset>
-
-          <Separator />
-
-          {/* Fees Section */}
-          <fieldset className="space-y-4">
-            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Fees — As of Start Date
-            </legend>
-            <p className="text-xs text-muted-foreground -mt-2">
-              Only enter fees effective on {formData.loan_start_date || 'the loan start date'}. Fees charged on later dates must be added as separate events.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="arrangement_fee">Arrangement Fee (EUR)<PdfPill field="arrangement_fee" /></Label>
-                <Input
-                  id="arrangement_fee"
-                  type="number"
-                  step="0.01"
-                  value={formData.arrangement_fee}
-                  onChange={(e) => handleChange('arrangement_fee', e.target.value)}
-                  placeholder="0.00"
-                  className={pdfFieldClass('arrangement_fee')}
-                />
-                <Select 
-                  value={formData.fee_payment_type} 
-                  onValueChange={(v) => handleChange('fee_payment_type', v)}
-                >
-                  <SelectTrigger className="mt-2">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pik">Withheld</SelectItem>
-                    <SelectItem value="cash">Cash Invoice</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {formData.fee_payment_type === 'pik'
-                    ? 'Will be withheld from borrower'
-                    : 'Separate cash invoice to borrower'}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="commitment_fee_oneoff">Commitment Fee (EUR)</Label>
-                <Input
-                  id="commitment_fee_oneoff"
-                  type="number"
-                  step="0.01"
-                  value={formData.commitment_fee_oneoff}
-                  onChange={(e) => handleChange('commitment_fee_oneoff', e.target.value)}
-                  placeholder="0.00"
-                />
-                <p className="text-xs text-muted-foreground">
-                  One-off pre-drawdown commitment fee (signing to drawdown). Always cash.
-                </p>
-              </div>
-            </div>
-          </fieldset>
-
-          <Separator />
-
-          {/* Payments & Notices Section */}
-          <fieldset className="space-y-4">
-            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Payments & Notices
-            </legend>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Notice Frequency<PdfPill field="notice_frequency" /></Label>
-                <Select
-                  value={formData.notice_frequency}
-                  onValueChange={(v) => handleChange('notice_frequency', v)}
-                >
-                  <SelectTrigger className={pdfFieldClass('notice_frequency')}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="quarterly">Quarterly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="payment_due_rule">Payment Due Date Rule<PdfPill field="payment_due_rule" /></Label>
-                <Input
-                  id="payment_due_rule"
-                  value={formData.payment_due_rule}
-                  onChange={(e) => handleChange('payment_due_rule', e.target.value)}
-                  placeholder="e.g., 5 business days after period end"
-                  className={pdfFieldClass('payment_due_rule')}
-                />
-              </div>
-            </div>
-          </fieldset>
-
-          <Separator />
-
-          {/* Notes & Links Section */}
-          <fieldset className="space-y-4">
-            <legend className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              Notes & Links
-            </legend>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="remarks">Remarks</Label>
-                <Input
-                  id="remarks"
-                  value={formData.remarks}
-                  onChange={(e) => handleChange('remarks', e.target.value)}
-                  placeholder="Short note about this loan..."
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="additional_info">Description<PdfPill field="additional_info" /></Label>
-                <Textarea
-                  id="additional_info"
-                  value={formData.additional_info}
-                  onChange={(e) => handleChange('additional_info', e.target.value)}
-                  placeholder="Detailed loan description — auto-generated from document upload..."
-                  rows={4}
-                  className={pdfFieldClass('additional_info')}
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="google_maps_url">Google Maps</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="google_maps_url"
-                      value={formData.google_maps_url}
-                      onChange={(e) => handleChange('google_maps_url', e.target.value)}
-                      placeholder="Paste Google Maps link"
-                      className="flex-1"
-                    />
-                    {formData.google_maps_url && (
-                      <a href={formData.google_maps_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border hover:bg-muted">
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="kadastrale_kaart_url">Kadasterkaart</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="kadastrale_kaart_url"
-                      value={formData.kadastrale_kaart_url}
-                      onChange={(e) => handleChange('kadastrale_kaart_url', e.target.value)}
-                      placeholder="Paste Kadasterkaart link"
-                      className="flex-1"
-                    />
-                    {formData.kadastrale_kaart_url && (
-                      <a href={formData.kadastrale_kaart_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-border hover:bg-muted">
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </fieldset>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setIsOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleCreate} 
-            disabled={!canSubmit || createLoan.isPending}
-          >
-            {createLoan.isPending ? 'Creating...' : 'Create Loan'}
-          </Button>
+            {isPropertyStep && (
+              <Button variant="outline" onClick={goNext}>
+                <SkipForward className="h-4 w-4 mr-1" /> Skip
+              </Button>
+            )}
+            {!isLastStep && currentStep?.id !== 'type' && (
+              <Button onClick={goNext} disabled={!canProceed()}>
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            )}
+            {isLastStep && (
+              <Button onClick={handleCreate} disabled={createLoan.isPending}>
+                {createLoan.isPending ? 'Creating...' : 'Create Loan'}
+              </Button>
+            )}
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

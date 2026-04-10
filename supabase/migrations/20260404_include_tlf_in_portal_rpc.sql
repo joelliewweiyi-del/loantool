@@ -1,4 +1,5 @@
--- Remove Status field from get_loans_for_portal() — Portal manages status independently
+-- Include TLF loans in get_loans_for_portal() alongside RED IV.
+-- Use lps.facility (e.g. TLFJAN26A) instead of lps.vehicle for the Facility column.
 
 CREATE OR REPLACE FUNCTION public.get_loans_for_portal()
 RETURNS json

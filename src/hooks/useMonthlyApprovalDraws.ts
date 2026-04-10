@@ -24,6 +24,7 @@ export interface GroupedLoanDraws {
   confirmedCount: number;
   pendingCount: number;
   dominantType: 'draw' | 'repayment' | 'mixed';
+  hasFullRepayment: boolean;
 }
 
 export interface MonthlyApprovalDraws {
@@ -71,13 +72,14 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('loans')
-        .select('id, loan_id, borrower_name, vehicle');
+        .select('id, loan_id, borrower_name, vehicle, outstanding');
       if (error) throw error;
       return data as Array<{
         id: string;
         loan_id: string;
         borrower_name: string;
         vehicle: string | null;
+        outstanding: number | null;
       }>;
     },
     staleTime: 5 * 60 * 1000,
@@ -212,6 +214,10 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
         || findAmountDateMatch(loan?.id, row.EntryDate, amount, isDraw)
         || findDateTotalMatch(loan?.id, row.EntryDate, amount);
 
+      // Detect full repayment: credit that matches loan's outstanding balance (±€50 tolerance)
+      const loanOutstanding = loan?.outstanding ?? 0;
+      const isFullRepayment = !isDraw && loanOutstanding > 0 && Math.abs(amount - loanOutstanding) < 50;
+
       transactions.push({
         loanId,
         loanUuid: loan?.id ?? null,
@@ -225,6 +231,7 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
         isConfirmed: !!existing,
         createdEventId: existing?.id ?? null,
         eventStatus: (existing?.status as 'draft' | 'approved') ?? null,
+        isFullRepayment,
       });
     }
 
@@ -257,6 +264,7 @@ export function useMonthlyApprovalDraws(yearMonth: string | undefined) {
         confirmedCount: txs.filter(t => t.isConfirmed).length,
         pendingCount: txs.filter(t => !t.isConfirmed).length,
         dominantType,
+        hasFullRepayment: txs.some(t => t.isFullRepayment),
       };
     });
 

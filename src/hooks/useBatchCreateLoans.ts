@@ -172,11 +172,13 @@ export function useBatchCreateLoans() {
               );
             }
 
-            // 3. Principal Draw
+            // 3. Principal Draw (subtract withheld fees for actual cash out)
             if (loanData.outstanding && loanData.outstanding > 0) {
+              const withheldFees = isPikLoan ? (arrangement_fee || 0) : 0;
+              const cashOut = loanData.outstanding - withheldFees;
               await createFoundingEvent(
                 'principal_draw',
-                loanData.outstanding,
+                cashOut,
                 null,
                 { auto_generated: true, description: 'Opening principal draw' }
               );
@@ -192,7 +194,7 @@ export function useBatchCreateLoans() {
                   auto_generated: true,
                   fee_type: 'arrangement',
                   payment_type: isPikLoan ? 'pik' : 'cash',
-                  description: 'Arrangement fee (withheld from borrower)'
+                  description: isPikLoan ? 'Arrangement fee (withheld)' : 'Arrangement fee',
                 }
               );
             }

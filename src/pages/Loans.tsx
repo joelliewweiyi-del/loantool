@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useLoans, useLatestChargesPerLoan, useUpdateLoan } from '@/hooks/useLoans';
+import { useAfasVehicleAlerts, type VehicleAlert } from '@/hooks/useAfasVehicleAlerts';
 import { useAuth } from '@/hooks/useAuth';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -12,8 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatDate, formatCurrency, formatCurrencyShort, formatPercent } from '@/lib/format';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, ArrowUpDown, ArrowUp, ArrowDown, X, ArrowRight } from 'lucide-react';
 import { FinancialStrip } from '@/components/loans/FinancialStrip';
+import { getCurrentDate } from '@/lib/simulatedDate';
+import { differenceInMonths } from 'date-fns';
 import { VEHICLES, DEFAULT_VEHICLE, type Vehicle, vehicleRequiresFacility, isPipelineVehicle, PIPELINE_STAGES } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { PipelineCard } from '@/components/mobile/PipelineCard';
@@ -31,7 +34,7 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
   // On mobile /loans route (not portfolio): force Pipeline vehicle, no tabs
   const mobilePipeline = isMobile && !mobilePortfolio;
   const defaultVehicle = mobilePortfolio ? 'RED IV' : DEFAULT_VEHICLE;
-  const activeVehicle = mobilePipeline ? 'Pipeline' : (searchParams.get('vehicle') as Vehicle || defaultVehicle);
+  const activeVehicle = mobilePipeline ? 'Pipeline' : (searchParams.get('vehicle') as Vehicle | 'Repaid' || defaultVehicle);
   const {
     data: loans,
     isLoading
@@ -50,7 +53,40 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const updateLoan = useUpdateLoan();
+  const { alerts: vehicleAlerts, dismiss: dismissAlert } = useAfasVehicleAlerts(loans);
   const canCreate = roles.includes('pm') || roles.includes('controller');
+
+  /** Returns a text color class based on how close a loan is to maturity */
+  const maturityColor = (maturityDate: string | null | undefined): string => {
+    if (!maturityDate || isRepaidTab) return 'text-muted-foreground';
+    const now = getCurrentDate();
+    const maturity = new Date(maturityDate);
+    if (maturity < now) return 'text-destructive font-medium';
+    if (differenceInMonths(maturity, now) <= 3) return 'text-accent-amber font-medium';
+    return 'text-muted-foreground';
+  };
+
+  const handleApproveTransfer = useCallback((loanId: string, alert: VehicleAlert, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (alert.type === 'vehicle_transfer') {
+      updateLoan.mutate({
+        id: loanId,
+        updates: {
+          vehicle: alert.detectedVehicle,
+          original_vehicle: alert.currentVehicle,
+          red_iv_start_date: alert.firstTransactionDate?.split('T')[0] || null,
+        } as any,
+      });
+    } else {
+      // Pipeline activation — navigate to loan detail for full activation flow
+      navigate(`/loans/${loanId}`);
+    }
+  }, [updateLoan, navigate]);
+
+  const handleDismissAlert = useCallback((loanId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    dismissAlert(loanId);
+  }, [dismissAlert]);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -86,8 +122,11 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
     setSearchQuery('');
   };
 
-  // Filter by vehicle first
-  const vehicleLoans = loans?.filter(loan => (loan as any).vehicle === activeVehicle) || [];
+  // Filter by vehicle first (Repaid tab shows all repaid loans across vehicles)
+  const isRepaidTab = activeVehicle === 'Repaid';
+  const vehicleLoans = isRepaidTab
+    ? loans?.filter(loan => loan.status === 'repaid') || []
+    : loans?.filter(loan => (loan as any).vehicle === activeVehicle && loan.status !== 'repaid') || [];
   const searchFiltered = vehicleLoans.filter(loan => loan.borrower_name.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).loan_id?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).city?.toLowerCase().includes(searchQuery.toLowerCase()) || (loan as any).category?.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const filteredLoans = useMemo(() => {
@@ -137,10 +176,11 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
     ? VEHICLES.filter(v => !isPipelineVehicle(v.value))
     : VEHICLES;
 
-  // Count loans per vehicle for tabs
+  // Count loans per vehicle for tabs (exclude repaid from vehicle counts)
+  const repaidCount = loans?.filter(l => l.status === 'repaid').length || 0;
   const vehicleCounts = availableVehicles.map(v => ({
     ...v,
-    count: loans?.filter(l => (l as any).vehicle === v.value).length || 0,
+    count: loans?.filter(l => (l as any).vehicle === v.value && l.status !== 'repaid').length || 0,
   }));
   if (isLoading) {
     return <div className="p-6 space-y-6">
@@ -170,19 +210,40 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
       {/* Vehicle Tabs — hidden on mobile pipeline (only Pipeline shown) */}
       {!mobilePipeline && (
         <Tabs value={activeVehicle} onValueChange={handleVehicleChange} className="w-full">
-          <TabsList className={`grid w-full max-w-md ${vehicleCounts.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+          <TabsList className={`grid w-full max-w-lg ${vehicleCounts.length === 2 ? 'grid-cols-3' : 'grid-cols-4'}`}>
             {vehicleCounts.map(v => (
               <TabsTrigger key={v.value} value={v.value} className="flex items-center gap-2">
                 {v.label}
                 <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{v.count}</span>
               </TabsTrigger>
             ))}
+            {repaidCount > 0 && (
+              <TabsTrigger value="Repaid" className="flex items-center gap-2">
+                Repaid
+                <span className="ml-1 text-xs bg-muted px-1.5 py-0.5 rounded-full">{repaidCount}</span>
+              </TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
       )}
 
       {/* Portfolio Metrics Strip */}
-      {isPipelineVehicle(activeVehicle) ? (() => {
+      {isRepaidTab ? (() => {
+        const totalOriginalCommitment = vehicleLoans.reduce((s, l) => s + (l.total_commitment || 0), 0);
+        const loansWithRate = vehicleLoans.filter(l => l.interest_rate && l.interest_rate > 0);
+        const avgRateRepaid = loansWithRate.length > 0
+          ? loansWithRate.reduce((s, l) => s + (l.interest_rate || 0), 0) / loansWithRate.length
+          : 0;
+        return <FinancialStrip items={isMobile ? [
+          { label: 'Loans Closed', value: String(vehicleLoans.length), mono: false },
+          { label: 'Commitment', value: formatCurrencyShort(totalOriginalCommitment) },
+          { label: 'Avg Rate', value: avgRateRepaid > 0 ? formatPercent(avgRateRepaid, 2) : '—' },
+        ] : [
+          { label: 'Loans Closed', value: String(vehicleLoans.length), mono: false },
+          { label: 'Original Commitment', value: formatCurrency(totalOriginalCommitment) },
+          { label: 'Avg Rate', value: avgRateRepaid > 0 ? formatPercent(avgRateRepaid, 2) : '—' },
+        ]} />;
+      })() : isPipelineVehicle(activeVehicle) ? (() => {
         const prospectCount = vehicleLoans.filter(l => (l as any).pipeline_stage === 'prospect').length;
         const hardCount = vehicleLoans.filter(l => (l as any).pipeline_stage === 'hard').length;
         const signedCount = vehicleLoans.filter(l => (l as any).pipeline_stage === 'signed').length;
@@ -279,7 +340,9 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
             <span className="flex-1 min-w-0">Loan</span>
             <span className="text-right shrink-0 w-[110px]">Outstanding</span>
           </div>
-          {filteredLoans.map((loan, i) => (
+          {filteredLoans.map((loan, i) => {
+            const alert = vehicleAlerts.get(loan.id);
+            return (
             <div
               key={loan.id}
               className={`flex items-center px-4 py-2.5 active:bg-muted/40 transition-colors cursor-pointer ${
@@ -291,17 +354,62 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
                 <div className="flex items-center gap-1.5">
                   <span className="font-mono text-[11px] font-bold text-primary shrink-0">{(loan as any).loan_id}</span>
                   <span className="text-[13px] font-medium truncate">{(loan as any).city || loan.borrower_name}</span>
+                  {alert && (
+                    <span className="shrink-0 inline-flex items-center gap-0.5 text-[10px] font-medium text-accent-amber">
+                      <ArrowRight className="h-2.5 w-2.5" />
+                      {alert.detectedVehicle}
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5 text-[11px] text-foreground-muted font-mono">
                   <span>{formatPercent(loan.interest_rate, 2)}</span>
                   <span className="opacity-40">|</span>
-                  <span>{formatDate(loan.maturity_date)}</span>
+                  <span className={maturityColor(loan.maturity_date)}>{formatDate(loan.maturity_date)}</span>
                 </div>
               </div>
               <span className="text-right shrink-0 pl-3 font-mono text-[13px] font-semibold w-[110px]">{formatCurrencyShort(loan.outstanding)}</span>
             </div>
-          ))}
+            );
+          })}
         </div>
+      ) : isRepaidTab ? (
+      /* Repaid loans table */
+      <Card>
+        <CardContent className="pt-4">
+          <table className="data-table">
+              <thead>
+                <tr>
+                  <SortTh field="loan_id">Loan_ID</SortTh>
+                  <SortTh field="city">Borrower</SortTh>
+                  <th>Vehicle</th>
+                  <SortTh field="total_commitment" className="text-right">Commitment</SortTh>
+                  <SortTh field="interest_rate" className="text-right">Rate</SortTh>
+                  <SortTh field="loan_start_date" className="text-right">Start</SortTh>
+                  <SortTh field="maturity_date" className="text-right">Maturity</SortTh>
+                  <th className="text-right">Repaid</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredLoans.map(loan => (
+                  <tr key={loan.id} onClick={() => navigate(`/loans/${loan.id}`)} className="clickable">
+                    <td className="font-mono font-medium">{(loan as any).loan_id || '—'}</td>
+                    <td>{(loan as any).city || loan.borrower_name}</td>
+                    <td>
+                      <span className="text-xs px-2 py-0.5 rounded bg-muted">
+                        {(loan as any).vehicle || '—'}
+                      </span>
+                    </td>
+                    <td className="numeric">{formatCurrency(loan.total_commitment || 0)}</td>
+                    <td className="numeric">{formatPercent(loan.interest_rate, 2)}</td>
+                    <td className="text-right text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
+                    <td className="text-right text-muted-foreground">{formatDate(loan.maturity_date)}</td>
+                    <td className="text-right text-muted-foreground">{loan.repaid_at ? formatDate(loan.repaid_at) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+        </CardContent>
+      </Card>
       ) : (
       <Card>
         <CardContent className="pt-4">
@@ -324,8 +432,35 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
                 </tr>
               </thead>
               <tbody>
-                {filteredLoans.map(loan => <tr key={loan.id} onClick={() => navigate(`/loans/${loan.id}`)} className="clickable">
-                    <td className="font-mono font-medium">{(loan as any).loan_id || '—'}</td>
+                {filteredLoans.map(loan => {
+                  const alert = vehicleAlerts.get(loan.id);
+                  return <tr key={loan.id} onClick={() => navigate(`/loans/${loan.id}`)} className="clickable">
+                    <td className="font-mono font-medium">
+                      <span className="inline-flex items-center gap-2">
+                        {(loan as any).loan_id || '—'}
+                        {alert && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium text-accent-amber">
+                            <ArrowRight className="h-3 w-3" />
+                            {alert.detectedVehicle}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-5 px-1.5 text-[10px] font-semibold border-accent-amber/40 text-accent-amber hover:bg-accent-amber/10"
+                              onClick={(e) => handleApproveTransfer(loan.id, alert, e)}
+                            >
+                              Approve
+                            </Button>
+                            <button
+                              className="ml-0.5 text-foreground-muted hover:text-foreground"
+                              onClick={(e) => handleDismissAlert(loan.id, e)}
+                              aria-label="Dismiss alert"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     {vehicleRequiresFacility(activeVehicle) && <td>
                         <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-medium">
                           {(loan as any).facility || '—'}
@@ -365,8 +500,8 @@ export default function Loans({ mobilePortfolio }: LoansProps = {}) {
                       {latestCharges[loan.id]?.commitmentFee ? formatCurrency(latestCharges[loan.id].commitmentFee) : '—'}
                     </td>
                     <td className="text-right text-muted-foreground">{formatDate(loan.loan_start_date)}</td>
-                    <td className="text-right text-muted-foreground">{formatDate(loan.maturity_date)}</td>
-                  </tr>)}
+                    <td className={`text-right ${maturityColor(loan.maturity_date)}`}>{formatDate(loan.maturity_date)}</td>
+                  </tr>})}
               </tbody>
             </table>
         </CardContent>

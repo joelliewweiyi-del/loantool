@@ -9,11 +9,9 @@ import {
   LogOut,
   Loader2,
   User,
-  ClipboardCheck,
   Download,
   LayoutDashboard,
   MessageSquare,
-  Landmark,
   Shield,
   Handshake,
   Calculator,
@@ -43,7 +41,6 @@ const navigation: NavGroup[] = [
     label: 'Portfolio',
     items: [
       { name: 'Loans', href: '/loans', icon: FileText },
-      { name: 'Collateral', href: '/collateral', icon: Landmark },
       { name: 'Activity', href: '/activity', icon: MessageSquare },
       { name: 'Export', href: '/export', icon: Download },
     ],
@@ -52,9 +49,8 @@ const navigation: NavGroup[] = [
     label: 'Workflow',
     items: [
       { name: 'Approvals', href: '/approvals', icon: Eye },
-      { name: 'Monthly Approval', href: '/monthly-approval', icon: ClipboardCheck },
       { name: 'Calculation Sheet', href: '/calculation-sheet', icon: Calculator },
-      { name: 'Compliance', href: '/compliance', icon: Shield },
+      { name: 'Covenant Tracking', href: '/compliance', icon: Shield },
     ],
   },
   {
